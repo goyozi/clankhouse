@@ -1,4 +1,4 @@
-import { DatabaseSync, type StatementSync } from "node:sqlite";
+import { DatabaseSync, type StatementSync } from "node:sqlite"
 
 /*
  * ============================================================================
@@ -6,43 +6,37 @@ import { DatabaseSync, type StatementSync } from "node:sqlite";
  * ============================================================================
  */
 
-export type PersistedStatus = "interrupted" | "succeeded" | "failed";
+export type PersistedStatus = "interrupted" | "succeeded" | "failed"
 
 type Statements = {
-    runs: RunStatements,
-    steps: StepStatements,
-    artifacts: ArtifactStatements,
-    sessions: SessionStatements,
+    runs: RunStatements
+    steps: StepStatements
+    artifacts: ArtifactStatements
+    sessions: SessionStatements
     events: EventStatements
 }
 
-const statementCache = new WeakMap<DatabaseSync, Statements>();
+const statementCache = new WeakMap<DatabaseSync, Statements>()
 
 export function openDatabase(file: string): DatabaseSync {
-    const db = new DatabaseSync(file);
-    db.exec("PRAGMA journal_mode = WAL");
-    db.exec("PRAGMA foreign_keys = ON");
-    db.exec(schemaDDL());
-    return db;
+    const db = new DatabaseSync(file)
+    db.exec("PRAGMA journal_mode = WAL")
+    db.exec("PRAGMA foreign_keys = ON")
+    db.exec(schemaDDL())
+    return db
 }
 
 function schemaDDL(): string {
-    return [
-        RUNS_DDL,
-        STEPS_DDL,
-        ARTIFACTS_DDL,
-        SESSIONS_DDL,
-        EVENTS_DDL
-    ].join("\n");
+    return [RUNS_DDL, STEPS_DDL, ARTIFACTS_DDL, SESSIONS_DDL, EVENTS_DDL].join("\n")
 }
 
 function statements(db: DatabaseSync): Statements {
-    let stmts = statementCache.get(db);
+    let stmts = statementCache.get(db)
     if (!stmts) {
-        stmts = prepareStatements(db);
-        statementCache.set(db, stmts);
+        stmts = prepareStatements(db)
+        statementCache.set(db, stmts)
     }
-    return stmts;
+    return stmts
 }
 
 function prepareStatements(db: DatabaseSync): Statements {
@@ -52,7 +46,7 @@ function prepareStatements(db: DatabaseSync): Statements {
         artifacts: prepareArtifactStatements(db),
         sessions: prepareSessionStatements(db),
         events: prepareEventStatements(db)
-    };
+    }
 }
 
 /*
@@ -77,88 +71,102 @@ CREATE TABLE IF NOT EXISTS runs (
 );
 CREATE INDEX IF NOT EXISTS idx_runs_key ON runs(key);
 CREATE INDEX IF NOT EXISTS idx_runs_workflow_name ON runs(workflow_name);
-`;
+`
 
 export type RunRow = {
-    id: string,
-    key: string,
-    attempt: number,
-    workflow_name: string,
-    input: string | null,
-    output: string | null,
-    error: string | null,
-    status: PersistedStatus,
-    started_at: string,
+    id: string
+    key: string
+    attempt: number
+    workflow_name: string
+    input: string | null
+    output: string | null
+    error: string | null
+    status: PersistedStatus
+    started_at: string
     ended_at: string | null
 }
 
 export type ListRunsFilter = {
-    key?: string,
-    workflowName?: string,
-    statuses?: PersistedStatus[],
+    key?: string
+    workflowName?: string
+    statuses?: PersistedStatus[]
     lastN?: number
 }
 
 type RunStatements = {
-    insert: StatementSync,
-    findLastAttempt: StatementSync,
-    findById: StatementSync,
-    succeed: StatementSync,
+    insert: StatementSync
+    findLastAttempt: StatementSync
+    findById: StatementSync
+    succeed: StatementSync
     fail: StatementSync
 }
 
 function prepareRunStatements(db: DatabaseSync): RunStatements {
     return {
-        insert: db.prepare("INSERT INTO runs (id, key, attempt, workflow_name, input, status, started_at) VALUES (?, ?, ?, ?, ?, ?, ?)"),
-        findLastAttempt: db.prepare("SELECT * FROM runs WHERE workflow_name = ? AND key = ? ORDER BY attempt DESC LIMIT 1"),
+        insert: db.prepare(
+            "INSERT INTO runs (id, key, attempt, workflow_name, input, status, started_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        ),
+        findLastAttempt: db.prepare(
+            "SELECT * FROM runs WHERE workflow_name = ? AND key = ? ORDER BY attempt DESC LIMIT 1"
+        ),
         findById: db.prepare("SELECT * FROM runs WHERE id = ?"),
         succeed: db.prepare("UPDATE runs SET status = 'succeeded', output = ?, ended_at = ? WHERE id = ?"),
         fail: db.prepare("UPDATE runs SET status = 'failed', error = ?, ended_at = ? WHERE id = ?")
-    };
+    }
 }
 
 export function insertRun(db: DatabaseSync, row: RunRow): void {
-    statements(db).runs.insert.run(row.id, row.key, row.attempt, row.workflow_name, row.input, row.status, row.started_at);
+    statements(db).runs.insert.run(
+        row.id,
+        row.key,
+        row.attempt,
+        row.workflow_name,
+        row.input,
+        row.status,
+        row.started_at
+    )
 }
 
 export function findLastAttempt(db: DatabaseSync, workflowName: string, key: string): RunRow | undefined {
-    return statements(db).runs.findLastAttempt.get(workflowName, key) as RunRow | undefined;
+    return statements(db).runs.findLastAttempt.get(workflowName, key) as RunRow | undefined
 }
 
 export function findRunById(db: DatabaseSync, id: string): RunRow | undefined {
-    return statements(db).runs.findById.get(id) as RunRow | undefined;
+    return statements(db).runs.findById.get(id) as RunRow | undefined
 }
 
 export function succeedRun(db: DatabaseSync, id: string, output: string | null, endedAt: string): void {
-    statements(db).runs.succeed.run(output, endedAt, id);
+    statements(db).runs.succeed.run(output, endedAt, id)
 }
 
 export function failRun(db: DatabaseSync, id: string, error: string, endedAt: string): void {
-    statements(db).runs.fail.run(error, endedAt, id);
+    statements(db).runs.fail.run(error, endedAt, id)
 }
 
 export function listRuns(db: DatabaseSync, filter: ListRunsFilter): RunRow[] {
-    const clauses: string[] = [];
-    const params: (string | number)[] = [];
+    const clauses: string[] = []
+    const params: (string | number)[] = []
     if (filter.key !== undefined) {
-        clauses.push("key = ?");
-        params.push(filter.key);
+        clauses.push("key = ?")
+        params.push(filter.key)
     }
     if (filter.workflowName !== undefined) {
-        clauses.push("workflow_name = ?");
-        params.push(filter.workflowName);
+        clauses.push("workflow_name = ?")
+        params.push(filter.workflowName)
     }
     if (filter.statuses !== undefined) {
-        clauses.push(`status IN (${filter.statuses.map(() => "?").join(", ")})`);
-        params.push(...filter.statuses);
+        clauses.push(`status IN (${filter.statuses.map(() => "?").join(", ")})`)
+        params.push(...filter.statuses)
     }
-    const where = clauses.length > 0 ? ` WHERE ${clauses.join(" AND ")}` : "";
-    let limit = "";
+    const where = clauses.length > 0 ? ` WHERE ${clauses.join(" AND ")}` : ""
+    let limit = ""
     if (filter.lastN !== undefined) {
-        limit = " LIMIT ?";
-        params.push(filter.lastN);
+        limit = " LIMIT ?"
+        params.push(filter.lastN)
     }
-    return db.prepare(`SELECT * FROM runs${where} ORDER BY started_at DESC, attempt DESC${limit}`).all(...params) as unknown as RunRow[];
+    return db
+        .prepare(`SELECT * FROM runs${where} ORDER BY started_at DESC, attempt DESC${limit}`)
+        .all(...params) as unknown as RunRow[]
 }
 
 /*
@@ -187,53 +195,55 @@ CREATE TABLE IF NOT EXISTS steps (
     UNIQUE (run_id, key)
 );
 CREATE INDEX IF NOT EXISTS idx_steps_run_id_seq ON steps(run_id, seq);
-`;
+`
 
-export type StepKind = "custom" | "artifact" | "llm" | "agent" | "event";
+export type StepKind = "custom" | "artifact" | "llm" | "agent" | "event"
 
-export type StepColumn = "session_id" | "snapshot_ref" | "artifact_id" | "event_key";
+export type StepColumn = "session_id" | "snapshot_ref" | "artifact_id" | "event_key"
 
 export type StepRow = {
-    id: string,
-    run_id: string,
-    key: string,
-    name: string,
-    seq: number,
-    kind: StepKind,
-    status: PersistedStatus,
-    output: string | null,
-    error: string | null,
-    session_id: string | null,
-    snapshot_ref: string | null,
-    artifact_id: string | null,
-    event_key: string | null,
-    started_at: string,
+    id: string
+    run_id: string
+    key: string
+    name: string
+    seq: number
+    kind: StepKind
+    status: PersistedStatus
+    output: string | null
+    error: string | null
+    session_id: string | null
+    snapshot_ref: string | null
+    artifact_id: string | null
+    event_key: string | null
+    started_at: string
     ended_at: string | null
 }
 
 export type NewStepRow = Pick<StepRow, "id" | "run_id" | "key" | "name" | "seq" | "kind" | "started_at">
 
 type StepStatements = {
-    findByRunAndKey: StatementSync,
-    findByRun: StatementSync,
-    findBefore: StatementSync,
-    maxSeq: StatementSync,
-    insert: StatementSync,
-    copy: StatementSync,
-    reset: StatementSync,
-    succeed: StatementSync,
-    fail: StatementSync,
+    findByRunAndKey: StatementSync
+    findByRun: StatementSync
+    findBefore: StatementSync
+    maxSeq: StatementSync
+    insert: StatementSync
+    copy: StatementSync
+    reset: StatementSync
+    succeed: StatementSync
+    fail: StatementSync
     setColumn: Record<StepColumn, StatementSync>
 }
 
 function prepareStepStatements(db: DatabaseSync): StepStatements {
-    const setColumn = (column: StepColumn) => db.prepare(`UPDATE steps SET ${column} = ? WHERE id = ?`);
+    const setColumn = (column: StepColumn) => db.prepare(`UPDATE steps SET ${column} = ? WHERE id = ?`)
     return {
         findByRunAndKey: db.prepare("SELECT * FROM steps WHERE run_id = ? AND key = ?"),
         findByRun: db.prepare("SELECT * FROM steps WHERE run_id = ? ORDER BY seq"),
         findBefore: db.prepare("SELECT * FROM steps WHERE run_id = ? AND seq < ? ORDER BY seq"),
         maxSeq: db.prepare("SELECT COALESCE(MAX(seq), -1) AS maxSeq FROM steps WHERE run_id = ?"),
-        insert: db.prepare("INSERT INTO steps (id, run_id, key, name, seq, kind, status, started_at) VALUES (?, ?, ?, ?, ?, ?, 'interrupted', ?)"),
+        insert: db.prepare(
+            "INSERT INTO steps (id, run_id, key, name, seq, kind, status, started_at) VALUES (?, ?, ?, ?, ?, ?, 'interrupted', ?)"
+        ),
         copy: db.prepare(`INSERT INTO steps (id, run_id, key, name, seq, kind, status, output, error, session_id, snapshot_ref, artifact_id, event_key, started_at, ended_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
         reset: db.prepare(`UPDATE steps SET status = 'interrupted', output = NULL, error = NULL,
@@ -247,49 +257,64 @@ function prepareStepStatements(db: DatabaseSync): StepStatements {
             artifact_id: setColumn("artifact_id"),
             event_key: setColumn("event_key")
         }
-    };
+    }
 }
 
 export function findStep(db: DatabaseSync, runId: string, key: string): StepRow | undefined {
-    return statements(db).steps.findByRunAndKey.get(runId, key) as StepRow | undefined;
+    return statements(db).steps.findByRunAndKey.get(runId, key) as StepRow | undefined
 }
 
 export function findStepsByRun(db: DatabaseSync, runId: string): StepRow[] {
-    return statements(db).steps.findByRun.all(runId) as unknown as StepRow[];
+    return statements(db).steps.findByRun.all(runId) as unknown as StepRow[]
 }
 
 export function findStepsBefore(db: DatabaseSync, runId: string, seq: number): StepRow[] {
-    return statements(db).steps.findBefore.all(runId, seq) as unknown as StepRow[];
+    return statements(db).steps.findBefore.all(runId, seq) as unknown as StepRow[]
 }
 
 export function findMaxStepSeq(db: DatabaseSync, runId: string): number {
-    const { maxSeq } = statements(db).steps.maxSeq.get(runId) as { maxSeq: number };
-    return maxSeq;
+    const { maxSeq } = statements(db).steps.maxSeq.get(runId) as { maxSeq: number }
+    return maxSeq
 }
 
 export function insertStep(db: DatabaseSync, row: NewStepRow): void {
-    statements(db).steps.insert.run(row.id, row.run_id, row.key, row.name, row.seq, row.kind, row.started_at);
+    statements(db).steps.insert.run(row.id, row.run_id, row.key, row.name, row.seq, row.kind, row.started_at)
 }
 
 export function copyStep(db: DatabaseSync, row: StepRow): void {
-    statements(db).steps.copy.run(row.id, row.run_id, row.key, row.name, row.seq, row.kind, row.status, row.output, row.error,
-        row.session_id, row.snapshot_ref, row.artifact_id, row.event_key, row.started_at, row.ended_at);
+    statements(db).steps.copy.run(
+        row.id,
+        row.run_id,
+        row.key,
+        row.name,
+        row.seq,
+        row.kind,
+        row.status,
+        row.output,
+        row.error,
+        row.session_id,
+        row.snapshot_ref,
+        row.artifact_id,
+        row.event_key,
+        row.started_at,
+        row.ended_at
+    )
 }
 
 export function resetStep(db: DatabaseSync, id: string, startedAt: string): void {
-    statements(db).steps.reset.run(startedAt, id);
+    statements(db).steps.reset.run(startedAt, id)
 }
 
 export function succeedStep(db: DatabaseSync, id: string, output: string | null, endedAt: string): void {
-    statements(db).steps.succeed.run(output, endedAt, id);
+    statements(db).steps.succeed.run(output, endedAt, id)
 }
 
 export function failStep(db: DatabaseSync, id: string, error: string, endedAt: string): void {
-    statements(db).steps.fail.run(error, endedAt, id);
+    statements(db).steps.fail.run(error, endedAt, id)
 }
 
 export function setStepColumn(db: DatabaseSync, id: string, column: StepColumn, value: string): void {
-    statements(db).steps.setColumn[column].run(value, id);
+    statements(db).steps.setColumn[column].run(value, id)
 }
 
 /*
@@ -309,48 +334,50 @@ CREATE TABLE IF NOT EXISTS artifacts (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_artifacts_run_id ON artifacts(run_id);
-`;
+`
 
 export type ArtifactRow = {
-    id: string,
-    run_id: string,
-    name: string,
-    file: string,
-    kind: "text" | "binary",
-    mime_type: string | null,
+    id: string
+    run_id: string
+    name: string
+    file: string
+    kind: "text" | "binary"
+    mime_type: string | null
     created_at: string
 }
 
 type ArtifactStatements = {
-    insert: StatementSync,
-    findById: StatementSync,
-    findByRun: StatementSync,
+    insert: StatementSync
+    findById: StatementSync
+    findByRun: StatementSync
     deleteDuplicates: StatementSync
 }
 
 function prepareArtifactStatements(db: DatabaseSync): ArtifactStatements {
     return {
-        insert: db.prepare("INSERT INTO artifacts (id, run_id, name, file, kind, mime_type, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"),
+        insert: db.prepare(
+            "INSERT INTO artifacts (id, run_id, name, file, kind, mime_type, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        ),
         findById: db.prepare("SELECT * FROM artifacts WHERE id = ?"),
         findByRun: db.prepare("SELECT * FROM artifacts WHERE run_id = ?"),
         deleteDuplicates: db.prepare("DELETE FROM artifacts WHERE run_id = ? AND file = ? AND id != ?")
-    };
+    }
 }
 
 export function insertArtifact(db: DatabaseSync, row: ArtifactRow): void {
-    statements(db).artifacts.insert.run(row.id, row.run_id, row.name, row.file, row.kind, row.mime_type, row.created_at);
+    statements(db).artifacts.insert.run(row.id, row.run_id, row.name, row.file, row.kind, row.mime_type, row.created_at)
 }
 
 export function findArtifactById(db: DatabaseSync, id: string): ArtifactRow | undefined {
-    return statements(db).artifacts.findById.get(id) as ArtifactRow | undefined;
+    return statements(db).artifacts.findById.get(id) as ArtifactRow | undefined
 }
 
 export function findArtifactsByRun(db: DatabaseSync, runId: string): ArtifactRow[] {
-    return statements(db).artifacts.findByRun.all(runId) as unknown as ArtifactRow[];
+    return statements(db).artifacts.findByRun.all(runId) as unknown as ArtifactRow[]
 }
 
 export function deleteDuplicateArtifacts(db: DatabaseSync, runId: string, file: string, keepId: string): void {
-    statements(db).artifacts.deleteDuplicates.run(runId, file, keepId);
+    statements(db).artifacts.deleteDuplicates.run(runId, file, keepId)
 }
 
 /*
@@ -379,77 +406,81 @@ CREATE TABLE IF NOT EXISTS session_messages (
     created_at TEXT NOT NULL,
     UNIQUE (session_id, seq)
 );
-`;
+`
 
 export type SessionRow = {
-    id: string,
-    kind: "llm" | "coding-agent",
-    provider: string,
-    model: string,
-    status: PersistedStatus,
-    started_at: string,
+    id: string
+    kind: "llm" | "coding-agent"
+    provider: string
+    model: string
+    status: PersistedStatus
+    started_at: string
     ended_at: string | null
 }
 
 export type SessionMessageRow = {
-    id: string,
-    session_id: string,
-    seq: number,
-    role: "system" | "user" | "assistant" | "tool",
-    content: string,
+    id: string
+    session_id: string
+    seq: number
+    role: "system" | "user" | "assistant" | "tool"
+    content: string
     created_at: string
 }
 
 export type NewSessionRow = Pick<SessionRow, "id" | "kind" | "provider" | "model" | "started_at">
 
 type SessionStatements = {
-    insert: StatementSync,
-    findById: StatementSync,
-    succeed: StatementSync,
-    fail: StatementSync,
-    insertMessage: StatementSync,
-    findMessages: StatementSync,
+    insert: StatementSync
+    findById: StatementSync
+    succeed: StatementSync
+    fail: StatementSync
+    insertMessage: StatementSync
+    findMessages: StatementSync
     findMessageById: StatementSync
 }
 
 function prepareSessionStatements(db: DatabaseSync): SessionStatements {
     return {
-        insert: db.prepare("INSERT INTO sessions (id, kind, provider, model, status, started_at) VALUES (?, ?, ?, ?, 'interrupted', ?)"),
+        insert: db.prepare(
+            "INSERT INTO sessions (id, kind, provider, model, status, started_at) VALUES (?, ?, ?, ?, 'interrupted', ?)"
+        ),
         findById: db.prepare("SELECT * FROM sessions WHERE id = ?"),
         succeed: db.prepare("UPDATE sessions SET status = 'succeeded', ended_at = ? WHERE id = ?"),
         fail: db.prepare("UPDATE sessions SET status = 'failed', ended_at = ? WHERE id = ?"),
-        insertMessage: db.prepare("INSERT INTO session_messages (id, session_id, seq, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)"),
+        insertMessage: db.prepare(
+            "INSERT INTO session_messages (id, session_id, seq, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+        ),
         findMessages: db.prepare("SELECT * FROM session_messages WHERE session_id = ? AND seq > ? ORDER BY seq"),
         findMessageById: db.prepare("SELECT * FROM session_messages WHERE id = ?")
-    };
+    }
 }
 
 export function insertSession(db: DatabaseSync, row: NewSessionRow): void {
-    statements(db).sessions.insert.run(row.id, row.kind, row.provider, row.model, row.started_at);
+    statements(db).sessions.insert.run(row.id, row.kind, row.provider, row.model, row.started_at)
 }
 
 export function findSessionById(db: DatabaseSync, id: string): SessionRow | undefined {
-    return statements(db).sessions.findById.get(id) as SessionRow | undefined;
+    return statements(db).sessions.findById.get(id) as SessionRow | undefined
 }
 
 export function succeedSession(db: DatabaseSync, id: string, endedAt: string): void {
-    statements(db).sessions.succeed.run(endedAt, id);
+    statements(db).sessions.succeed.run(endedAt, id)
 }
 
 export function failSession(db: DatabaseSync, id: string, endedAt: string): void {
-    statements(db).sessions.fail.run(endedAt, id);
+    statements(db).sessions.fail.run(endedAt, id)
 }
 
 export function insertSessionMessage(db: DatabaseSync, row: SessionMessageRow): void {
-    statements(db).sessions.insertMessage.run(row.id, row.session_id, row.seq, row.role, row.content, row.created_at);
+    statements(db).sessions.insertMessage.run(row.id, row.session_id, row.seq, row.role, row.content, row.created_at)
 }
 
 export function findSessionMessages(db: DatabaseSync, sessionId: string, afterSeq = -1): SessionMessageRow[] {
-    return statements(db).sessions.findMessages.all(sessionId, afterSeq) as unknown as SessionMessageRow[];
+    return statements(db).sessions.findMessages.all(sessionId, afterSeq) as unknown as SessionMessageRow[]
 }
 
 export function findSessionMessageById(db: DatabaseSync, id: string): SessionMessageRow | undefined {
-    return statements(db).sessions.findMessageById.get(id) as SessionMessageRow | undefined;
+    return statements(db).sessions.findMessageById.get(id) as SessionMessageRow | undefined
 }
 
 /*
@@ -470,23 +501,23 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS idx_events_key ON events(key);
 CREATE INDEX IF NOT EXISTS idx_events_origin ON events(origin);
-`;
+`
 
 export type EventRow = {
-    id: string,
-    key: string,
-    payload: string,
-    origin: string | null,
-    emitted_at: string,
-    consumed_at: string | null,
+    id: string
+    key: string
+    payload: string
+    origin: string | null
+    emitted_at: string
+    consumed_at: string | null
     consumed_by: string | null
 }
 
 export type NewEventRow = Omit<EventRow, "consumed_at" | "consumed_by">
 
 type EventStatements = {
-    insert: StatementSync,
-    consume: StatementSync,
+    insert: StatementSync
+    consume: StatementSync
     deleteUnconsumedByOrigin: StatementSync
 }
 
@@ -495,23 +526,26 @@ function prepareEventStatements(db: DatabaseSync): EventStatements {
         insert: db.prepare("INSERT INTO events (id, key, payload, origin, emitted_at) VALUES (?, ?, ?, ?, ?)"),
         consume: db.prepare("UPDATE events SET consumed_at = ?, consumed_by = ? WHERE id = ?"),
         deleteUnconsumedByOrigin: db.prepare("DELETE FROM events WHERE origin = ? AND consumed_at IS NULL")
-    };
+    }
 }
 
 export function insertEvent(db: DatabaseSync, row: NewEventRow): void {
-    statements(db).events.insert.run(row.id, row.key, row.payload, row.origin, row.emitted_at);
+    statements(db).events.insert.run(row.id, row.key, row.payload, row.origin, row.emitted_at)
 }
 
 export function deleteUnconsumedEventsByOrigin(db: DatabaseSync, origin: string): void {
-    statements(db).events.deleteUnconsumedByOrigin.run(origin);
+    statements(db).events.deleteUnconsumedByOrigin.run(origin)
 }
 
 export function findDeliverableEvent(db: DatabaseSync, keys: string[], stepId: string): EventRow | undefined {
-    const placeholders = keys.map(() => "?").join(", ");
-    return db.prepare(`SELECT * FROM events WHERE key IN (${placeholders}) AND (consumed_at IS NULL OR consumed_by = ?) ORDER BY consumed_at IS NULL, emitted_at, id LIMIT 1`)
-        .get(...keys, stepId) as EventRow | undefined;
+    const placeholders = keys.map(() => "?").join(", ")
+    return db
+        .prepare(
+            `SELECT * FROM events WHERE key IN (${placeholders}) AND (consumed_at IS NULL OR consumed_by = ?) ORDER BY consumed_at IS NULL, emitted_at, id LIMIT 1`
+        )
+        .get(...keys, stepId) as EventRow | undefined
 }
 
 export function consumeEvent(db: DatabaseSync, id: string, consumedAt: string, consumedBy: string): void {
-    statements(db).events.consume.run(consumedAt, consumedBy, id);
+    statements(db).events.consume.run(consumedAt, consumedBy, id)
 }

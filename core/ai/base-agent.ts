@@ -1,16 +1,16 @@
-import * as z from "zod";
-import { requireContext } from "../context";
-import type { Worktree } from "../git";
-import { uniqueName } from "../util";
-import type { CodingAgent, CodingRunOptions } from "./coding-agent";
-import { renderPrompt } from "./prompt";
-import type { SessionRecorder } from "./sessions";
+import * as z from "zod"
+import { requireContext } from "../context"
+import type { Worktree } from "../git"
+import { uniqueName } from "../util"
+import type { CodingAgent, CodingRunOptions } from "./coding-agent"
+import { renderPrompt } from "./prompt"
+import type { SessionRecorder } from "./sessions"
 
 export type CodingAgentInvocation = {
-    stepName: string,
-    prompt: string,
-    output: z.ZodTypeAny,
-    worktree: Worktree,
+    stepName: string
+    prompt: string
+    output: z.ZodTypeAny
+    worktree: Worktree
     session: SessionRecorder
 }
 
@@ -30,30 +30,42 @@ export abstract class BaseCodingAgent implements CodingAgent {
     protected abstract invoke(invocation: CodingAgentInvocation): Promise<unknown>
 
     async run<T extends z.ZodTypeAny>(stepName: string, options: CodingRunOptions<T>): Promise<z.infer<T>> {
-        const ctx = requireContext();
-        let session: SessionRecorder | undefined;
+        const ctx = requireContext()
+        let session: SessionRecorder | undefined
         return ctx.loopy.engine.executeStep({
             kind: "agent",
             name: stepName,
             schema: options.output,
             execute: async (handle) => {
-                const prompt = await renderPrompt(options.prompt);
-                session = ctx.loopy.sessions.create({ kind: "coding-agent", provider: this.provider, model: this.model });
-                handle.set("session_id", session.id);
-                return this.invoke({ stepName, prompt, output: options.output, worktree: options.worktree, session });
+                const prompt = await renderPrompt(options.prompt)
+                session = ctx.loopy.sessions.create({
+                    kind: "coding-agent",
+                    provider: this.provider,
+                    model: this.model
+                })
+                handle.set("session_id", session.id)
+                return this.invoke({
+                    stepName,
+                    prompt,
+                    output: options.output,
+                    worktree: options.worktree,
+                    session
+                })
             },
             onSuccess: async (handle) => {
-                const ref = await options.worktree.snapshotRef(`refs/loopy/agent/${uniqueName(`${ctx.workflowName}/${ctx.runKey}`)}/${ctx.attempt}/${uniqueName(handle.stepKey)}`);
-                handle.set("snapshot_ref", ref);
-                session?.succeed();
+                const ref = await options.worktree.snapshotRef(
+                    `refs/loopy/agent/${uniqueName(`${ctx.workflowName}/${ctx.runKey}`)}/${ctx.attempt}/${uniqueName(handle.stepKey)}`
+                )
+                handle.set("snapshot_ref", ref)
+                session?.succeed()
             },
             onError: async () => session?.fail(),
             onReplay: async (row) => {
                 if (row.snapshot_ref === null) {
-                    throw new Error(`Agent step "${row.key}" has no worktree snapshot to restore`);
+                    throw new Error(`Agent step "${row.key}" has no worktree snapshot to restore`)
                 }
-                await options.worktree.restoreRef(row.snapshot_ref);
+                await options.worktree.restoreRef(row.snapshot_ref)
             }
-        });
+        })
     }
 }

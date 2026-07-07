@@ -1,9 +1,9 @@
-import type { Artifact } from "./artifacts";
-import * as sql from "./db";
-import { decode } from "./codec";
-import type { DatabaseSync } from "node:sqlite";
-import { observableStatus, type ActiveSets } from "./runtime";
-import type { ArtifactRow, ListRunsFilter, RunRow, StepRow } from "./db";
+import type { Artifact } from "./artifacts"
+import * as sql from "./db"
+import { decode } from "./codec"
+import type { DatabaseSync } from "node:sqlite"
+import { observableStatus, type ActiveSets } from "./runtime"
+import type { ArtifactRow, ListRunsFilter, RunRow, StepRow } from "./db"
 
 export class WorkflowRuns {
     private readonly db: DatabaseSync
@@ -16,9 +16,10 @@ export class WorkflowRuns {
 
     async list(options?: ListWorkflowOptions): Promise<WorkflowRunMetadata[]> {
         const statuses = options?.statuses
-        const needsOverlayFilter = statuses !== undefined && statuses.includes("interrupted") !== statuses.includes("running")
+        const needsOverlayFilter =
+            statuses !== undefined && statuses.includes("interrupted") !== statuses.includes("running")
         const rows = sql.listRuns(this.db, this.createDbFilter(options, needsOverlayFilter))
-        const result = rows.map(row => this.toMetadata(row))
+        const result = rows.map((row) => this.toMetadata(row))
         return this.applyOverlayFilter(result, options, needsOverlayFilter)
     }
 
@@ -26,14 +27,19 @@ export class WorkflowRuns {
         const filter: ListRunsFilter = {}
         if (options?.key !== undefined) filter.key = options.key
         if (options?.workflowName !== undefined) filter.workflowName = options.workflowName
-        if (options?.statuses !== undefined) filter.statuses = [...new Set(options.statuses.map(s => s === "running" ? "interrupted" : s))]
+        if (options?.statuses !== undefined)
+            filter.statuses = [...new Set(options.statuses.map((s) => (s === "running" ? "interrupted" : s)))]
         if (options?.lastN !== undefined && !needsOverlayFilter) filter.lastN = options.lastN
         return filter
     }
 
-    private applyOverlayFilter(result: WorkflowRunMetadata[], options: ListWorkflowOptions | undefined, needsOverlayFilter: boolean): WorkflowRunMetadata[] {
+    private applyOverlayFilter(
+        result: WorkflowRunMetadata[],
+        options: ListWorkflowOptions | undefined,
+        needsOverlayFilter: boolean
+    ): WorkflowRunMetadata[] {
         if (!needsOverlayFilter) return result
-        const filtered = result.filter(m => options!.statuses!.includes(m.status))
+        const filtered = result.filter((m) => options!.statuses!.includes(m.status))
         return options?.lastN !== undefined ? filtered.slice(0, options.lastN) : filtered
     }
 
@@ -46,8 +52,8 @@ export class WorkflowRuns {
             ...this.toMetadata(row),
             ...(row.output !== null ? { output: decode(row.output) } : {}),
             ...(row.error !== null ? { error: row.error } : {}),
-            steps: stepRows.map(s => this.toStep(s)),
-            artifacts: artifactRows.map(a => this.toArtifact(a))
+            steps: stepRows.map((s) => this.toStep(s)),
+            artifacts: artifactRows.map((a) => this.toArtifact(a))
         }
     }
 
@@ -80,9 +86,19 @@ export class WorkflowRuns {
             case "custom":
                 return { ...base, kind: "custom", output }
             case "artifact":
-                return { ...base, kind: "artifact", output, ...(row.artifact_id !== null ? { artifactId: row.artifact_id } : {}) }
+                return {
+                    ...base,
+                    kind: "artifact",
+                    output,
+                    ...(row.artifact_id !== null ? { artifactId: row.artifact_id } : {})
+                }
             case "llm":
-                return { ...base, kind: "llm", output, ...(row.session_id !== null ? { sessionId: row.session_id } : {}) }
+                return {
+                    ...base,
+                    kind: "llm",
+                    output,
+                    ...(row.session_id !== null ? { sessionId: row.session_id } : {})
+                }
             case "agent":
                 return {
                     ...base,
@@ -92,7 +108,12 @@ export class WorkflowRuns {
                     ...(row.snapshot_ref !== null ? { snapshotRef: row.snapshot_ref } : {})
                 }
             case "event":
-                return { ...base, kind: "event", output, ...(row.event_key !== null ? { eventKey: row.event_key } : {}) }
+                return {
+                    ...base,
+                    kind: "event",
+                    output,
+                    ...(row.event_key !== null ? { eventKey: row.event_key } : {})
+                }
         }
     }
 
@@ -114,22 +135,27 @@ export type PersistedStepStatus = "interrupted" | "succeeded" | "failed"
 export type ObservableStepStatus = PersistedStepStatus | "running"
 
 type StepBase = {
-    id: string,
-    runId: string,
-    key: string,
-    name: string,
-    seq: number,
-    startedAt: Date,
-    endedAt?: Date,
-    status: ObservableStepStatus,
+    id: string
+    runId: string
+    key: string
+    name: string
+    seq: number
+    startedAt: Date
+    endedAt?: Date
+    status: ObservableStepStatus
     error?: string
 }
 
-export type CustomStep = StepBase & { kind: "custom", output?: unknown }
-export type ArtifactStep = StepBase & { kind: "artifact", artifactId?: string, output?: Artifact }
-export type LlmStep = StepBase & { kind: "llm", sessionId?: string, output?: unknown }
-export type AgentStep = StepBase & { kind: "agent", sessionId?: string, snapshotRef?: string, output?: unknown }
-export type EventStep = StepBase & { kind: "event", eventKey?: string, output?: unknown }
+export type CustomStep = StepBase & { kind: "custom"; output?: unknown }
+export type ArtifactStep = StepBase & { kind: "artifact"; artifactId?: string; output?: Artifact }
+export type LlmStep = StepBase & { kind: "llm"; sessionId?: string; output?: unknown }
+export type AgentStep = StepBase & {
+    kind: "agent"
+    sessionId?: string
+    snapshotRef?: string
+    output?: unknown
+}
+export type EventStep = StepBase & { kind: "event"; eventKey?: string; output?: unknown }
 
 export type Step = CustomStep | ArtifactStep | LlmStep | AgentStep | EventStep
 
@@ -142,38 +168,38 @@ export type WorkflowRun = {
     /**
      * Unique, URL-friendly run ID.
      */
-    id: string,
+    id: string
     /**
      * Semantic ID, reused across attempts.
      */
-    key: string,
+    key: string
     /**
      * Attempt number. (workflowName, key, attempt) tuple is always unique.
      */
-    attempt: number,
-    workflowName: string,
-    startedAt: Date,
-    endedAt?: Date,
-    status: ObservableRunStatus,
-    output?: unknown,
-    error?: string,
-    steps: Step[],
+    attempt: number
+    workflowName: string
+    startedAt: Date
+    endedAt?: Date
+    status: ObservableRunStatus
+    output?: unknown
+    error?: string
+    steps: Step[]
     artifacts: Artifact[]
 }
 
 export type WorkflowRunMetadata = {
-    id: string,
-    key: string,
-    attempt: number,
-    workflowName: string,
-    startedAt: Date,
-    endedAt?: Date,
+    id: string
+    key: string
+    attempt: number
+    workflowName: string
+    startedAt: Date
+    endedAt?: Date
     status: ObservableRunStatus
 }
 
 export type ListWorkflowOptions = {
-    key?: string,
-    workflowName?: string,
-    statuses?: ObservableRunStatus[],
+    key?: string
+    workflowName?: string
+    statuses?: ObservableRunStatus[]
     lastN?: number
 }

@@ -1,13 +1,13 @@
-import * as z from "zod";
-import { requireContext } from "../context";
-import type { LanguageModel, ModelCallOptions } from "./llm";
-import { renderPrompt } from "./prompt";
-import type { SessionRecorder } from "./sessions";
+import * as z from "zod"
+import { requireContext } from "../context"
+import type { LanguageModel, ModelCallOptions } from "./llm"
+import { renderPrompt } from "./prompt"
+import type { SessionRecorder } from "./sessions"
 
 export type LanguageModelInvocation = {
-    stepName: string,
-    prompt: string,
-    output: z.ZodTypeAny,
+    stepName: string
+    prompt: string
+    output: z.ZodTypeAny
     session: SessionRecorder
 }
 
@@ -25,20 +25,24 @@ export abstract class BaseLanguageModel implements LanguageModel {
     protected abstract invoke(invocation: LanguageModelInvocation): Promise<unknown>
 
     async call<T extends z.ZodTypeAny>(stepName: string, options: ModelCallOptions<T>): Promise<z.infer<T>> {
-        const loopy = requireContext().loopy;
-        let session: SessionRecorder | undefined;
+        const loopy = requireContext().loopy
+        let session: SessionRecorder | undefined
         return loopy.engine.executeStep({
             kind: "llm",
             name: stepName,
             schema: options.output,
             execute: async (handle) => {
-                const prompt = await renderPrompt(options.prompt);
-                session = loopy.sessions.create({ kind: "llm", provider: this.provider, model: this.model });
-                handle.set("session_id", session.id);
-                return this.invoke({ stepName, prompt, output: options.output, session });
+                const prompt = await renderPrompt(options.prompt)
+                session = loopy.sessions.create({
+                    kind: "llm",
+                    provider: this.provider,
+                    model: this.model
+                })
+                handle.set("session_id", session.id)
+                return this.invoke({ stepName, prompt, output: options.output, session })
             },
             onSuccess: async () => session?.succeed(),
             onError: async () => session?.fail()
-        });
+        })
     }
 }

@@ -1,20 +1,20 @@
-import * as z from "zod";
-import { mkdirSync } from "node:fs";
-import * as path from "node:path";
-import { DatabaseSync } from "node:sqlite";
-import { resolveLoopyDir } from "./util";
-import { WorkflowRuns } from "./runs";
-import { Artifacts } from "./artifacts";
-import { AISessions } from "./ai/sessions";
-import { openDatabase } from "./db";
-import type { ActiveSets } from "./runtime";
-import { Engine } from "./engine";
-import { Events } from "./events";
-import { runContext } from "./context";
-import { decode } from "./codec";
+import * as z from "zod"
+import { mkdirSync } from "node:fs"
+import * as path from "node:path"
+import { DatabaseSync } from "node:sqlite"
+import { resolveLoopyDir } from "./util"
+import { WorkflowRuns } from "./runs"
+import { Artifacts } from "./artifacts"
+import { AISessions } from "./ai/sessions"
+import { openDatabase } from "./db"
+import type { ActiveSets } from "./runtime"
+import { Engine } from "./engine"
+import { Events } from "./events"
+import { runContext } from "./context"
+import { decode } from "./codec"
 
 type RegisteredWorkflow = {
-    options: { input: z.ZodTypeAny, output: z.ZodTypeAny, key: (input: any) => string },
+    options: { input: z.ZodTypeAny; output: z.ZodTypeAny; key: (input: any) => string }
     fn: (input: any) => Promise<any>
 }
 
@@ -47,7 +47,11 @@ export class Loopy {
         this.db.close()
     }
 
-    registerWorkflow<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(name: string, options: WorkflowOptions<I, O>, workflowFn: (input: z.infer<I>) => Promise<z.infer<O>>) {
+    registerWorkflow<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(
+        name: string,
+        options: WorkflowOptions<I, O>,
+        workflowFn: (input: z.infer<I>) => Promise<z.infer<O>>
+    ) {
         if (this.workflows.has(name)) throw new Error(`Workflow "${name}" is already registered`)
         this.workflows.set(name, { options, fn: workflowFn })
     }
@@ -72,7 +76,9 @@ export class Loopy {
         const key = registered.options.key(parsed)
         const plan = this.engine.resolvePlan(name, key, parsed, rerun)
         if (plan.type !== "execute") return
-        this.engine.executeRun(this, plan.runRow, async () => registered.options.output.parse(await registered.fn(parsed))).catch(() => { })
+        this.engine
+            .executeRun(this, plan.runRow, async () => registered.options.output.parse(await registered.fn(parsed)))
+            .catch(() => {})
     }
 
     /**
@@ -83,9 +89,12 @@ export class Loopy {
     async run<O>(name: string, key: string, workflowFn: () => Promise<O>, rerun?: RerunOptions): Promise<O> {
         const plan = this.engine.resolvePlan(name, key, undefined, rerun)
         switch (plan.type) {
-            case "noopRunning": return this.active.runs.get(plan.runId)!.promise as Promise<O>
-            case "noopSucceeded": return plan.runRow.output === null ? undefined as O : decode(plan.runRow.output)
-            case "execute": return this.engine.executeRun(this, plan.runRow, workflowFn)
+            case "noopRunning":
+                return this.active.runs.get(plan.runId)!.promise as Promise<O>
+            case "noopSucceeded":
+                return plan.runRow.output === null ? (undefined as O) : decode(plan.runRow.output)
+            case "execute":
+                return this.engine.executeRun(this, plan.runRow, workflowFn)
         }
     }
 
@@ -145,11 +154,11 @@ export class Loopy {
      */
     async waitForAny(defs: EventDefinition<any>[]): Promise<any> {
         if (defs.length === 0) throw new Error("waitForAny requires at least one event definition")
-        return this.waitForEventStep(defs, `wait:${defs.map(d => d.key).join("+")}`)
+        return this.waitForEventStep(defs, `wait:${defs.map((d) => d.key).join("+")}`)
     }
 
-    private waitForEventStep(defs: EventDefinition<any>[], stepName: string): Promise<{ key: string, event: any }> {
-        const variants = defs.map(d => z.object({ key: z.literal(d.key), event: d.schema }))
+    private waitForEventStep(defs: EventDefinition<any>[], stepName: string): Promise<{ key: string; event: any }> {
+        const variants = defs.map((d) => z.object({ key: z.literal(d.key), event: d.schema }))
         const schema = variants.length === 1 ? variants[0] : z.union(variants)
         return this.engine.executeStep({
             kind: "event",
@@ -165,11 +174,11 @@ export class Loopy {
 }
 
 export type WorkflowOptions<I extends z.ZodTypeAny, O extends z.ZodTypeAny> = {
-    input: I,
-    output: O,
+    input: I
+    output: O
     key: (input: z.infer<I>) => string
 }
 
 export type RerunOptions = { from: string }
 
-export type EventDefinition<T extends z.ZodTypeAny> = { key: string, schema: T }
+export type EventDefinition<T extends z.ZodTypeAny> = { key: string; schema: T }
