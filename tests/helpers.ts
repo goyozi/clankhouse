@@ -1,0 +1,107 @@
+import { execFile } from "node:child_process";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { promisify } from "node:util";
+import { onTestFinished } from "vitest";
+import { Loopy } from "../core/loopy";
+
+const execFileAsync = promisify(execFile);
+
+export function tempDir(prefix: string): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+    onTestFinished(() => fs.rmSync(dir, { recursive: true, force: true }));
+    return dir;
+}
+
+export function tempLoopy(): { loopy: Loopy, dir: string, reopen: () => Loopy } {
+    const dir = tempDir("loopy-test-");
+    const instances: Loopy[] = [];
+    const open = () => {
+        const instance = new Loopy(dir);
+        instances.push(instance);
+        return instance;
+    };
+    const loopy = open();
+    onTestFinished(() => {
+        for (const instance of instances) {
+            try {
+                instance.close();
+            } catch {
+            }
+        }
+    });
+    return { loopy, dir, reopen: open };
+}
+
+export function tempLoopyDirEnv(): string {
+    const dir = tempDir("loopy-dir-");
+    const previous = process.env.LOOPY_DIR;
+    process.env.LOOPY_DIR = dir;
+    onTestFinished(() => {
+        if (previous === undefined) delete process.env.LOOPY_DIR;
+        else process.env.LOOPY_DIR = previous;
+    });
+    return dir;
+}
+
+export async function runGit(cwd: string, args: string[]): Promise<string> {
+    const { stdout } = await execFileAsync("git", args, { cwd });
+    return stdout.trim();
+}
+
+export type TempGitRepo = {
+    path: string,
+    write: (file: string, content: string) => void,
+    read: (file: string) => string,
+    exists: (file: string) => boolean,
+    commitAll: (message: string) => Promise<void>,
+    addBareOrigin: () => Promise<string>
+}
+
+export async function tempGitRepo(): Promise<TempGitRepo> {
+    const dir = tempDir("loopy-git-");
+    await runGit(dir, ["init", "-b", "main"]);
+    await runGit(dir, ["config", "user.email", "test@loopy.dev"]);
+    await runGit(dir, ["config", "user.name", "Loopy Test"]);
+    const repo: TempGitRepo = {
+        path: dir,
+        write(file, content) {
+            const target = path.join(dir, file);
+            fs.mkdirSync(path.dirname(target), { recursive: true });
+            fs.writeFileSync(target, content);
+        },
+        read: file => fs.readFileSync(path.join(dir, file), "utf8"),
+        exists: file => fs.existsSync(path.join(dir, file)),
+        async commitAll(message) {
+            await runGit(dir, ["add", "-A"]);
+            await runGit(dir, ["commit", "-m", message]);
+        },
+        async addBareOrigin() {
+            const bare = tempDir("loopy-origin-");
+            await runGit(bare, ["init", "--bare"]);
+            await runGit(dir, ["remote", "add", "origin", bare]);
+            return bare;
+        }
+    };
+    repo.write("README.md", "# test\n");
+    await repo.commitAll("initial");
+    return repo;
+}
+
+export function testRun<O>(
+    loopy: Loopy,
+    body: () => Promise<O>,
+    opts: { key?: string, from?: string } = {}
+): Promise<O> {
+    const rerun = opts.from !== undefined ? { from: opts.from } : undefined;
+    return loopy.run("test-workflow", opts.key ?? "test-key", body, rerun);
+}
+
+export function gate(): { released: Promise<void>, release: () => void } {
+    let release!: () => void;
+    const released = new Promise<void>(resolve => {
+        release = resolve;
+    });
+    return { released, release };
+}
