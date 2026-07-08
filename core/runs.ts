@@ -1,15 +1,14 @@
 import type { Artifact } from "./artifacts"
 import * as sql from "./db"
 import { decode } from "./codec"
-import type { DatabaseSync } from "node:sqlite"
 import { observableStatus, type ActiveSets } from "./runtime"
-import type { ArtifactRow, ListRunsFilter, RunRow, StepRow } from "./db"
+import type { ArtifactRow, Db, ListRunsFilter, RunRow, StepRow } from "./db"
 
 export class WorkflowRuns {
-    private readonly db: DatabaseSync
+    private readonly db: Db
     private readonly active: ActiveSets
 
-    constructor(db: DatabaseSync, active: ActiveSets) {
+    constructor(db: Db, active: ActiveSets) {
         this.db = db
         this.active = active
     }

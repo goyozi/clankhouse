@@ -6,8 +6,7 @@ import { Readable } from "node:stream"
 import { pipeline } from "node:stream/promises"
 import { requireContext } from "./context"
 import * as sql from "./db"
-import type { ArtifactRow } from "./db"
-import type { DatabaseSync } from "node:sqlite"
+import type { ArtifactRow, Db } from "./db"
 import type { Engine } from "./engine"
 import { newId, nowIso, uniqueName } from "./util"
 
@@ -22,10 +21,10 @@ export const ArtifactSchema = z.object({
 
 export class Artifacts {
     private readonly loopyDir: string
-    private readonly db: DatabaseSync
+    private readonly db: Db
     private readonly engine: Engine
 
-    constructor(loopyDir: string, db: DatabaseSync, engine: Engine) {
+    constructor(loopyDir: string, db: Db, engine: Engine) {
         this.loopyDir = loopyDir
         this.db = db
         this.engine = engine

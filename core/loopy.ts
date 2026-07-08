@@ -1,12 +1,11 @@
 import * as z from "zod"
 import { mkdirSync } from "node:fs"
 import * as path from "node:path"
-import { DatabaseSync } from "node:sqlite"
+import { openDatabase, type Db } from "./db"
 import { resolveLoopyDir } from "./util"
 import { WorkflowRuns } from "./runs"
 import { Artifacts } from "./artifacts"
 import { AISessions } from "./ai/sessions"
-import { openDatabase } from "./db"
 import type { ActiveSets } from "./runtime"
 import { Engine } from "./engine"
 import { Events } from "./events"
@@ -23,7 +22,7 @@ export class Loopy {
     readonly runs: WorkflowRuns
     readonly artifacts: Artifacts
     readonly sessions: AISessions
-    readonly db: DatabaseSync
+    readonly db: Db
     readonly active: ActiveSets = { runs: new Map(), steps: new Set(), sessions: new Set() }
     readonly engine: Engine
     readonly events: Events

@@ -1,6 +1,6 @@
 import type { EventDefinition } from "./loopy"
 import * as sql from "./db"
-import type { DatabaseSync } from "node:sqlite"
+import type { Db } from "./db"
 import { newId, nowIso } from "./util"
 import { decode, encode } from "./codec"
 
@@ -11,10 +11,10 @@ type Waiter = {
 }
 
 export class Events {
-    private readonly db: DatabaseSync
+    private readonly db: Db
     private readonly waiters = new Map<string, Waiter>()
 
-    constructor(db: DatabaseSync) {
+    constructor(db: Db) {
         this.db = db
     }
 

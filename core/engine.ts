@@ -2,9 +2,8 @@ import * as z from "zod"
 import type { Loopy, RerunOptions } from "./loopy"
 import { requireContext, runContext, type RunContext } from "./context"
 import * as sql from "./db"
-import type { RunRow, StepColumn, StepKind, StepRow } from "./db"
+import type { Db, RunRow, StepColumn, StepKind, StepRow } from "./db"
 import type { ActiveSets } from "./runtime"
-import type { DatabaseSync } from "node:sqlite"
 import { copyFileSync, mkdirSync } from "node:fs"
 import * as path from "node:path"
 import { errorMessage, newId, nowIso } from "./util"
@@ -35,11 +34,11 @@ export type Plan =
     | { type: "noopSucceeded"; runRow: RunRow }
 
 export class Engine {
-    private readonly db: DatabaseSync
+    private readonly db: Db
     private readonly active: ActiveSets
     private readonly loopyDir: string
 
-    constructor(db: DatabaseSync, active: ActiveSets, loopyDir: string) {
+    constructor(db: Db, active: ActiveSets, loopyDir: string) {
         this.db = db
         this.active = active
         this.loopyDir = loopyDir

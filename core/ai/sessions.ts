@@ -1,15 +1,14 @@
 import * as sql from "../db"
-import type { SessionMessageRow } from "../db"
+import type { Db, SessionMessageRow } from "../db"
 import { observableStatus, type ActiveSets } from "../runtime"
-import type { DatabaseSync } from "node:sqlite"
 import { newId, nowIso } from "../util"
 
 export class AISessions {
-    private readonly db: DatabaseSync
+    private readonly db: Db
     private readonly active: ActiveSets
     private readonly listeners = new Map<string, Set<() => void>>()
 
-    constructor(db: DatabaseSync, active: ActiveSets) {
+    constructor(db: Db, active: ActiveSets) {
         this.db = db
         this.active = active
     }
