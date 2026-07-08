@@ -168,7 +168,7 @@ export type ObservableSessionStatus = PersistedSessionStatus | "running"
 export type AISessionMessage = {
     id: string
     sessionId: string
-    role: "system" | "user" | "assistant" | "tool"
+    role: "system" | "user" | "assistant" | "tool" | "tool_result"
     content: string
     createdAt: Date
 }

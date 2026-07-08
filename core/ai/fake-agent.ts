@@ -24,6 +24,23 @@ export type FakeAgentResult = {
     output: unknown
 }
 
+export async function applyChange(change: FakeChange, baseDir: string): Promise<void> {
+    const target = path.join(baseDir, change.file)
+    if ("text" in change) {
+        await mkdir(path.dirname(target), { recursive: true })
+        await writeFile(target, change.text)
+    } else if ("oldText" in change) {
+        const content = await readFile(target, "utf8")
+        if (!content.includes(change.oldText)) throw new Error(`oldText not found in ${change.file}`)
+        await writeFile(
+            target,
+            content.replace(change.oldText, () => change.newText)
+        )
+    } else {
+        await rm(target)
+    }
+}
+
 export class FakeCodingAgent extends BaseCodingAgent {
     readonly provider = "fake-agent"
     readonly model = "fake"
@@ -38,20 +55,7 @@ export class FakeCodingAgent extends BaseCodingAgent {
         session.addMessage("user", prompt)
         const result = this.fakeRun(stepName, prompt)
         for (const change of result.changes) {
-            const target = path.join(worktree.path, change.file)
-            if ("text" in change) {
-                await mkdir(path.dirname(target), { recursive: true })
-                await writeFile(target, change.text)
-            } else if ("oldText" in change) {
-                const content = await readFile(target, "utf8")
-                if (!content.includes(change.oldText)) throw new Error(`oldText not found in ${change.file}`)
-                await writeFile(
-                    target,
-                    content.replace(change.oldText, () => change.newText)
-                )
-            } else {
-                await rm(target)
-            }
+            await applyChange(change, worktree.path)
             session.addMessage("tool", JSON.stringify(change))
         }
         session.addMessage("assistant", JSON.stringify(result.output))
