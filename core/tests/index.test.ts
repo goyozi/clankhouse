@@ -1,7 +1,7 @@
 import * as fs from "node:fs"
 import * as path from "node:path"
 import { expect, test } from "vitest"
-import { tempDir } from "./helpers"
+import { tempDir } from "@loopy/test-utils"
 
 test("importing the package does not create the loopy dir until first use", async () => {
     // given a loopy dir path pointed to by the LOOPY_DIR env var
@@ -10,7 +10,7 @@ test("importing the package does not create the loopy dir until first use", asyn
     process.env.LOOPY_DIR = dir
     try {
         // when importing the package
-        const mod = await import("../core/index")
+        const mod = await import("@loopy/core")
         // then the loopy dir is not created just from importing
         expect(fs.existsSync(dir)).toBe(false)
 

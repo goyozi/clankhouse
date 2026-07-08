@@ -1,8 +1,8 @@
 import * as fs from "node:fs"
 import * as path from "node:path"
 import { expect, test } from "vitest"
-import { Loopy } from "../core/loopy"
-import { tempDir } from "./helpers"
+import { Loopy } from "@loopy/core/loopy"
+import { tempDir } from "@loopy/test-utils"
 
 test("uses explicitly provided directory and creates the database", () => {
     // given a nested directory path that does not yet exist

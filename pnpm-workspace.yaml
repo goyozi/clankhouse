@@ -1,3 +1,11 @@
+packages:
+    - core
+    - claude
+    - test-utils
+
+catalog:
+    zod: ^4.4.3
+
 allowBuilds:
     better-sqlite3: true
     esbuild: true

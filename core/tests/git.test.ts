@@ -1,9 +1,9 @@
 import * as fs from "node:fs"
 import * as path from "node:path"
 import { beforeEach, expect, test } from "vitest"
-import { GitRepository } from "../core/git"
-import { uniqueName } from "../core/util"
-import { runGit, tempGitRepo, tempLoopy, tempLoopyDirEnv, testRun } from "./helpers"
+import { GitRepository } from "@loopy/core/git"
+import { uniqueName } from "@loopy/core/util"
+import { runGit, tempGitRepo, tempLoopy, tempLoopyDirEnv, testRun } from "@loopy/test-utils"
 
 let loopyDir: string
 beforeEach(() => {

@@ -1,6 +1,6 @@
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { gate, tempLoopy } from "./helpers"
+import { gate, tempLoopy } from "@loopy/test-utils"
 
 const input = z.object({ id: z.string(), value: z.number() })
 const output = z.object({ doubled: z.number() })

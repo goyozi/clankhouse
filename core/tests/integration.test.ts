@@ -2,12 +2,12 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { FakeCodingAgent } from "../core/ai/fake-agent"
-import { FakeLLM } from "../core/ai/fake-llm"
-import { GitRepository } from "../core/git"
-import { Loopy } from "../core/loopy"
-import { uniqueName } from "../core/util"
-import { gate, tempGitRepo, tempLoopy } from "./helpers"
+import { FakeCodingAgent } from "@loopy/core/ai/fake-agent"
+import { FakeLLM } from "@loopy/core/ai/fake-llm"
+import { GitRepository } from "@loopy/core/git"
+import { Loopy } from "@loopy/core/loopy"
+import { uniqueName } from "@loopy/core/util"
+import { gate, tempGitRepo, tempLoopy } from "@loopy/test-utils"
 
 test("end-to-end: durable workflow with llm, agent, artifact and approval survives crashes and reruns", async () => {
     // given a durable loopy instance and a git repository

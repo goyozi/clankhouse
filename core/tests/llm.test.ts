@@ -2,9 +2,9 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { FakeLLM } from "../core/ai/fake-llm"
-import { Loopy } from "../core/loopy"
-import { gate, tempDir, tempLoopy, testRun } from "./helpers"
+import { FakeLLM } from "@loopy/core/ai/fake-llm"
+import { Loopy } from "@loopy/core/loopy"
+import { gate, tempDir, tempLoopy, testRun } from "@loopy/test-utils"
 
 const outputSchema = z.object({ summary: z.string() })
 

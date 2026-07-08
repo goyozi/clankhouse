@@ -1,8 +1,8 @@
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { Loopy } from "../core/loopy"
-import { decode } from "../core/codec"
-import { gate, tempLoopy, testRun } from "./helpers"
+import { Loopy } from "@loopy/core/loopy"
+import { decode } from "@loopy/core/codec"
+import { gate, tempLoopy, testRun } from "@loopy/test-utils"
 
 const approval = z.object({ ok: z.boolean() })
 

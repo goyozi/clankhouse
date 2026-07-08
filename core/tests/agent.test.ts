@@ -2,10 +2,10 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { FakeCodingAgent } from "../core/ai/fake-agent"
-import { GitRepository, Worktree } from "../core/git"
-import { uniqueName } from "../core/util"
-import { runGit, tempGitRepo, tempLoopy, testRun } from "./helpers"
+import { FakeCodingAgent } from "@loopy/core/ai/fake-agent"
+import { GitRepository, Worktree } from "@loopy/core/git"
+import { uniqueName } from "@loopy/core/util"
+import { runGit, tempGitRepo, tempLoopy, testRun } from "@loopy/test-utils"
 
 const outputSchema = z.object({ done: z.boolean() })
 

@@ -1,0 +1,22 @@
+{
+    "name": "@loopy/claude",
+    "version": "1.0.0",
+    "type": "module",
+    "main": "./src/index.ts",
+    "exports": {
+        ".": "./src/index.ts",
+        "./ai/claude-agent": "./src/ai/claude-agent.ts"
+    },
+    "scripts": {
+        "test": "vitest run --config vitest.config.ts",
+        "typecheck": "tsc -p tsconfig.json --noEmit"
+    },
+    "dependencies": {
+        "@anthropic-ai/claude-agent-sdk": "^0.3.202",
+        "@loopy/core": "workspace:*",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@loopy/test-utils": "workspace:*"
+    }
+}

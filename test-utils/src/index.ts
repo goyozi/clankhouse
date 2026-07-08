@@ -4,7 +4,7 @@ import * as os from "node:os"
 import * as path from "node:path"
 import { promisify } from "node:util"
 import { onTestFinished } from "vitest"
-import { Loopy } from "../core/loopy"
+import { Loopy } from "@loopy/core/loopy"
 
 const execFileAsync = promisify(execFile)
 

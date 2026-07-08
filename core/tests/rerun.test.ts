@@ -2,7 +2,7 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { gate, tempLoopy, testRun } from "./helpers"
+import { gate, tempLoopy, testRun } from "@loopy/test-utils"
 
 test("second run of a succeeded key is a no-op returning the stored output", async () => {
     // given a workflow body that counts calls and returns a fixed result

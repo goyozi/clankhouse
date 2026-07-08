@@ -1,7 +1,7 @@
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { BaseLanguageModel, type LanguageModelInvocation } from "../core/ai/base-llm"
-import { gate, tempLoopy, testRun } from "./helpers"
+import { BaseLanguageModel, type LanguageModelInvocation } from "@loopy/core/ai/base-llm"
+import { gate, tempLoopy, testRun } from "@loopy/test-utils"
 
 test("get returns the session with ordered messages and stream yields them in order", async () => {
     // given a session with system, user, and assistant messages that has succeeded

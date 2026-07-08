@@ -7,9 +7,9 @@ import type {
     SDKResultMessage,
     SDKUserMessage
 } from "@anthropic-ai/claude-agent-sdk"
-import { BaseCodingAgent, type CodingAgentInvocation } from "./base-agent"
-import type { SessionRecorder } from "./sessions"
-import type { Worktree } from "../git"
+import { BaseCodingAgent, type CodingAgentInvocation } from "@loopy/core/ai/base-agent"
+import type { SessionRecorder } from "@loopy/core/ai/sessions"
+import type { Worktree } from "@loopy/core/git"
 
 export type QueryFunction = (input: {
     prompt: string | AsyncIterable<SDKUserMessage>

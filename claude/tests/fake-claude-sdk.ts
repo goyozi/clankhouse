@@ -8,8 +8,8 @@ import type {
     SDKSystemMessage,
     SDKUserMessage
 } from "@anthropic-ai/claude-agent-sdk"
-import type { QueryFunction } from "../core/ai/claude-agent"
-import { applyChange, type FakeChange } from "../core/ai/fake-agent"
+import type { QueryFunction } from "@loopy/claude/ai/claude-agent"
+import { applyChange, type FakeChange } from "@loopy/core/ai/fake-agent"
 
 type AssistantBlock = SDKAssistantMessage["message"]["content"][number]
 

@@ -1,8 +1,8 @@
 import * as fs from "node:fs"
 import * as path from "node:path"
 import { expect, test } from "vitest"
-import { renderPrompt } from "../core/ai/prompt"
-import { tempDir } from "./helpers"
+import { renderPrompt } from "@loopy/core/ai/prompt"
+import { tempDir } from "@loopy/test-utils"
 
 test("relative prompt files resolve against the project root", async () => {
     // given a temp project with a prompts/greet.md template file

@@ -1,9 +1,9 @@
 import * as fs from "node:fs"
 import * as path from "node:path"
 import { expect, test } from "vitest"
-import type { Artifact } from "../core/artifacts"
-import { Loopy } from "../core/loopy"
-import { gate, tempLoopy, testRun } from "./helpers"
+import type { Artifact } from "@loopy/core/artifacts"
+import { Loopy } from "@loopy/core/loopy"
+import { gate, tempLoopy, testRun } from "@loopy/test-utils"
 
 async function collect(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
     const reader = stream.getReader()

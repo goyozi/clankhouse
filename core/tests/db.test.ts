@@ -1,7 +1,7 @@
 import { expect, test } from "vitest"
-import * as sql from "../core/db"
-import type { RunRow } from "../core/db"
-import { tempLoopy } from "./helpers"
+import * as sql from "@loopy/core/db"
+import type { RunRow } from "@loopy/core/db"
+import { tempLoopy } from "@loopy/test-utils"
 
 function runRow(overrides: Partial<RunRow> & Pick<RunRow, "id">): RunRow {
     return {

@@ -2,11 +2,11 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { ClaudeAgent } from "../core/ai/claude-agent"
-import { GitRepository, Worktree } from "../core/git"
-import { uniqueName } from "../core/util"
+import { ClaudeAgent } from "@loopy/claude/ai/claude-agent"
+import { GitRepository, Worktree } from "@loopy/core/git"
+import { uniqueName } from "@loopy/core/util"
 import { fakeClaudeQuery } from "./fake-claude-sdk"
-import { runGit, tempGitRepo, tempLoopy, testRun } from "./helpers"
+import { runGit, tempGitRepo, tempLoopy, testRun } from "@loopy/test-utils"
 
 const outputSchema = z.object({ done: z.boolean() })
 

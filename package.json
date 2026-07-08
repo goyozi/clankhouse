@@ -1,13 +1,13 @@
 {
     "name": "loopy",
     "version": "1.0.0",
+    "private": true,
     "description": "",
     "type": "module",
-    "main": "core/index.ts",
     "scripts": {
-        "test": "vitest run",
+        "test": "pnpm --filter @loopy/core --filter @loopy/claude test",
         "test:watch": "vitest",
-        "typecheck": "tsc --noEmit",
+        "typecheck": "pnpm --filter @loopy/core --filter @loopy/claude typecheck",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "lint": "eslint .",
@@ -17,14 +17,6 @@
     "author": "",
     "license": "ISC",
     "packageManager": "pnpm@11.9.0",
-    "dependencies": {
-        "@anthropic-ai/claude-agent-sdk": "^0.3.202",
-        "better-sqlite3": "^12.11.1",
-        "handlebars": "^4.7.9",
-        "nanoid": "^5.1.16",
-        "superjson": "^2.2.6",
-        "zod": "^4.4.3"
-    },
     "devDependencies": {
         "@eslint/js": "^10.0.1",
         "@types/better-sqlite3": "^7.6.13",

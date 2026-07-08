@@ -1,7 +1,7 @@
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { Loopy } from "../core/loopy"
-import { gate, tempLoopy, testRun } from "./helpers"
+import { Loopy } from "@loopy/core/loopy"
+import { gate, tempLoopy, testRun } from "@loopy/test-utils"
 
 test("runs a workflow with durable steps and persists results", async () => {
     // given a fresh loopy instance
