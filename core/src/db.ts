@@ -225,9 +225,11 @@ export type StepRow = {
 export type NewStepRow = Pick<StepRow, "id" | "run_id" | "key" | "name" | "seq" | "kind" | "started_at">
 
 type StepStatements = {
+    findById: Statement
     findByRunAndKey: Statement
     findByRun: Statement
     findBefore: Statement
+    findFrom: Statement
     maxSeq: Statement
     insert: Statement
     copy: Statement
@@ -240,9 +242,11 @@ type StepStatements = {
 function prepareStepStatements(db: Db): StepStatements {
     const setColumn = (column: StepColumn) => db.prepare(`UPDATE steps SET ${column} = ? WHERE id = ?`)
     return {
+        findById: db.prepare("SELECT * FROM steps WHERE id = ?"),
         findByRunAndKey: db.prepare("SELECT * FROM steps WHERE run_id = ? AND key = ?"),
         findByRun: db.prepare("SELECT * FROM steps WHERE run_id = ? ORDER BY seq"),
         findBefore: db.prepare("SELECT * FROM steps WHERE run_id = ? AND seq < ? ORDER BY seq"),
+        findFrom: db.prepare("SELECT * FROM steps WHERE run_id = ? AND seq >= ? ORDER BY seq"),
         maxSeq: db.prepare("SELECT COALESCE(MAX(seq), -1) AS maxSeq FROM steps WHERE run_id = ?"),
         insert: db.prepare(
             "INSERT INTO steps (id, run_id, key, name, seq, kind, status, started_at) VALUES (?, ?, ?, ?, ?, ?, 'interrupted', ?)"
@@ -265,6 +269,14 @@ function prepareStepStatements(db: Db): StepStatements {
 
 export function findStep(db: Db, runId: string, key: string): StepRow | undefined {
     return statements(db).steps.findByRunAndKey.get(runId, key) as StepRow | undefined
+}
+
+export function findStepById(db: Db, id: string): StepRow | undefined {
+    return statements(db).steps.findById.get(id) as StepRow | undefined
+}
+
+export function findStepsFrom(db: Db, runId: string, seq: number): StepRow[] {
+    return statements(db).steps.findFrom.all(runId, seq) as unknown as StepRow[]
 }
 
 export function findStepsByRun(db: Db, runId: string): StepRow[] {

@@ -4,6 +4,7 @@ import { requireContext, runContext, type RunContext } from "./context"
 import * as sql from "./db"
 import type { Db, RunRow, StepColumn, StepKind, StepRow } from "./db"
 import type { ActiveSets } from "./runtime"
+import type { Notifier } from "./watch"
 import { copyFileSync, mkdirSync } from "node:fs"
 import * as path from "node:path"
 import { errorMessage, newId, nowIso } from "./util"
@@ -37,11 +38,13 @@ export class Engine {
     private readonly db: Db
     private readonly active: ActiveSets
     private readonly loopyDir: string
+    private readonly notifier: Notifier
 
-    constructor(db: Db, active: ActiveSets, loopyDir: string) {
+    constructor(db: Db, active: ActiveSets, loopyDir: string, notifier: Notifier) {
         this.db = db
         this.active = active
         this.loopyDir = loopyDir
+        this.notifier = notifier
     }
 
     resolvePlan(workflowName: string, key: string, input: unknown, rerun?: RerunOptions): Plan {
@@ -148,7 +151,10 @@ export class Engine {
                     throw e
                 }
             )
-            .finally(() => this.active.runs.delete(runRow.id))
+            .finally(() => {
+                this.active.runs.delete(runRow.id)
+                this.notifier.notify(runRow.id)
+            })
         this.active.runs.set(runRow.id, { promise })
         return promise
     }
@@ -183,14 +189,18 @@ export class Engine {
                 started_at: nowIso()
             })
         }
+        const notifier = this.notifier
+        const runId = ctx.runId
         const handle: StepHandle = {
             stepId: id,
             stepKey: key,
             set(column, value) {
                 sql.setStepColumn(db, id, column, value)
+                notifier.notify(runId)
             }
         }
         this.active.steps.add(id)
+        this.notifier.notify(runId)
         try {
             const output = options.schema.parse(await options.execute(handle))
             if (options.onSuccess) await options.onSuccess(handle, output)
@@ -202,6 +212,7 @@ export class Engine {
             throw e
         } finally {
             this.active.steps.delete(id)
+            this.notifier.notify(runId)
         }
     }
 

@@ -9,6 +9,7 @@ import { AISessions } from "./ai/sessions"
 import type { ActiveSets } from "./runtime"
 import { Engine } from "./engine"
 import { Events } from "./events"
+import { Notifier } from "./watch"
 import { runContext } from "./context"
 import { decode } from "./codec"
 
@@ -35,9 +36,10 @@ export class Loopy {
         this.loopyDir = resolveLoopyDir(loopyDir)
         mkdirSync(this.loopyDir, { recursive: true })
         this.db = openDatabase(path.join(this.loopyDir, "loopy.db"))
-        this.engine = new Engine(this.db, this.active, this.loopyDir)
+        const notifier = new Notifier()
+        this.engine = new Engine(this.db, this.active, this.loopyDir, notifier)
         this.events = new Events(this.db)
-        this.runs = new WorkflowRuns(this.db, this.active)
+        this.runs = new WorkflowRuns(this.db, this.active, notifier)
         this.artifacts = new Artifacts(this.loopyDir, this.db, this.engine)
         this.sessions = new AISessions(this.db, this.active)
     }

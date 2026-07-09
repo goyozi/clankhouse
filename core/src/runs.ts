@@ -3,14 +3,17 @@ import * as sql from "./db"
 import { decode } from "./codec"
 import { observableStatus, type ActiveSets } from "./runtime"
 import type { ArtifactRow, Db, ListRunsFilter, RunRow, StepRow } from "./db"
+import { watch, type Notifier } from "./watch"
 
 export class WorkflowRuns {
     private readonly db: Db
     private readonly active: ActiveSets
+    private readonly notifier: Notifier
 
-    constructor(db: Db, active: ActiveSets) {
+    constructor(db: Db, active: ActiveSets, notifier: Notifier) {
         this.db = db
         this.active = active
+        this.notifier = notifier
     }
 
     async list(options?: ListWorkflowOptions): Promise<WorkflowRunMetadata[]> {
@@ -54,6 +57,73 @@ export class WorkflowRuns {
             steps: stepRows.map((s) => this.toStep(s)),
             artifacts: artifactRows.map((a) => this.toArtifact(a))
         }
+    }
+
+    /**
+     * Streams step and run updates.
+     * Step updates are yielded as they arrive, while run updates are yielded when
+     * a run stops (succeeded, failed, or interrupted).
+     *
+     * Parameter `fromStepId` is inclusive as the step's state may have changed.
+     *
+     * Note: failed runs are reported as soon as the run fails. A parallel step may still be
+     * in progress and will still be yielded, unless canceled.
+     */
+    async *stream(
+        runId: string,
+        options?: { fromStepId?: string; signal?: AbortSignal }
+    ): AsyncGenerator<RunStreamItem, void, void> {
+        if (!sql.findRunById(this.db, runId)) throw new Error(`Workflow run not found: ${runId}`)
+        const seen = new Map<string, string>()
+        let watermark = this.resolveWatermark(runId, options?.fromStepId)
+        let sawActiveStep = false
+        let reportedStatus: ObservableRunStatus = "running"
+
+        const changedSteps = (rows: StepRow[]): Step[] => {
+            sawActiveStep = rows.some((row) => this.active.steps.has(row.id))
+            const changed: Step[] = []
+            for (const row of rows) {
+                const fp = fingerprint(row, observableStatus(row.status, this.active.steps.has(row.id)))
+                if (seen.get(row.id) === fp) continue
+                seen.set(row.id, fp)
+                changed.push(this.toStep(row))
+            }
+            return changed
+        }
+
+        const forgetSucceededPrefix = (rows: StepRow[]): void => {
+            for (const row of rows) {
+                if (row.status !== "succeeded") return
+                watermark = row.seq + 1
+                seen.delete(row.id)
+            }
+        }
+
+        const settledRunStatus = (): WorkflowRunMetadata | undefined => {
+            const runRow = sql.findRunById(this.db, runId)!
+            const status = observableStatus(runRow.status, this.active.runs.has(runId))
+            if (status === "running" || status === reportedStatus) return undefined
+            reportedStatus = status
+            return this.toMetadata(runRow)
+        }
+
+        const drain = (): RunStreamItem[] => {
+            const rows = sql.findStepsFrom(this.db, runId, watermark)
+            const items: RunStreamItem[] = changedSteps(rows)
+            forgetSucceededPrefix(rows)
+            const settled = settledRunStatus()
+            if (settled) items.push(settled)
+            return items
+        }
+
+        yield* watch(this.notifier, runId, drain, () => this.active.runs.has(runId) || sawActiveStep, options?.signal)
+    }
+
+    private resolveWatermark(runId: string, fromStepId: string | undefined): number {
+        if (fromStepId === undefined) return 0
+        const row = sql.findStepById(this.db, fromStepId)
+        if (!row || row.run_id !== runId) throw new Error(`Step not found in run ${runId}: ${fromStepId}`)
+        return row.seq
     }
 
     private toMetadata(row: RunRow): WorkflowRunMetadata {
@@ -128,6 +198,20 @@ export class WorkflowRuns {
     }
 }
 
+function fingerprint(row: StepRow, status: ObservableStepStatus): string {
+    return JSON.stringify([
+        status,
+        row.output,
+        row.error,
+        row.session_id,
+        row.snapshot_ref,
+        row.artifact_id,
+        row.event_key,
+        row.started_at,
+        row.ended_at
+    ])
+}
+
 // persisted state is never "running" -> "running" stuff is in-memory only and "overlayed" on top of "interrupted"
 export type PersistedStepStatus = "interrupted" | "succeeded" | "failed"
 
@@ -195,6 +279,8 @@ export type WorkflowRunMetadata = {
     endedAt?: Date
     status: ObservableRunStatus
 }
+
+export type RunStreamItem = Step | WorkflowRunMetadata
 
 export type ListWorkflowOptions = {
     key?: string

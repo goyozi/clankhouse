@@ -3,6 +3,7 @@ We are working on Loopy, a local-first durable AI workflow framework.
 ## Modules
 
 core:
+
 - durable workflows, backed by sqlite (in-memory context via `AsyncLocalStorage`)
 - prompt templating via Handlebars
 - typed outputs based on zod schemas
@@ -12,9 +13,11 @@ core:
 - event system
 
 claude:
+
 - `ClaudeAgent` - coding agent using `claude-agent-sdk`
 
 test-utils:
+
 - shared utils for testing Loopy workflows
 
 ## Testing

@@ -2,11 +2,12 @@ import * as sql from "../db"
 import type { Db, SessionMessageRow } from "../db"
 import { observableStatus, type ActiveSets } from "../runtime"
 import { newId, nowIso } from "../util"
+import { Notifier, watch } from "../watch"
 
 export class AISessions {
     private readonly db: Db
     private readonly active: ActiveSets
-    private readonly listeners = new Map<string, Set<() => void>>()
+    private readonly notifier = new Notifier()
 
     constructor(db: Db, active: ActiveSets) {
         this.db = db
@@ -28,7 +29,10 @@ export class AISessions {
         }
     }
 
-    async *stream(id: string, options?: { afterMessageId?: string }): AsyncGenerator<AISessionMessage, void, void> {
+    async *stream(
+        id: string,
+        options?: { afterMessageId?: string; signal?: AbortSignal }
+    ): AsyncGenerator<AISessionMessage, void, void> {
         if (!sql.findSessionById(this.db, id)) throw new Error(`AI session not found: ${id}`)
         let lastSeq = -1
         if (options?.afterMessageId !== undefined) {
@@ -37,35 +41,19 @@ export class AISessions {
                 throw new Error(`Message not found in session ${id}: ${options.afterMessageId}`)
             lastSeq = row.seq
         }
-        let notified: boolean
-        let wake = deferred()
-        const listener = () => {
-            notified = true
-            wake.release()
+        const drain = () => {
+            const rows = sql.findSessionMessages(this.db, id, lastSeq)
+            if (rows.length > 0) lastSeq = rows.at(-1)!.seq
+            return rows.map(toMessage)
         }
-        this.register(id, listener)
-        try {
-            while (true) {
-                notified = false
-                for (const row of sql.findSessionMessages(this.db, id, lastSeq)) {
-                    lastSeq = row.seq
-                    yield toMessage(row)
-                }
-                if (!this.active.sessions.has(id)) return
-                if (notified) continue
-                wake = deferred()
-                await wake.released
-            }
-        } finally {
-            this.deregister(id, listener)
-        }
+        yield* watch(this.notifier, id, drain, () => this.active.sessions.has(id), options?.signal)
     }
 
     create(options: { kind: "llm" | "coding-agent"; provider: string; model: string }): SessionRecorder {
         const id = newId()
         const db = this.db
         const active = this.active.sessions
-        const notify = () => this.notify(id)
+        const notify = () => this.notifier.notify(id)
         sql.insertSession(db, {
             id,
             kind: options.kind,
@@ -100,28 +88,6 @@ export class AISessions {
             }
         }
     }
-
-    private register(id: string, listener: () => void): void {
-        let set = this.listeners.get(id)
-        if (!set) {
-            set = new Set()
-            this.listeners.set(id, set)
-        }
-        set.add(listener)
-    }
-
-    private deregister(id: string, listener: () => void): void {
-        const set = this.listeners.get(id)
-        if (!set) return
-        set.delete(listener)
-        if (set.size === 0) this.listeners.delete(id)
-    }
-
-    private notify(id: string): void {
-        const set = this.listeners.get(id)
-        if (!set) return
-        for (const listener of [...set]) listener()
-    }
 }
 
 function toMessage(row: SessionMessageRow): AISessionMessage {
@@ -132,14 +98,6 @@ function toMessage(row: SessionMessageRow): AISessionMessage {
         content: row.content,
         createdAt: new Date(row.created_at)
     }
-}
-
-function deferred(): { released: Promise<void>; release: () => void } {
-    let release!: () => void
-    const released = new Promise<void>((resolve) => {
-        release = resolve
-    })
-    return { released, release }
 }
 
 export type SessionRecorder = {
