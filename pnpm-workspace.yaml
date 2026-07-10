@@ -1,6 +1,7 @@
 packages:
     - core
     - claude
+    - codex
     - test-utils
 
 catalog:

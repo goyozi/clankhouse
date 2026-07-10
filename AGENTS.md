@@ -16,6 +16,10 @@ claude:
 
 - `ClaudeAgent` - coding agent using `claude-agent-sdk`
 
+codex:
+
+- `CodexAgent` - coding agent using `@openai/codex-sdk`
+
 test-utils:
 
 - shared utils for testing Loopy workflows
