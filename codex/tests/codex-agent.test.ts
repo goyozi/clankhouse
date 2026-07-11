@@ -5,10 +5,29 @@ import { expect, test } from "vitest"
 import { CodexAgent } from "@loopy/codex/ai/codex-agent"
 import { GitRepository, Worktree } from "@loopy/core/git"
 import { uniqueName } from "@loopy/core/util"
-import { runGit, tempGitRepo, tempLoopy, testRun } from "@loopy/test-utils"
+import {
+    instructedSchema,
+    instructedTags,
+    runGit,
+    taggedOutput,
+    tempGitRepo,
+    tempLoopy,
+    testRun
+} from "@loopy/test-utils"
 import { fakeCodex } from "./fake-codex-sdk"
 
 const outputSchema = z.object({ done: z.boolean() })
+const liveOutputSchema = z.array(
+    z.discriminatedUnion("kind", [
+        z.object({
+            kind: z.literal("file"),
+            path: z.string(),
+            lineCount: z.number().int(),
+            note: z.string().optional()
+        }),
+        z.object({ kind: z.literal("status"), done: z.boolean(), warning: z.string().optional() })
+    ])
+)
 
 test("CodexAgent maps the SDK conversation to the session and snapshots the worktree", async () => {
     // given a fake SDK scripted with reasoning, a file change and structured output
@@ -66,7 +85,7 @@ test("CodexAgent maps the SDK conversation to the session and snapshots the work
         "tool_result",
         "assistant"
     ])
-    expect(session.messages[0].content).toBe("do it")
+    expect(session.messages[0].content).toMatch(/^do it\n\nIMPORTANT — requested final report:/)
     expect(JSON.parse(session.messages[1].content)).toEqual({
         threadId: expect.stringMatching(/^[0-9a-f-]{36}$/),
         model: "gpt-5.4"
@@ -77,7 +96,49 @@ test("CodexAgent maps the SDK conversation to the session and snapshots the work
         tool: "file_change",
         input: { changes: [{ path: "src/hello.ts", kind: "add" }] }
     })
-    expect(session.messages.at(-1)!.content).toBe(JSON.stringify({ done: true }))
+    // and the final agent message is recorded once, verbatim, with no re-stringified duplicate
+    expect(session.messages.at(-1)!.content).toBe(
+        taggedOutput(session.messages[0].content, JSON.stringify({ done: true }))
+    )
+})
+
+test("CodexAgent runs a void-output step without instructed output framing", async () => {
+    // given a fake SDK that applies a file change and returns no structured output
+    const { loopy } = tempLoopy()
+    const repo = await tempGitRepo()
+    const repository = new GitRepository(repo.path)
+    const { codexFactory, runCalls } = fakeCodex(() => ({
+        items: [
+            {
+                completed: {
+                    id: "change_1",
+                    type: "file_change",
+                    changes: [{ path: "src/hello.ts", kind: "add" }],
+                    status: "completed"
+                },
+                change: { file: "src/hello.ts", text: "export const hi = 1\n" }
+            }
+        ]
+    }))
+    const agent = new CodexAgent({ model: "gpt-5.4", codexFactory })
+    let worktree!: Worktree
+
+    // when the agent runs with a void output schema
+    const result = await testRun(loopy, async () => {
+        worktree = await repository.worktree({ base: "main" })
+        return agent.run("implement", { prompt: "do it", output: z.void(), worktree })
+    })
+
+    // then it returns nothing and the SDK receives the bare prompt with no output framing
+    expect(result).toBeUndefined()
+    expect(runCalls[0].input).toBe("do it")
+    // and the coding work is applied and the step and session still succeed with a snapshot
+    expect(fs.readFileSync(path.join(worktree.path, "src/hello.ts"), "utf8")).toBe("export const hi = 1\n")
+    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const step = run.steps[0]
+    if (step.kind !== "agent") throw new Error("unreachable")
+    expect((await worktree.git(["rev-parse", step.snapshotRef!])).exitCode).toBe(0)
+    expect((await loopy.sessions.get(step.sessionId!)).status).toBe("succeeded")
 })
 
 test("CodexAgent records every supported SDK item type", async () => {
@@ -246,7 +307,16 @@ test("CodexAgent passes locked default options to the SDK", async () => {
 
     // then the client inherits its native defaults
     expect(clientOptions).toEqual([{}])
-    // and the thread is locked to the worktree without approvals
+    const prompt = runCalls[0].input
+    if (typeof prompt !== "string") throw new Error("unreachable")
+    const { opening, closing } = instructedTags(prompt)
+    const jsonSchema = {
+        type: "object",
+        properties: { done: { type: "boolean" } },
+        required: ["done"],
+        additionalProperties: false
+    }
+    // and the thread is locked to the worktree without approvals or generated output directories
     expect(threadOptions).toEqual([
         {
             model: "gpt-5.4",
@@ -255,17 +325,26 @@ test("CodexAgent passes locked default options to the SDK", async () => {
             approvalPolicy: "never"
         }
     ])
-    // and the rendered prompt and JSON schema are passed to the streamed turn
+    // and the rendered prompt carries nonce tags and JSON schema instead of native turn options
     expect(runCalls).toHaveLength(1)
-    expect(runCalls[0].input).toBe("do it")
-    expect(runCalls[0].options).toEqual({
-        outputSchema: {
-            type: "object",
-            properties: { done: { type: "boolean" } },
-            required: ["done"],
-            additionalProperties: false
-        }
-    })
+    expect(prompt).toBe(`do it
+
+IMPORTANT — requested final report:
+
+When you are done, put a final JSON report between these exact tags in your final response:
+
+${opening}
+${closing}
+
+The JSON must conform to this JSON Schema:
+
+\`\`\`json
+${JSON.stringify(jsonSchema, null, 2)}
+\`\`\`
+Write only raw JSON between the tags — no markdown fences, no comments, no surrounding prose.
+You may include prose outside the tags.`)
+    expect(instructedSchema(prompt)).toEqual(jsonSchema)
+    expect(runCalls[0].options).toBeUndefined()
 })
 
 test("CodexAgent forwards every configured native SDK option", async () => {
@@ -273,7 +352,9 @@ test("CodexAgent forwards every configured native SDK option", async () => {
     const { loopy } = tempLoopy()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
-    const { codexFactory, clientOptions, threadOptions } = fakeCodex(() => ({ output: { done: true } }))
+    const { codexFactory, clientOptions, threadOptions, runCalls } = fakeCodex(() => ({
+        output: { done: true }
+    }))
     const agent = new CodexAgent({
         model: "gpt-5.4",
         sandboxMode: "danger-full-access",
@@ -305,6 +386,8 @@ test("CodexAgent forwards every configured native SDK option", async () => {
             config: { show_raw_agent_reasoning: true }
         }
     ])
+    const prompt = runCalls[0].input
+    if (typeof prompt !== "string") throw new Error("unreachable")
     // and every configured thread option is forwarded beside the derived worktree path
     expect(threadOptions).toEqual([
         {
@@ -356,7 +439,7 @@ test("CodexAgent augments the process environment with the configured env", asyn
     expect(clientOptions[0].env!.LOOPY_CODEX_ADDED).toBe("from-agent")
 })
 
-test("CodexAgent retains format annotations and recursive references in the output schema", async () => {
+test("CodexAgent includes format annotations and recursive references in the instructed schema", async () => {
     // given a recursive Zod output schema with a format-annotated field
     const { loopy } = tempLoopy()
     const repo = await tempGitRepo()
@@ -375,8 +458,10 @@ test("CodexAgent retains format annotations and recursive references in the outp
 
     // then the structured result is returned
     expect(result).toEqual({ contact: "bob@example.com", children: [] })
-    // and only the schema metadata is removed while provider-supported keywords remain
-    const schema = runCalls[0].options!.outputSchema as {
+    // and only the schema metadata is removed while JSON Schema keywords remain in the prompt
+    const prompt = runCalls[0].input
+    if (typeof prompt !== "string") throw new Error("unreachable")
+    const schema = instructedSchema(prompt) as {
         $schema?: string
         properties: { contact: { format?: string }; children: { items: { $ref?: string } } }
     }
@@ -506,8 +591,47 @@ test("a stream ending without turn completion fails the step", async () => {
     await expect(result).rejects.toThrow("Codex agent stream ended without completing the turn")
 })
 
-test("a completed turn without a final response fails the step", async () => {
-    // given a fake SDK that completes without an agent message
+test("an untagged final agent response fails the step", async () => {
+    // given a fake SDK that replies with plain JSON without the instructed tags
+    const { loopy } = tempLoopy()
+    const repo = await tempGitRepo()
+    const repository = new GitRepository(repo.path)
+    const { codexFactory } = fakeCodex(() => ({ finalResponse: JSON.stringify({ done: true }) }))
+    const agent = new CodexAgent({ model: "gpt-5.4", codexFactory })
+
+    // when the agent runs
+    const result = testRun(loopy, async () => {
+        const worktree = await repository.worktree({ base: "main" })
+        return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
+    })
+
+    // then the missing tags are rejected
+    await expect(result).rejects.toThrow("Coding agent did not return the instructed output tags")
+})
+
+test("invalid JSON inside the instructed tags fails the step", async () => {
+    // given a fake SDK returning plain text inside the instructed tags
+    const { loopy } = tempLoopy()
+    const repo = await tempGitRepo()
+    const repository = new GitRepository(repo.path)
+    const { codexFactory } = fakeCodex((prompt) => {
+        const { opening, closing } = instructedTags(prompt)
+        return { finalResponse: `${opening}\nall done\n${closing}` }
+    })
+    const agent = new CodexAgent({ model: "gpt-5.4", codexFactory })
+
+    // when the agent runs
+    const result = testRun(loopy, async () => {
+        const worktree = await repository.worktree({ base: "main" })
+        return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
+    })
+
+    // then the invalid JSON is rejected
+    await expect(result).rejects.toThrow("returned invalid JSON between the instructed output tags")
+})
+
+test("Codex output fails when the turn has no final agent message", async () => {
+    // given a Codex agent whose turn completes without an agent message
     const { loopy } = tempLoopy()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
@@ -517,29 +641,15 @@ test("a completed turn without a final response fails the step", async () => {
     // when the agent runs
     const result = testRun(loopy, async () => {
         const worktree = await repository.worktree({ base: "main" })
-        return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
+        return agent.run("report", { prompt: "report", output: outputSchema, worktree })
     })
 
-    // then the missing response is rejected
-    await expect(result).rejects.toThrow("Codex agent returned no final response")
-})
-
-test("a non-JSON final response fails the step", async () => {
-    // given a fake SDK returning plain text despite the structured output request
-    const { loopy } = tempLoopy()
-    const repo = await tempGitRepo()
-    const repository = new GitRepository(repo.path)
-    const { codexFactory } = fakeCodex(() => ({ outputText: "all done" }))
-    const agent = new CodexAgent({ model: "gpt-5.4", codexFactory })
-
-    // when the agent runs
-    const result = testRun(loopy, async () => {
-        const worktree = await repository.worktree({ base: "main" })
-        return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
-    })
-
-    // then invalid structured output is rejected
-    await expect(result).rejects.toThrow("Codex agent returned invalid structured output")
+    // then the missing tagged report fails the durable step and session
+    await expect(result).rejects.toThrow("did not return the instructed output tags")
+    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const step = run.steps[0]
+    if (step.kind !== "agent") throw new Error("unreachable")
+    expect((await loopy.sessions.get(step.sessionId!)).status).toBe("failed")
 })
 
 test("structured output violating the Zod schema fails the step", async () => {
@@ -610,35 +720,43 @@ test("codex agent step replay restores the worktree without re-invoking the SDK"
 })
 
 test.skipIf(!process.env.CODEX_AGENT_LIVE_TEST)(
-    "live: CodexAgent performs a real coding task",
+    "live: CodexAgent performs a coding task with non-trivial output",
     { timeout: 180_000 },
     async () => {
         // given a real codex agent and a real worktree
         const { loopy } = tempLoopy()
         const repo = await tempGitRepo()
         const repository = new GitRepository(repo.path)
-        const agent = new CodexAgent({ model: "gpt-5.4" })
+        const agent = new CodexAgent({ model: "gpt-5.4-mini" })
         let worktree!: Worktree
 
-        // when it performs a tiny coding task
+        // when it creates a two-line file and reports an array-root discriminated union
         const result = await testRun(loopy, async () => {
             worktree = await repository.worktree({ base: "main" })
             return agent.run("implement", {
-                prompt: "Create a file named hello.txt containing exactly: hi",
-                output: outputSchema,
+                prompt: `Create hello.txt with exactly these two lines:
+hello
+loopy
+
+Report exactly two array entries in order: a file entry for hello.txt with lineCount 2, then a status entry with done true. Omit the optional note and warning fields.`,
+                output: liveOutputSchema,
                 worktree
             })
         })
 
-        // then it reports completion and the file exists in the worktree
-        expect(result.done).toBe(true)
-        expect(fs.readFileSync(path.join(worktree.path, "hello.txt"), "utf8")).toContain("hi")
-        // and the session records a succeeded conversation
+        // then it returns the exact complex output and writes the requested file
+        expect(result).toEqual([
+            { kind: "file", path: "hello.txt", lineCount: 2 },
+            { kind: "status", done: true }
+        ])
+        expect(fs.readFileSync(path.join(worktree.path, "hello.txt"), "utf8")).toBe("hello\nloopy\n")
+        // and the session succeeds with a valid worktree snapshot
         const run = await loopy.runs.get((await loopy.runs.list())[0].id)
         const step = run.steps[0]
         if (step.kind !== "agent") throw new Error("unreachable")
         const session = await loopy.sessions.get(step.sessionId!)
         expect(session.status).toBe("succeeded")
         expect(session.messages.length).toBeGreaterThan(2)
+        expect((await worktree.git(["rev-parse", step.snapshotRef!])).exitCode).toBe(0)
     }
 )

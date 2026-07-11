@@ -10,6 +10,7 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk"
 import type { QueryFunction } from "@loopy/claude/ai/claude-agent"
 import { applyChange, type FakeChange } from "@loopy/core/ai/fake-agent"
+import { taggedOutput } from "@loopy/test-utils"
 
 type AssistantBlock = SDKAssistantMessage["message"]["content"][number]
 
@@ -27,6 +28,7 @@ export type FakeQueryScript = {
     text?: string[]
     toolCalls?: FakeToolCall[]
     output?: unknown
+    finalResponse?: string
     errorSubtype?: Exclude<SDKResultMessage["subtype"], "success">
     errors?: string[]
     throwMidStream?: Error
@@ -46,12 +48,16 @@ export function fakeClaudeQuery(script: (prompt: string) => FakeQueryScript): {
     const query: QueryFunction = ({ prompt, options }) => {
         if (typeof prompt !== "string") throw new Error("fakeClaudeQuery supports only string prompts")
         calls.push({ prompt, options })
-        return run(script(prompt), options)
+        return run(prompt, script(prompt), options)
     }
     return { query, calls }
 }
 
-async function* run(script: FakeQueryScript, options: Options | undefined): AsyncGenerator<SDKMessage, void> {
+async function* run(
+    prompt: string,
+    script: FakeQueryScript,
+    options: Options | undefined
+): AsyncGenerator<SDKMessage, void> {
     const sessionId = randomUUID()
     yield initMessage(sessionId, options)
     if (script.throwMidStream) throw script.throwMidStream
@@ -67,8 +73,13 @@ async function* run(script: FakeQueryScript, options: Options | undefined): Asyn
         if (call.change) await applyChange(call.change, options?.cwd ?? process.cwd())
         yield toolResultMessage(sessionId, toolUseId, call.result ?? "ok")
     }
+    let finalResponse = script.finalResponse
+    if (script.output !== undefined) finalResponse ??= taggedOutput(prompt, JSON.stringify(script.output))
+    if (finalResponse !== undefined) {
+        yield assistantMessage(sessionId, options, [{ type: "text", text: finalResponse, citations: null }])
+    }
     if (script.endWithoutResult) return
-    yield resultMessage(sessionId, script, options)
+    yield resultMessage(sessionId, script, finalResponse)
 }
 
 function toolUseBlock(call: FakeToolCall, id: string): AssistantBlock {
@@ -142,7 +153,7 @@ function toolResultMessage(sessionId: string, toolUseId: string, result: string)
     }
 }
 
-function resultMessage(sessionId: string, script: FakeQueryScript, options: Options | undefined): SDKResultMessage {
+function resultMessage(sessionId: string, script: FakeQueryScript, finalResponse?: string): SDKResultMessage {
     const common = {
         duration_ms: 1,
         duration_api_ms: 1,
@@ -164,26 +175,13 @@ function resultMessage(sessionId: string, script: FakeQueryScript, options: Opti
             ...common
         }
     }
-    const structuredOutputActive = options?.outputFormat !== undefined && !cliRejectsSchema(options.outputFormat.schema)
     return {
         type: "result",
         subtype: "success",
         is_error: false,
-        result: "done",
-        ...(structuredOutputActive && script.output !== undefined && { structured_output: script.output }),
+        result: finalResponse ?? "done",
         ...common
     }
-}
-
-function cliRejectsSchema(schema: Record<string, unknown>): boolean {
-    return "$schema" in schema || containsFormat(schema)
-}
-
-function containsFormat(node: unknown): boolean {
-    if (node === null || typeof node !== "object") return false
-    if (Array.isArray(node)) return node.some(containsFormat)
-    const schema = node as Record<string, unknown>
-    return typeof schema.format === "string" || Object.values(schema).some(containsFormat)
 }
 
 function fakeUsage(): NonNullableUsage {

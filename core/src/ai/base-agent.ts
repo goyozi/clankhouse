@@ -3,6 +3,7 @@ import { requireContext } from "../context"
 import type { Worktree } from "../git"
 import { uniqueName } from "../util"
 import type { CodingAgent, CodingRunOptions } from "./coding-agent"
+import { prepareInstructedOutput } from "./instructed-output"
 import { renderPrompt } from "./prompt"
 import type { SessionRecorder } from "./sessions"
 
@@ -18,16 +19,26 @@ export type CodingAgentInvocation = {
  * Owns all durability concerns of a coding agent session: the durable step,
  * the persisted session and its messages, prompt rendering, output validation
  * and worktree snapshotting. Replaying a stored step restores the snapshot.
- * Implementations only provide `invoke`, driving the agent against the worktree,
- * instructing it to format its final output per the provided output schema and
- * recording all session messages they can (system/user/assistant/tool),
- * including the user's prompt.
+ * Implementations only provide `invoke`, driving the agent against the worktree
+ * and recording all session messages they can (system/user/assistant/tool),
+ * including the user's prompt. Providers can use `invokeWithInstructedOutput`
+ * for the shared instructed-output prompt and parser.
  */
 export abstract class BaseCodingAgent implements CodingAgent {
     abstract readonly provider: string
     abstract readonly model: string
 
     protected abstract invoke(invocation: CodingAgentInvocation): Promise<unknown>
+
+    protected async invokeWithInstructedOutput(
+        invocation: CodingAgentInvocation,
+        run: (prompt: string) => Promise<string | undefined>
+    ): Promise<unknown> {
+        const prepared = prepareInstructedOutput(invocation.prompt, invocation.output)
+        invocation.session.addMessage("user", prepared.prompt)
+        const finalMessage = await run(prepared.prompt)
+        return prepared.collect(finalMessage)
+    }
 
     async run<T extends z.ZodTypeAny>(stepName: string, options: CodingRunOptions<T>): Promise<z.infer<T>> {
         const ctx = requireContext()

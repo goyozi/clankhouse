@@ -6,9 +6,28 @@ import { ClaudeAgent } from "@loopy/claude/ai/claude-agent"
 import { GitRepository, Worktree } from "@loopy/core/git"
 import { uniqueName } from "@loopy/core/util"
 import { fakeClaudeQuery } from "./fake-claude-sdk"
-import { runGit, tempGitRepo, tempLoopy, testRun } from "@loopy/test-utils"
+import {
+    instructedSchema,
+    instructedTags,
+    runGit,
+    taggedOutput,
+    tempGitRepo,
+    tempLoopy,
+    testRun
+} from "@loopy/test-utils"
 
 const outputSchema = z.object({ done: z.boolean() })
+const liveOutputSchema = z.array(
+    z.discriminatedUnion("kind", [
+        z.object({
+            kind: z.literal("file"),
+            path: z.string(),
+            lineCount: z.number().int(),
+            note: z.string().optional()
+        }),
+        z.object({ kind: z.literal("status"), done: z.boolean(), warning: z.string().optional() })
+    ])
+)
 
 test("ClaudeAgent maps the SDK conversation to the session and snapshots the worktree", async () => {
     // given a fake SDK scripted with text, a file-writing tool call and a structured output
@@ -65,7 +84,7 @@ test("ClaudeAgent maps the SDK conversation to the session and snapshots the wor
         "tool_result",
         "assistant"
     ])
-    expect(session.messages[0].content).toBe("do it")
+    expect(session.messages[0].content).toMatch(/^do it\n\nIMPORTANT — requested final report:/)
     expect(session.messages[2].content).toBe("Writing the file now.")
     expect(session.messages[3].content).toBe(
         JSON.stringify({ id: "toolu_write1", tool: "Write", input: { file_path: "src/hello.ts" } })
@@ -75,8 +94,46 @@ test("ClaudeAgent maps the SDK conversation to the session and snapshots the wor
     )
     // and the system message records the SDK session id
     expect(JSON.parse(session.messages[1].content).sessionId).toMatch(/^[0-9a-f-]{36}$/)
-    // and the final assistant message carries the structured output
-    expect(session.messages.at(-1)!.content).toBe(JSON.stringify({ done: true }))
+    // and the final assistant message carries the tagged answer exactly as the agent wrote it
+    expect(session.messages.at(-1)!.content).toBe(
+        taggedOutput(session.messages[0].content, JSON.stringify({ done: true }))
+    )
+})
+
+test("ClaudeAgent runs a void-output step without instructed output framing", async () => {
+    // given a fake SDK that writes a file and returns no structured output
+    const { loopy } = tempLoopy()
+    const repo = await tempGitRepo()
+    const repository = new GitRepository(repo.path)
+    const { query, calls } = fakeClaudeQuery(() => ({
+        text: ["All done."],
+        toolCalls: [
+            {
+                name: "Write",
+                input: { file_path: "src/hello.ts" },
+                change: { file: "src/hello.ts", text: "export const hi = 1\n" }
+            }
+        ]
+    }))
+    const agent = new ClaudeAgent({ model: "claude-sonnet-5", query })
+    let worktree!: Worktree
+
+    // when the agent runs with a void output schema
+    const result = await testRun(loopy, async () => {
+        worktree = await repository.worktree({ base: "main" })
+        return agent.run("implement", { prompt: "do it", output: z.void(), worktree })
+    })
+
+    // then it returns nothing and the SDK receives the bare prompt with no output framing
+    expect(result).toBeUndefined()
+    expect(calls[0].prompt).toBe("do it")
+    // and the coding work is applied and the step and session still succeed with a snapshot
+    expect(fs.readFileSync(path.join(worktree.path, "src/hello.ts"), "utf8")).toBe("export const hi = 1\n")
+    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const step = run.steps[0]
+    if (step.kind !== "agent") throw new Error("unreachable")
+    expect((await worktree.git(["rev-parse", step.snapshotRef!])).exitCode).toBe(0)
+    expect((await loopy.sessions.get(step.sessionId!)).status).toBe("succeeded")
 })
 
 test("ClaudeAgent records every supported SDK message and block type", async () => {
@@ -162,12 +219,21 @@ test("ClaudeAgent passes default options to the SDK", async () => {
         return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
     })
 
-    // then the SDK receives the rendered prompt exactly once
+    // then the SDK receives the rendered prompt with nonce tags and the schema exactly once
     expect(calls).toHaveLength(1)
-    expect(calls[0].prompt).toBe("do it")
-    // and the worktree path as its working directory
+    expect(calls[0].prompt).toMatch(/^do it\n\nIMPORTANT — requested final report:/)
+    expect(instructedTags(calls[0].prompt).opening).toMatch(/^<loopy_structured_output_[0-9a-f_]+>$/)
+    expect(instructedSchema(calls[0].prompt)).toEqual({
+        type: "object",
+        properties: { done: { type: "boolean" } },
+        required: ["done"],
+        additionalProperties: false
+    })
+    // and the worktree is configured without native structured output or generated directories
     const options = calls[0].options!
     expect(options.cwd).toBe(worktree.path)
+    expect(options.additionalDirectories).toBeUndefined()
+    expect(options.outputFormat).toBeUndefined()
     // and the auto command classifier as permission mode
     expect(options.permissionMode).toBe("auto")
     // and the AskUserQuestion tool disabled
@@ -178,16 +244,6 @@ test("ClaudeAgent passes default options to the SDK", async () => {
     expect(options.settingSources).toEqual(["project"])
     // and the configured model
     expect(options.model).toBe("claude-sonnet-5")
-    // and the output schema as structured output format, without the $schema marker the API silently rejects
-    expect(options.outputFormat).toEqual({
-        type: "json_schema",
-        schema: {
-            type: "object",
-            properties: { done: { type: "boolean" } },
-            required: ["done"],
-            additionalProperties: false
-        }
-    })
     // and no options that were not configured
     expect(options.maxTurns).toBeUndefined()
     expect(options.env).toBeUndefined()
@@ -236,37 +292,6 @@ test("ClaudeAgent passes configured options to the SDK", async () => {
     expect((await loopy.sessions.get(step.sessionId!)).model).toBe("claude-opus-4-8")
 })
 
-test("format keywords are stripped from the wire schema and folded into descriptions", async () => {
-    // given an output schema whose fields emit JSON schema format keywords the CLI silently rejects
-    const { loopy } = tempLoopy()
-    const repo = await tempGitRepo()
-    const repository = new GitRepository(repo.path)
-    const output = { deployedAt: "2026-07-08T09:30:00Z", contact: "bob@example.com" }
-    const { query, calls } = fakeClaudeQuery(() => ({ output }))
-    const agent = new ClaudeAgent({ model: "claude-sonnet-5", query })
-    const formatSchema = z.object({
-        deployedAt: z.iso.datetime().describe("when it was deployed"),
-        contact: z.email()
-    })
-
-    // when the agent runs
-    const result = await testRun(loopy, async () => {
-        const worktree = await repository.worktree({ base: "main" })
-        return agent.run("implement", { prompt: "do it", output: formatSchema, worktree })
-    })
-
-    // then the run succeeds, proving the fake saw no format keywords it would drop structured output for
-    expect(result).toEqual(output)
-    // and the wire schema carries the formats folded into descriptions instead
-    const schema = calls[0].options!.outputFormat!.schema as {
-        properties: Record<string, Record<string, unknown>>
-    }
-    expect(schema.properties.deployedAt.description).toBe("when it was deployed (format: date-time)")
-    expect(schema.properties.contact.description).toBe("format: email")
-    // and the validation patterns are preserved
-    expect(schema.properties.deployedAt.pattern).toBeDefined()
-})
-
 test("a non-JSON-representable output schema fails the step without invoking the SDK", async () => {
     // given an output schema containing a Date, which JSON structured output cannot represent
     const { loopy } = tempLoopy()
@@ -286,33 +311,6 @@ test("a non-JSON-representable output schema fails the step without invoking the
             })
         })
     ).rejects.toThrow("Date cannot be represented in JSON Schema")
-
-    // then the SDK is never invoked
-    expect(calls).toHaveLength(0)
-    // and the agent step and the session are marked failed
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-    const step = run.steps[0]
-    expect(step.status).toBe("failed")
-    if (step.kind !== "agent") throw new Error("unreachable")
-    expect((await loopy.sessions.get(step.sessionId!)).status).toBe("failed")
-})
-
-test("a recursive output schema fails the step without invoking the SDK", async () => {
-    // given a self-referential output schema, which structured outputs reject as recursive
-    const { loopy } = tempLoopy()
-    const repo = await tempGitRepo()
-    const repository = new GitRepository(repo.path)
-    const { query, calls } = fakeClaudeQuery(() => ({ output: { name: "root", children: [] } }))
-    const agent = new ClaudeAgent({ model: "claude-sonnet-5", query })
-    const category: z.ZodType = z.lazy(() => z.object({ name: z.string(), children: z.array(category) }))
-
-    // when the agent runs against the recursive schema
-    await expect(
-        testRun(loopy, async () => {
-            const worktree = await repository.worktree({ base: "main" })
-            return agent.run("implement", { prompt: "do it", output: category, worktree })
-        })
-    ).rejects.toThrow("Claude agent output schema is recursive")
 
     // then the SDK is never invoked
     expect(calls).toHaveLength(0)
@@ -355,12 +353,12 @@ test("an error result fails the step and the session", async () => {
     expect(session.messages.map((m) => m.role)).toEqual(["user", "system", "assistant"])
 })
 
-test("a success result without structured output fails the step", async () => {
-    // given a fake SDK whose success result carries no structured output
+test("an untagged final response fails the step", async () => {
+    // given a fake SDK whose successful turn returns plain JSON without the instructed tags
     const { loopy } = tempLoopy()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
-    const { query } = fakeClaudeQuery(() => ({ text: ["All done."] }))
+    const { query } = fakeClaudeQuery(() => ({ finalResponse: JSON.stringify({ done: true }) }))
     const agent = new ClaudeAgent({ model: "claude-sonnet-5", query })
 
     // when the agent runs
@@ -369,7 +367,7 @@ test("a success result without structured output fails the step", async () => {
             const worktree = await repository.worktree({ base: "main" })
             return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
         })
-    ).rejects.toThrow("Claude agent returned no structured output")
+    ).rejects.toThrow("Coding agent did not return the instructed output tags")
 
     // then the agent step and the session are marked failed
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
@@ -377,6 +375,27 @@ test("a success result without structured output fails the step", async () => {
     expect(step.status).toBe("failed")
     if (step.kind !== "agent") throw new Error("unreachable")
     expect((await loopy.sessions.get(step.sessionId!)).status).toBe("failed")
+})
+
+test("invalid JSON inside the instructed tags fails the step", async () => {
+    // given a fake SDK returning plain text inside the instructed tags
+    const { loopy } = tempLoopy()
+    const repo = await tempGitRepo()
+    const repository = new GitRepository(repo.path)
+    const { query } = fakeClaudeQuery((prompt) => {
+        const { opening, closing } = instructedTags(prompt)
+        return { finalResponse: `${opening}\nall done\n${closing}` }
+    })
+    const agent = new ClaudeAgent({ model: "claude-sonnet-5", query })
+
+    // when the agent runs
+    const result = testRun(loopy, async () => {
+        const worktree = await repository.worktree({ base: "main" })
+        return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
+    })
+
+    // then the invalid JSON is rejected
+    await expect(result).rejects.toThrow("returned invalid JSON between the instructed output tags")
 })
 
 test("structured output violating the schema fails the step", async () => {
@@ -493,70 +512,43 @@ test("claude agent step replay restores the worktree without re-invoking the SDK
 })
 
 test.skipIf(!process.env.CLAUDE_AGENT_LIVE_TEST)(
-    "live: ClaudeAgent performs a real coding task",
+    "live: ClaudeAgent performs a coding task with non-trivial output",
     { timeout: 180_000 },
     async () => {
         // given a real claude agent and a real worktree
         const { loopy } = tempLoopy()
         const repo = await tempGitRepo()
         const repository = new GitRepository(repo.path)
-        const agent = new ClaudeAgent({ model: "claude-sonnet-5" })
+        const agent = new ClaudeAgent({ model: "claude-sonnet-4-6" })
         let worktree!: Worktree
 
-        // when it performs a tiny coding task
+        // when it creates a two-line file and reports an array-root discriminated union
         const result = await testRun(loopy, async () => {
             worktree = await repository.worktree({ base: "main" })
             return agent.run("implement", {
-                prompt: "Create a file named hello.txt containing exactly: hi",
-                output: outputSchema,
+                prompt: `Create hello.txt with exactly these two lines:
+hello
+loopy
+
+Report exactly two array entries in order: a file entry for hello.txt with lineCount 2, then a status entry with done true. Omit the optional note and warning fields.`,
+                output: liveOutputSchema,
                 worktree
             })
         })
 
-        // then it reports completion and the file exists in the worktree
-        expect(result.done).toBe(true)
-        expect(fs.readFileSync(path.join(worktree.path, "hello.txt"), "utf8")).toContain("hi")
-        // and the session records a succeeded conversation
+        // then it returns the exact complex output and writes the requested file
+        expect(result).toEqual([
+            { kind: "file", path: "hello.txt", lineCount: 2 },
+            { kind: "status", done: true }
+        ])
+        expect(fs.readFileSync(path.join(worktree.path, "hello.txt"), "utf8")).toBe("hello\nloopy\n")
+        // and the session succeeds with a valid worktree snapshot
         const run = await loopy.runs.get((await loopy.runs.list())[0].id)
         const step = run.steps[0]
         if (step.kind !== "agent") throw new Error("unreachable")
         const session = await loopy.sessions.get(step.sessionId!)
         expect(session.status).toBe("succeeded")
         expect(session.messages.length).toBeGreaterThan(2)
-    }
-)
-
-test.skipIf(!process.env.CLAUDE_AGENT_LIVE_TEST)(
-    "live: ClaudeAgent extracts file contents into a format-annotated schema",
-    { timeout: 180_000 },
-    async () => {
-        // given a real claude agent and a worktree holding a file with deployment details
-        const { loopy } = tempLoopy()
-        const repo = await tempGitRepo()
-        const repository = new GitRepository(repo.path)
-        const agent = new ClaudeAgent({ model: "claude-sonnet-5" })
-
-        // when the agent reads the file and reports it against a schema with format-emitting fields
-        const result = await testRun(loopy, async () => {
-            const worktree = await repository.worktree({ base: "main" })
-            fs.writeFileSync(
-                path.join(worktree.path, "info.txt"),
-                "Deployed at: 2026-07-08T09:30:00Z\nContact: bob@example.com\n"
-            )
-            return agent.run("report", {
-                prompt: "Read info.txt and report the deployment time and the contact email.",
-                output: z.object({ deployedAt: z.iso.datetime(), contact: z.email() }),
-                worktree
-            })
-        })
-
-        // then the extracted values satisfy the format-annotated schema
-        expect(new Date(result.deployedAt).toISOString()).toBe("2026-07-08T09:30:00.000Z")
-        expect(result.contact).toBe("bob@example.com")
-        // and the session records a succeeded conversation
-        const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-        const step = run.steps[0]
-        if (step.kind !== "agent") throw new Error("unreachable")
-        expect((await loopy.sessions.get(step.sessionId!)).status).toBe("succeeded")
+        expect((await worktree.git(["rev-parse", step.snapshotRef!])).exitCode).toBe(0)
     }
 )

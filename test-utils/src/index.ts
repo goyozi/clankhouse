@@ -104,3 +104,22 @@ export function gate(): { released: Promise<void>; release: () => void } {
     })
     return { released, release }
 }
+
+export function instructedTags(prompt: string): { name: string; opening: string; closing: string } {
+    const match = prompt.match(/<(loopy_structured_output_[0-9a-f_]+)>/)
+    if (match === null) throw new Error("prompt has no instructed output tags")
+    return { name: match[1], opening: `<${match[1]}>`, closing: `</${match[1]}>` }
+}
+
+export function instructedSchema(prompt: string): unknown {
+    const startMarker = "```json\n"
+    const start = prompt.indexOf(startMarker)
+    const end = prompt.indexOf("\n```", start + startMarker.length)
+    if (start === -1 || end === -1) throw new Error("prompt has no instructed output schema")
+    return JSON.parse(prompt.slice(start + startMarker.length, end))
+}
+
+export function taggedOutput(prompt: string, outputText: string): string {
+    const { opening, closing } = instructedTags(prompt)
+    return `${opening}\n${outputText}\n${closing}`
+}

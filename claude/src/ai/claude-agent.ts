@@ -1,4 +1,3 @@
-import * as z from "zod"
 import { query } from "@anthropic-ai/claude-agent-sdk"
 import type {
     Options,
@@ -46,66 +45,39 @@ export class ClaudeAgent extends BaseCodingAgent {
         this.queryFn = options.query ?? query
     }
 
-    protected async invoke({ prompt, output, worktree, session }: CodingAgentInvocation): Promise<unknown> {
-        session.addMessage("user", prompt)
-        let result: SDKResultMessage | undefined
-        for await (const message of this.queryFn({ prompt, options: this.buildOptions(worktree, output) })) {
-            record(session, message)
-            if (message.type === "result") result = message
-        }
-        if (result === undefined) throw new Error("Claude agent stream ended without a result")
-        if (result.subtype !== "success") {
-            const details = result.errors.length > 0 ? `: ${result.errors.join("; ")}` : ""
-            throw new Error(`Claude agent failed with ${result.subtype}${details}`)
-        }
-        if (result.structured_output === undefined) throw new Error("Claude agent returned no structured output")
-        session.addMessage("assistant", JSON.stringify(result.structured_output))
-        return result.structured_output
+    protected async invoke(invocation: CodingAgentInvocation): Promise<unknown> {
+        return this.invokeWithInstructedOutput(invocation, async (prompt) => {
+            let result: SDKResultMessage | undefined
+            for await (const message of this.queryFn({
+                prompt,
+                options: this.buildOptions(invocation.worktree)
+            })) {
+                record(invocation.session, message)
+                if (message.type === "result") result = message
+            }
+            if (result === undefined) throw new Error("Claude agent stream ended without a result")
+            if (result.subtype !== "success") {
+                const details = result.errors.length > 0 ? `: ${result.errors.join("; ")}` : ""
+                throw new Error(`Claude agent failed with ${result.subtype}${details}`)
+            }
+            return result.result
+        })
     }
 
-    private buildOptions(worktree: Worktree, output: z.ZodTypeAny): Options {
+    private buildOptions(worktree: Worktree): Options {
         const options: Options = {
             cwd: worktree.path,
             model: this.model,
             permissionMode: "auto",
             systemPrompt: this.options.systemPrompt ?? { type: "preset", preset: "claude_code" },
             settingSources: this.options.settingSources ?? ["project"],
-            disallowedTools: [...new Set([...(this.options.disallowedTools ?? []), "AskUserQuestion"])],
-            outputFormat: { type: "json_schema", schema: toJSONSchema(output) }
+            disallowedTools: [...new Set([...(this.options.disallowedTools ?? []), "AskUserQuestion"])]
         }
         if (this.options.maxTurns !== undefined) options.maxTurns = this.options.maxTurns
         if (this.options.env !== undefined) options.env = { ...process.env, ...this.options.env }
         if (this.options.allowedTools !== undefined) options.allowedTools = this.options.allowedTools
         return options
     }
-}
-
-function toJSONSchema(output: z.ZodTypeAny): Record<string, unknown> {
-    // As of 2026-07-08, the CLI rejects format despite being officially supported by the docs.
-    // Encoding the format in description seems to work reliably.
-    const schema = z.toJSONSchema(output, {
-        override: ({ jsonSchema }) => {
-            if (typeof jsonSchema.format !== "string") return
-            const hint = `format: ${jsonSchema.format}`
-            jsonSchema.description =
-                typeof jsonSchema.description === "string" ? `${jsonSchema.description} (${hint})` : hint
-            delete jsonSchema.format
-        }
-    })
-    delete schema.$schema
-    if (containsRef(schema)) {
-        throw new Error(
-            "Claude agent output schema is recursive; structured outputs cannot represent self-referential schemas. Flatten it or bound its depth."
-        )
-    }
-    return schema
-}
-
-function containsRef(node: unknown): boolean {
-    if (node === null || typeof node !== "object") return false
-    if (Array.isArray(node)) return node.some(containsRef)
-    const schema = node as Record<string, unknown>
-    return typeof schema.$ref === "string" || Object.values(schema).some(containsRef)
 }
 
 function record(session: SessionRecorder, message: SDKMessage): void {

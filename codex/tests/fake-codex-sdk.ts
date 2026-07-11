@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import type { CodexOptions, Input, ThreadEvent, ThreadItem, ThreadOptions, TurnOptions } from "@openai/codex-sdk"
 import type { CodexFactory } from "@loopy/codex/ai/codex-agent"
 import { applyChange, type FakeChange } from "@loopy/core/ai/fake-agent"
+import { taggedOutput } from "@loopy/test-utils"
 
 export type FakeCodexItem = {
     started?: ThreadItem
@@ -13,7 +14,7 @@ export type FakeCodexItem = {
 export type FakeCodexScript = {
     items?: FakeCodexItem[]
     output?: unknown
-    outputText?: string
+    finalResponse?: string
     turnFailure?: string
     streamError?: string
     throwMidStream?: Error
@@ -43,7 +44,7 @@ export function fakeCodex(script: (prompt: string) => FakeCodexScript): {
                     async runStreamed(input, turnOptions) {
                         runCalls.push({ input, options: turnOptions })
                         if (typeof input !== "string") throw new Error("fakeCodex supports only string prompts")
-                        return { events: run(script(input), options) }
+                        return { events: run(input, script(input), options) }
                     }
                 }
             }
@@ -52,7 +53,11 @@ export function fakeCodex(script: (prompt: string) => FakeCodexScript): {
     return { codexFactory, clientOptions, threadOptions, runCalls }
 }
 
-async function* run(script: FakeCodexScript, options: ThreadOptions | undefined): AsyncGenerator<ThreadEvent> {
+async function* run(
+    prompt: string,
+    script: FakeCodexScript,
+    options: ThreadOptions | undefined
+): AsyncGenerator<ThreadEvent> {
     yield { type: "thread.started", thread_id: randomUUID() }
     yield { type: "turn.started" }
     if (script.throwMidStream) throw script.throwMidStream
@@ -73,11 +78,12 @@ async function* run(script: FakeCodexScript, options: ThreadOptions | undefined)
         yield { type: "turn.failed", error: { message: script.turnFailure } }
         return
     }
-    const finalText = script.outputText ?? (script.output === undefined ? undefined : JSON.stringify(script.output))
-    if (finalText !== undefined) {
+    let finalResponse = script.finalResponse
+    if (script.output !== undefined) finalResponse ??= taggedOutput(prompt, JSON.stringify(script.output))
+    if (finalResponse !== undefined) {
         yield {
             type: "item.completed",
-            item: { id: "agent_final", type: "agent_message", text: finalText }
+            item: { id: "agent_final", type: "agent_message", text: finalResponse }
         }
     }
     if (script.endWithoutCompletion) return
