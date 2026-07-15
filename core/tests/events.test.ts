@@ -2,9 +2,10 @@ import * as z from "zod"
 import { expect, test } from "vitest"
 import { Loopy } from "@loopy/core/loopy"
 import { decode } from "@loopy/core/codec"
-import { gate, tempLoopy, testRun } from "@loopy/test-utils"
+import { gate, runOutput, tempLoopy, testRun } from "@loopy/test-utils"
 
 const approval = z.object({ ok: z.boolean() })
+const workflowOptions = { input: z.void(), output: z.any(), key: () => "test-key" }
 
 test("waitFor receives an emitted event and records an event step", async () => {
     // given a fresh loopy instance and a synchronization gate
@@ -278,14 +279,17 @@ test("re-emitting on rerun supersedes the previous unconsumed event", async () =
         await loopy.emit("result", { v: value })
         return loopy.step("publish", z.string(), async () => publishImpl())
     }
+    loopy.registerWorkflow("test-workflow", workflowOptions, body)
     // when the first attempt emits result=1 and the publish step throws
-    await expect(testRun(loopy, body)).rejects.toThrow("boom")
+    const firstId = loopy.start("test-workflow", undefined)
+    await expect(runOutput(loopy, firstId)).rejects.toThrow("boom")
     // then a single unconsumed "result" event is stored
     expect(loopy.db.prepare("SELECT COUNT(*) AS n FROM events WHERE key = 'result'").get()).toEqual({ n: 1 })
     // and when the workflow reruns from the emit step with a corrected value and a working publish
     value = 2
     publishImpl = () => "published"
-    expect(await testRun(loopy, body, { from: "emit:result" })).toBe("published")
+    const secondId = loopy.rerun(firstId, { from: "emit:result" })
+    expect(await runOutput(loopy, secondId)).toBe("published")
     // then the stale event was superseded, leaving a single "result" event in the store
     expect(loopy.db.prepare("SELECT COUNT(*) AS n FROM events WHERE key = 'result'").get()).toEqual({ n: 1 })
     // and a later consumer receives the corrected payload rather than the stale one

@@ -10,6 +10,7 @@ import {
     instructedSchema,
     instructedTags,
     runGit,
+    runOutput,
     taggedOutput,
     tempGitRepo,
     tempLoopy,
@@ -17,6 +18,7 @@ import {
 } from "@loopy/test-utils"
 
 const outputSchema = z.object({ done: z.boolean() })
+const workflowOptions = { input: z.void(), output: z.any(), key: () => "test-key" }
 const liveOutputSchema = z.array(
     z.discriminatedUnion("kind", [
         z.object({
@@ -495,15 +497,18 @@ test("claude agent step replay restores the worktree without re-invoking the SDK
         await agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
         return loopy.step("publish", z.string(), async () => publishImpl())
     }
+    loopy.registerWorkflow("test-workflow", workflowOptions, body)
 
     // when the workflow runs and the publish step throws
-    await expect(testRun(loopy, body)).rejects.toThrow("boom")
+    const firstId = loopy.start("test-workflow", undefined)
+    await expect(runOutput(loopy, firstId)).rejects.toThrow("boom")
     // and the worktree's uncommitted changes are discarded
     await runGit(worktree.path, ["reset", "--hard"])
     await runGit(worktree.path, ["clean", "-fd"])
-    // and the workflow resumes from the publish step with a working implementation
+    // and the workflow reruns from the publish step with a working implementation
     publishImpl = () => "published"
-    expect(await testRun(loopy, body, { from: "publish" })).toBe("published")
+    const secondId = loopy.rerun(firstId, { from: "publish" })
+    expect(await runOutput(loopy, secondId)).toBe("published")
 
     // then the SDK is invoked exactly once
     expect(calls).toHaveLength(1)

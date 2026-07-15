@@ -5,9 +5,10 @@ import { expect, test } from "vitest"
 import { FakeCodingAgent } from "@loopy/core/ai/fake-agent"
 import { GitRepository, Worktree } from "@loopy/core/git"
 import { uniqueName } from "@loopy/core/util"
-import { runGit, tempGitRepo, tempLoopy, testRun } from "@loopy/test-utils"
+import { runGit, runOutput, tempGitRepo, tempLoopy, testRun } from "@loopy/test-utils"
 
 const outputSchema = z.object({ done: z.boolean() })
+const workflowOptions = { input: z.void(), output: z.any(), key: () => "test-key" }
 
 test("FakeCodingAgent applies changes and snapshots the worktree", async () => {
     // given a fake coding agent that edits two files and returns a typed output
@@ -75,18 +76,21 @@ test("agent step replay restores the worktree snapshot", async () => {
         await agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
         return loopy.step("publish", z.string(), async () => publishImpl())
     }
+    loopy.registerWorkflow("test-workflow", workflowOptions, body)
 
     // when the workflow runs and the publish step throws
-    await expect(testRun(loopy, body)).rejects.toThrow("boom")
+    const firstId = loopy.start("test-workflow", undefined)
+    await expect(runOutput(loopy, firstId)).rejects.toThrow("boom")
 
     // then discarding the worktree's uncommitted changes removes the agent's edit
     await runGit(worktree.path, ["reset", "--hard"])
     await runGit(worktree.path, ["clean", "-fd"])
     expect(fs.existsSync(path.join(worktree.path, "src/hello.ts"))).toBe(false)
 
-    // and when the workflow resumes from the publish step with a working implementation
+    // and when the workflow reruns from the publish step with a working implementation
     publishImpl = () => "published"
-    expect(await testRun(loopy, body, { from: "publish" })).toBe("published")
+    const secondId = loopy.rerun(firstId, { from: "publish" })
+    expect(await runOutput(loopy, secondId)).toBe("published")
 
     // then the agent step is not re-invoked on replay
     expect(invocations).toBe(1)
@@ -111,17 +115,20 @@ test("agent step replay fails loudly when its worktree snapshot is missing", asy
         await agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
         return loopy.step("publish", z.string(), async () => publishImpl())
     }
+    loopy.registerWorkflow("test-workflow", workflowOptions, body)
 
     // when the workflow runs and the publish step throws
-    await expect(testRun(loopy, body)).rejects.toThrow("boom")
+    const firstId = loopy.start("test-workflow", undefined)
+    await expect(runOutput(loopy, firstId)).rejects.toThrow("boom")
     // and the agent step's snapshot ref is lost before replay (e.g. the ref was pruned)
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
     loopy.db.prepare("UPDATE steps SET snapshot_ref = NULL WHERE id = ?").run(run.steps[0].id)
 
-    // and when the workflow resumes from the publish step
+    // and when the workflow reruns from the publish step
     publishImpl = () => "published"
     // then replaying the agent step refuses to proceed rather than silently skipping the restore
-    await expect(testRun(loopy, body, { from: "publish" })).rejects.toThrow(/no worktree snapshot/)
+    const secondId = loopy.rerun(firstId, { from: "publish" })
+    await expect(runOutput(loopy, secondId)).rejects.toThrow(/no worktree snapshot/)
 })
 
 test("snapshot refs stay distinct for step keys that sanitize to the same string", async () => {

@@ -9,6 +9,7 @@ import {
     instructedSchema,
     instructedTags,
     runGit,
+    runOutput,
     taggedOutput,
     tempGitRepo,
     tempLoopy,
@@ -17,6 +18,7 @@ import {
 import { fakeCodex } from "./fake-codex-sdk"
 
 const outputSchema = z.object({ done: z.boolean() })
+const workflowOptions = { input: z.void(), output: z.any(), key: () => "test-key" }
 const liveOutputSchema = z.array(
     z.discriminatedUnion("kind", [
         z.object({
@@ -705,14 +707,17 @@ test("codex agent step replay restores the worktree without re-invoking the SDK"
         await agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
         return loopy.step("publish", z.string(), async () => publishImpl())
     }
+    loopy.registerWorkflow("test-workflow", workflowOptions, body)
 
     // when the workflow fails after the agent and its changes are discarded
-    await expect(testRun(loopy, body)).rejects.toThrow("boom")
+    const firstId = loopy.start("test-workflow", undefined)
+    await expect(runOutput(loopy, firstId)).rejects.toThrow("boom")
     await runGit(worktree.path, ["reset", "--hard"])
     await runGit(worktree.path, ["clean", "-fd"])
-    // and the workflow resumes from the later step
+    // and the workflow reruns from the later step
     publishImpl = () => "published"
-    expect(await testRun(loopy, body, { from: "publish" })).toBe("published")
+    const secondId = loopy.rerun(firstId, { from: "publish" })
+    expect(await runOutput(loopy, secondId)).toBe("published")
 
     // then the SDK ran once and the stored snapshot restored the change
     expect(runCalls).toHaveLength(1)

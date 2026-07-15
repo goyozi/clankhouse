@@ -11,23 +11,17 @@ import { Engine } from "./engine"
 import { Events } from "./events"
 import { Notifier } from "./watch"
 import { runContext } from "./context"
-import { decode } from "./codec"
-
-type RegisteredWorkflow = {
-    options: { input: z.ZodTypeAny; output: z.ZodTypeAny; key: (input: any) => string }
-    fn: (input: any) => Promise<any>
-}
+import { Workflows, type RerunOptions, type WorkflowOptions } from "./workflows"
 
 export class Loopy {
     readonly loopyDir: string
     readonly runs: WorkflowRuns
     readonly artifacts: Artifacts
     readonly sessions: AISessions
+    readonly workflows: Workflows
     readonly db: Db
-    readonly active: ActiveSets = { runs: new Map(), steps: new Set(), sessions: new Set() }
     readonly engine: Engine
     readonly events: Events
-    private readonly workflows = new Map<string, RegisteredWorkflow>()
 
     /**
      * @param loopyDir path in which all Loopy-managed files are stored. Defaults to $LOOPY_DIR, if present, or ~/.loopy otherwise
@@ -37,11 +31,13 @@ export class Loopy {
         mkdirSync(this.loopyDir, { recursive: true })
         this.db = openDatabase(path.join(this.loopyDir, "loopy.db"))
         const notifier = new Notifier()
-        this.engine = new Engine(this.db, this.active, this.loopyDir, notifier)
+        const active: ActiveSets = { runs: new Map(), steps: new Set(), sessions: new Set() }
+        this.engine = new Engine(this.db, active, notifier)
+        this.workflows = new Workflows(this, this.loopyDir, this.db, this.engine, active)
         this.events = new Events(this.db)
-        this.runs = new WorkflowRuns(this.db, this.active, notifier)
+        this.runs = new WorkflowRuns(this.db, active, notifier)
         this.artifacts = new Artifacts(this.loopyDir, this.db, this.engine)
-        this.sessions = new AISessions(this.db, this.active)
+        this.sessions = new AISessions(this.db, active)
     }
 
     close(): void {
@@ -52,51 +48,31 @@ export class Loopy {
         name: string,
         options: WorkflowOptions<I, O>,
         workflowFn: (input: z.infer<I>) => Promise<z.infer<O>>
-    ) {
-        if (this.workflows.has(name)) throw new Error(`Workflow "${name}" is already registered`)
-        this.workflows.set(name, { options, fn: workflowFn })
+    ): void {
+        this.workflows.register(name, options, workflowFn)
     }
 
     /**
-     * Starts a workflow run for a registered workflow. Promise resolves when run is **started**.
-     *
-     * Rerun semantics:
-     * - Not provided & no existing run -> attempt #1
-     * - Not provided & existing run interrupted -> resume
-     * - Not provided & existing run running or succeeded -> no-op
-     * - Not provided & existing run failed -> error, no chance of success
-     * - Provided & existing run running or interrupted -> error, no concurrent attempts allowed
-     * - Provided & existing run NOT running nor interrupted -> new attempt from given step, reuse / restore results from previous steps
-     *
-     * @see Loopy.registerWorkflow
+     * Starts a workflow run for a registered workflow and returns its ID after dispatching it.
+     * Existing interrupted runs resume with their persisted input. Running and succeeded runs are no-ops.
      */
-    async start(name: string, input: any, rerun?: RerunOptions): Promise<void> {
-        const registered = this.workflows.get(name)
-        if (!registered) throw new Error(`Workflow "${name}" is not registered`)
-        const parsed = registered.options.input.parse(input)
-        const key = registered.options.key(parsed)
-        const plan = this.engine.resolvePlan(name, key, parsed, rerun)
-        if (plan.type !== "execute") return
-        this.engine
-            .executeRun(this, plan.runRow, async () => registered.options.output.parse(await registered.fn(parsed)))
-            .catch(() => {})
+    start(name: string, input: any): string {
+        return this.workflows.start(name, input)
+    }
+
+    resume(runId: string): string {
+        return this.workflows.resume(runId)
+    }
+
+    rerun(runId: string, options: RerunOptions): string {
+        return this.workflows.rerun(runId, options)
     }
 
     /**
      * Starts a workflow run and awaits its completion. Promise resolves when run is **finished**.
-     *
-     * @see Loopy.start for re-run semantics
      */
-    async run<O>(name: string, key: string, workflowFn: () => Promise<O>, rerun?: RerunOptions): Promise<O> {
-        const plan = this.engine.resolvePlan(name, key, undefined, rerun)
-        switch (plan.type) {
-            case "noopRunning":
-                return this.active.runs.get(plan.runId)!.promise as Promise<O>
-            case "noopSucceeded":
-                return plan.runRow.output === null ? (undefined as O) : decode(plan.runRow.output)
-            case "execute":
-                return this.engine.executeRun(this, plan.runRow, workflowFn)
-        }
+    run<O>(name: string, key: string, workflowFn: () => Promise<O>): Promise<O> {
+        return this.workflows.run(name, key, workflowFn)
     }
 
     /**
@@ -173,13 +149,5 @@ export class Loopy {
         })
     }
 }
-
-export type WorkflowOptions<I extends z.ZodTypeAny, O extends z.ZodTypeAny> = {
-    input: I
-    output: O
-    key: (input: z.infer<I>) => string
-}
-
-export type RerunOptions = { from: string }
 
 export type EventDefinition<T extends z.ZodTypeAny> = { key: string; schema: T }

@@ -7,7 +7,7 @@ import { FakeLLM } from "@loopy/core/ai/fake-llm"
 import { GitRepository } from "@loopy/core/git"
 import { Loopy } from "@loopy/core/loopy"
 import { uniqueName } from "@loopy/core/util"
-import { gate, tempGitRepo, tempLoopy } from "@loopy/test-utils"
+import { gate, runOutput, tempGitRepo, tempLoopy } from "@loopy/test-utils"
 
 test("end-to-end: durable workflow with llm, agent, artifact and approval survives crashes and reruns", async () => {
     // given a durable loopy instance and a git repository
@@ -62,23 +62,25 @@ test("end-to-end: durable workflow with llm, agent, artifact and approval surviv
             return `published by ${approval.approvedBy}`
         })
     }
+    const workflowInput = z.object({ key: z.string() })
+    const register = (l: Loopy, hooks: Hooks) =>
+        l.registerWorkflow(
+            "feature",
+            { input: workflowInput, output: z.string(), key: (value) => value.key },
+            makeBody(l, hooks)
+        )
 
     // given gates to pause the run after the drafts phase
     const parkA = gate()
     const reachedA = gate()
     // when the first run starts
-    loopy
-        .run(
-            "feature",
-            "feat-x",
-            makeBody(loopy, {
-                afterDrafts: async () => {
-                    reachedA.release()
-                    await parkA.released
-                }
-            })
-        )
-        .catch(() => {})
+    register(loopy, {
+        afterDrafts: async () => {
+            reachedA.release()
+            await parkA.released
+        }
+    })
+    const runId = loopy.start("feature", { key: "feat-x" })
     // and it pauses right after drafting, before implementing
     await reachedA.released
     // then only the plan step and the two draft llm calls have run so far
@@ -90,18 +92,13 @@ test("end-to-end: durable workflow with llm, agent, artifact and approval surviv
     const parkB = gate()
     const reachedB = gate()
     // when the run resumes and reaches the waitFor approval step
-    second
-        .run(
-            "feature",
-            "feat-x",
-            makeBody(second, {
-                afterApproval: async () => {
-                    reachedB.release()
-                    await parkB.released
-                }
-            })
-        )
-        .catch(() => {})
+    register(second, {
+        afterApproval: async () => {
+            reachedB.release()
+            await parkB.released
+        }
+    })
+    expect(second.resume(runId)).toBe(runId)
     // then the run is parked with a single pending wait-for-approval step
     await expect
         .poll(() => second.db.prepare("SELECT COUNT(*) AS n FROM steps WHERE key = 'wait:approval'").get(), {
@@ -118,7 +115,9 @@ test("end-to-end: durable workflow with llm, agent, artifact and approval surviv
     // given the loopy instance is reopened again
     const third = reopen()
     // when the run resumes to completion without further pausing
-    const result = await third.run("feature", "feat-x", makeBody(third, {}))
+    register(third, {})
+    expect(third.resume(runId)).toBe(runId)
+    const result = await runOutput(third, runId)
     // then it returns the published result
     expect(result).toBe("published by greg")
     // and all steps including publish have each run exactly once
@@ -161,9 +160,8 @@ test("end-to-end: durable workflow with llm, agent, artifact and approval surviv
     // given the alpha.txt file is deleted from the worktree
     fs.rmSync(path.join(worktreePath, "alpha.txt"))
     // when the workflow is rerun from the publish step
-    const rerunResult = await third.run("feature", "feat-x", makeBody(third, {}), {
-        from: "publish"
-    })
+    const rerunId = third.rerun(runId, { from: "publish" })
+    const rerunResult = await runOutput(third, rerunId)
     // then it returns the same published result
     expect(rerunResult).toBe("published by greg")
     // and only the publish step runs again, all earlier steps are not re-executed

@@ -2,7 +2,16 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { gate, tempLoopy, testRun } from "@loopy/test-utils"
+import { gate, runOutput, tempLoopy, testRun } from "@loopy/test-utils"
+import type { Loopy } from "@loopy/core/loopy"
+
+const input = z.object({ id: z.string(), value: z.number() })
+const options = { input, output: z.any(), key: (value: z.infer<typeof input>) => value.id }
+const testInput = { id: "test-key", value: 1 }
+
+function register(loopy: Loopy, body: (value: z.infer<typeof input>) => Promise<unknown>): void {
+    loopy.registerWorkflow("test-workflow", options, body)
+}
 
 test("second run of a succeeded key is a no-op returning the stored output", async () => {
     // given a workflow body that counts calls and returns a fixed result
@@ -41,7 +50,7 @@ test("run of an actively running key awaits the existing run", async () => {
     expect(await loopy.runs.list()).toHaveLength(1)
 })
 
-test("run of a failed key without rerun options is an error", async () => {
+test("run of a failed key without rerun is an error", async () => {
     // given a loopy instance
     const { loopy } = tempLoopy()
     // when the run body throws
@@ -51,129 +60,140 @@ test("run of a failed key without rerun options is an error", async () => {
             throw new Error("boom")
         })
     ).rejects.toThrow("boom")
-    // and when the same key is run again without rerun options
+    // and when the same key is run again
     // then it is rejected because the key has already failed
     await expect(testRun(loopy, async () => "fine")).rejects.toThrow(/has failed/)
 })
 
 test("rerun from a step starts a new attempt reusing earlier steps", async () => {
-    // given a body with step "a" that always succeeds and step "b" whose impl can be swapped
+    // given a registered workflow with step "a" that succeeds and step "b" that initially fails
     const { loopy } = tempLoopy()
     let aCalls = 0
     let bImpl: () => number = () => {
         throw new Error("boom")
     }
-    const body = async () => {
+    register(loopy, async () => {
         const a = await loopy.step("a", z.number(), async () => {
             aCalls++
             return 1
         })
         const b = await loopy.step("b", z.number(), async () => bImpl())
         return a + b
-    }
-    // when the run executes and step "b" fails
-    // then the run fails with the thrown error
-    await expect(testRun(loopy, body)).rejects.toThrow("boom")
-    // and when step "b" is fixed and the run is rerun from "b"
+    })
+    // when the first attempt fails at step "b"
+    const firstId = loopy.start("test-workflow", testInput)
+    await expect(runOutput(loopy, firstId)).rejects.toThrow("boom")
+    // and when step "b" is fixed and the run is rerun from it
     bImpl = () => 2
-    // then the rerun succeeds, combining the reused step "a" with the new step "b"
-    expect(await testRun(loopy, body, { from: "b" })).toBe(3)
-    // and step "a" was not re-executed
+    const secondId = loopy.rerun(firstId, { from: "b" })
+    // then the rerun returns a new ID and succeeds using the reused step "a"
+    expect(secondId).not.toBe(firstId)
+    expect(await runOutput(loopy, secondId)).toBe(3)
     expect(aCalls).toBe(1)
-    // and two attempts are recorded for the key
-    const runs = await loopy.runs.list({ key: "test-key" })
-    expect(runs.map((r) => r.attempt).sort()).toEqual([1, 2])
-    // and the second attempt succeeded with both steps marked succeeded
-    const attempt2 = await loopy.runs.get(runs.find((r) => r.attempt === 2)!.id)
-    expect(attempt2.status).toBe("succeeded")
-    expect(attempt2.steps.map((s) => [s.key, s.status])).toEqual([
+    // and the second attempt contains both succeeded steps
+    const attempt2 = await loopy.runs.get(secondId)
+    expect(attempt2.attempt).toBe(2)
+    expect(attempt2.steps.map((step) => [step.key, step.status])).toEqual([
         ["a", "succeeded"],
         ["b", "succeeded"]
     ])
 })
 
 test("rerun preserves chronological step order across a caught-and-failed step", async () => {
-    // given a body where step "b" fails and is caught, followed by succeeding steps "c" and "d"
+    // given a registered workflow where step "b" fails and is caught before later succeeding steps
     const { loopy } = tempLoopy()
     let bCalls = 0
-    const body = async () => {
+    register(loopy, async () => {
         await loopy.step("a", z.number(), async () => 1)
         try {
             await loopy.step("b", z.number(), async () => {
                 bCalls++
                 throw new Error("boom")
             })
-        } catch {
-            // the workflow tolerates step "b" failing and continues
-        }
+        } catch {}
         await loopy.step("c", z.number(), async () => 3)
         await loopy.step("d", z.number(), async () => 4)
         return "done"
-    }
-    // when the run executes and completes despite step "b" failing
-    expect(await testRun(loopy, body)).toBe("done")
-    // and when the run is rerun from the last step "d"
-    expect(await testRun(loopy, body, { from: "d" })).toBe("done")
-    // then the caught-and-failed step "b" was re-executed in place, not treated as reusable
+    })
+    // when the first attempt succeeds and is rerun from the last step
+    const firstId = loopy.start("test-workflow", testInput)
+    expect(await runOutput(loopy, firstId)).toBe("done")
+    const secondId = loopy.rerun(firstId, { from: "d" })
+    expect(await runOutput(loopy, secondId)).toBe("done")
+    // then the caught failed step is re-executed in place
     expect(bCalls).toBe(2)
-    // and the second attempt's steps stay in chronological order a, b, c, d
-    const runs = await loopy.runs.list({ key: "test-key" })
-    const attempt2 = await loopy.runs.get(runs.find((r) => r.attempt === 2)!.id)
-    expect(attempt2.steps.map((s) => s.key)).toEqual(["a", "b", "c", "d"])
-    expect(attempt2.steps.map((s) => s.status)).toEqual(["succeeded", "failed", "succeeded", "succeeded"])
+    // and the second attempt preserves chronological order and statuses
+    const attempt2 = await loopy.runs.get(secondId)
+    expect(attempt2.steps.map((step) => step.key)).toEqual(["a", "b", "c", "d"])
+    expect(attempt2.steps.map((step) => step.status)).toEqual(["succeeded", "failed", "succeeded", "succeeded"])
 })
 
 test("rerun of a succeeded run creates a new attempt", async () => {
-    // given a body with steps "a" and "b", where "b" reads a mutable outer value
+    // given a registered succeeded workflow whose second step reads a mutable implementation value
     const { loopy } = tempLoopy()
     let bValue = 2
-    const body = async () => {
+    register(loopy, async () => {
         const a = await loopy.step("a", z.number(), async () => 1)
         const b = await loopy.step("b", z.number(), async () => bValue)
         return a + b
-    }
-    // when the run executes successfully
-    // then it returns the sum of the two steps
-    expect(await testRun(loopy, body)).toBe(3)
-    // and when the outer value changes and the run is rerun from "b"
+    })
+    const firstId = loopy.start("test-workflow", testInput)
+    expect(await runOutput(loopy, firstId)).toBe(3)
+    // when the implementation value changes and the run is rerun from step "b"
     bValue = 10
-    // then the rerun returns the updated sum
-    expect(await testRun(loopy, body, { from: "b" })).toBe(11)
-    // and two attempts are recorded
+    const secondId = loopy.rerun(firstId, { from: "b" })
+    // then a new attempt returns the updated result
+    expect(await runOutput(loopy, secondId)).toBe(11)
     expect(await loopy.runs.list()).toHaveLength(2)
 })
 
+test("rerun reuses the source attempt input", async () => {
+    // given a registered workflow whose first attempt fails after reading its input
+    const { loopy } = tempLoopy()
+    let shouldFail = true
+    register(loopy, async (value) => {
+        await loopy.step("input", z.number(), async () => value.value)
+        return loopy.step("publish", z.number(), async () => {
+            if (shouldFail) throw new Error("boom")
+            return value.value
+        })
+    })
+    const firstId = loopy.start("test-workflow", { id: "test-key", value: 17 })
+    await expect(runOutput(loopy, firstId)).rejects.toThrow("boom")
+    // when the run is fixed and rerun without accepting new input
+    shouldFail = false
+    const secondId = loopy.rerun(firstId, { from: "publish" })
+    // then the new attempt executes with the source attempt's persisted input
+    expect(await runOutput(loopy, secondId)).toBe(17)
+})
+
 test("rerun copies artifacts to the new attempt", async () => {
-    // given a body that writes an artifact and then runs a "publish" step that can be made to fail
+    // given a registered workflow that writes an artifact before a publish step that initially fails
     const { loopy, dir } = tempLoopy()
     let publishImpl: () => string = () => {
         throw new Error("boom")
     }
-    const body = async () => {
+    register(loopy, async () => {
         await loopy.artifacts.writeText("report", "hello")
         return loopy.step("publish", z.string(), async () => publishImpl())
-    }
-    // when the run executes and the "publish" step fails
-    // then the run fails with the thrown error
-    await expect(testRun(loopy, body)).rejects.toThrow("boom")
-    // and when "publish" is fixed and the run is rerun from "publish"
+    })
+    const firstId = loopy.start("test-workflow", testInput)
+    await expect(runOutput(loopy, firstId)).rejects.toThrow("boom")
+    // when publish is fixed and the workflow is rerun from that step
     publishImpl = () => "published"
-    // then the rerun succeeds with the published value
-    expect(await testRun(loopy, body, { from: "publish" })).toBe("published")
-    // and the new attempt has the artifact copied over with its content readable
-    const runs = await loopy.runs.list({ key: "test-key" })
-    const attempt1 = await loopy.runs.get(runs.find((r) => r.attempt === 1)!.id)
-    const attempt2 = await loopy.runs.get(runs.find((r) => r.attempt === 2)!.id)
+    const secondId = loopy.rerun(firstId, { from: "publish" })
+    expect(await runOutput(loopy, secondId)).toBe("published")
+    // then the new attempt has an independently copied artifact
+    const attempt1 = await loopy.runs.get(firstId)
+    const attempt2 = await loopy.runs.get(secondId)
     expect(attempt2.artifacts).toHaveLength(1)
     expect(await loopy.artifacts.readText(attempt2.artifacts[0].id)).toEqual({ text: "hello" })
-    // and the copied artifact's file lives under the new attempt's run directory, not the previous run's
-    expect(attempt2.artifacts[0].file.startsWith(path.join("artifacts", attempt2.id))).toBe(true)
+    expect(attempt2.artifacts[0].file.startsWith(path.join("artifacts", secondId))).toBe(true)
     expect(attempt2.artifacts[0].file).not.toBe(attempt1.artifacts[0].file)
-    // and both attempts' files exist independently on disk
     expect(fs.existsSync(path.join(dir, attempt1.artifacts[0].file))).toBe(true)
     expect(fs.existsSync(path.join(dir, attempt2.artifacts[0].file))).toBe(true)
-    // and the artifact step reflects the copied artifact, including its new file path
-    const artifactStep = attempt2.steps.find((s) => s.key === "artifact:report")!
+    // and the copied artifact step points to the new artifact
+    const artifactStep = attempt2.steps.find((step) => step.key === "artifact:report")!
     expect(artifactStep.kind).toBe("artifact")
     if (artifactStep.kind === "artifact") {
         expect(artifactStep.artifactId).toBe(attempt2.artifacts[0].id)
@@ -181,59 +201,104 @@ test("rerun copies artifacts to the new attempt", async () => {
     }
 })
 
-test("rerun requires an existing run", async () => {
-    // given a loopy instance with no prior runs
+test("rerun requires an existing run ID", async () => {
+    // given a registered workflow with no prior runs
     const { loopy } = tempLoopy()
-    // when a rerun is attempted from a step with no existing run
-    // then it is rejected because no run is found
-    await expect(testRun(loopy, async () => 1, { from: "a" })).rejects.toThrow(/No run found/)
+    register(loopy, async () => 1)
+    // when rerun is called with an unknown ID
+    // then it is rejected because the run does not exist
+    expect(() => loopy.rerun("missing", { from: "a" })).toThrow(/not found/)
 })
 
 test("rerun from an unknown step is rejected", async () => {
-    // given a loopy instance
+    // given a registered workflow with a failed attempt
     const { loopy } = tempLoopy()
-    // when the run executes and fails
-    // then the run fails with the thrown error
-    await expect(
-        testRun(loopy, async () => {
-            throw new Error("boom")
-        })
-    ).rejects.toThrow("boom")
-    // and when a rerun is attempted from a step that never existed
-    // then it is rejected because the step is not found
-    await expect(testRun(loopy, async () => 1, { from: "nope" })).rejects.toThrow(/not found/)
+    register(loopy, async () => {
+        throw new Error("boom")
+    })
+    const firstId = loopy.start("test-workflow", testInput)
+    await expect(runOutput(loopy, firstId)).rejects.toThrow("boom")
+    // when rerun targets a step that never existed
+    // then it is rejected without creating an attempt
+    expect(() => loopy.rerun(firstId, { from: "nope" })).toThrow(/not found/)
+    expect(await loopy.runs.list()).toHaveLength(1)
 })
 
 test("rerun while the run is active is rejected", async () => {
-    // given a gated body and a first run that blocks on the gate
+    // given a registered workflow that remains active on a gate
     const { loopy } = tempLoopy()
     const parked = gate()
-    const first = testRun(loopy, async () => {
+    register(loopy, async () => {
         await parked.released
         return 1
     })
-    // when a rerun is attempted while the first run is still active
+    const firstId = loopy.start("test-workflow", testInput)
+    // when rerun is requested while the source is active
     // then it is rejected due to concurrent attempts
-    await expect(testRun(loopy, async () => 2, { from: "a" })).rejects.toThrow(/concurrent attempts/)
-    // and the first run is allowed to complete
+    expect(() => loopy.rerun(firstId, { from: "a" })).toThrow(/concurrent attempts/)
+    // and the original run is allowed to complete
     parked.release()
-    await first
+    expect(await runOutput(loopy, firstId)).toBe(1)
 })
 
 test("rerun of an interrupted run is rejected", async () => {
-    // given a loopy instance and gates to control the run and observe when step "a" completes
+    // given an interrupted registered workflow on a reopened Loopy instance
     const { loopy, reopen } = tempLoopy()
     const parked = gate()
     const reached = gate()
-    // when the run executes step "a" and then blocks indefinitely, simulating an interruption
-    testRun(loopy, async () => {
+    register(loopy, async () => {
         await loopy.step("a", z.number(), async () => 1)
         reached.release()
         await parked.released
-    }).catch(() => {})
+    })
+    const firstId = loopy.start("test-workflow", testInput)
     await reached.released
-    // and when a rerun from "a" is attempted against a reopened loopy instance
     const second = reopen()
+    register(second, async () => 1)
+    // when rerun is requested against the persisted interrupted attempt
     // then it is rejected due to concurrent attempts
-    await expect(testRun(second, async () => 1, { from: "a" })).rejects.toThrow(/concurrent attempts/)
+    expect(() => second.rerun(firstId, { from: "a" })).toThrow(/concurrent attempts/)
+})
+
+test("rerun of a non-latest attempt is rejected", async () => {
+    // given a registered workflow with two completed attempts
+    const { loopy } = tempLoopy()
+    let shouldFail = true
+    register(loopy, async () =>
+        loopy.step("publish", z.string(), async () => {
+            if (shouldFail) throw new Error("boom")
+            return "published"
+        })
+    )
+    const firstId = loopy.start("test-workflow", testInput)
+    await expect(runOutput(loopy, firstId)).rejects.toThrow("boom")
+    shouldFail = false
+    const secondId = loopy.rerun(firstId, { from: "publish" })
+    expect(await runOutput(loopy, secondId)).toBe("published")
+    // when rerun targets the older first attempt
+    // then it is rejected because only the latest attempt is eligible
+    expect(() => loopy.rerun(firstId, { from: "publish" })).toThrow(/not the latest attempt/)
+})
+
+test("rerun validates persisted input before creating an attempt", async () => {
+    // given a succeeded workflow whose current registration no longer accepts its persisted input
+    const { loopy, reopen } = tempLoopy()
+    register(loopy, async () => loopy.step("publish", z.string(), async () => "published"))
+    const firstId = loopy.start("test-workflow", testInput)
+    expect(await runOutput(loopy, firstId)).toBe("published")
+    const second = reopen()
+    second.registerWorkflow(
+        "test-workflow",
+        {
+            input: z.object({ id: z.string(), value: z.string() }),
+            output: z.string(),
+            key: (value) => value.id
+        },
+        async () => "published"
+    )
+
+    // when rerun validates the source input against the changed registration
+    // then it rejects before inserting another attempt
+    expect(() => second.rerun(firstId, { from: "publish" })).toThrow()
+    expect(await second.runs.list()).toHaveLength(1)
 })

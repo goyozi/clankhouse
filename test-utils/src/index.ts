@@ -5,6 +5,7 @@ import * as path from "node:path"
 import { promisify } from "node:util"
 import { onTestFinished } from "vitest"
 import { Loopy } from "@loopy/core/loopy"
+import type { WorkflowRun } from "@loopy/core/runs"
 
 const execFileAsync = promisify(execFile)
 
@@ -88,13 +89,27 @@ export async function tempGitRepo(): Promise<TempGitRepo> {
     return repo
 }
 
-export function testRun<O>(
-    loopy: Loopy,
-    body: () => Promise<O>,
-    opts: { key?: string; from?: string } = {}
-): Promise<O> {
-    const rerun = opts.from !== undefined ? { from: opts.from } : undefined
-    return loopy.run("test-workflow", opts.key ?? "test-key", body, rerun)
+export function testRun<O>(loopy: Loopy, body: () => Promise<O>, opts: { key?: string } = {}): Promise<O> {
+    return loopy.run("test-workflow", opts.key ?? "test-key", body)
+}
+
+export async function waitForRun(loopy: Loopy, runId: string): Promise<WorkflowRun> {
+    let run = await loopy.runs.get(runId)
+    while (run.status !== "succeeded" && run.status !== "failed") {
+        await delay(5)
+        run = await loopy.runs.get(runId)
+    }
+    return run
+}
+
+function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+export async function runOutput(loopy: Loopy, runId: string): Promise<unknown> {
+    const run = await waitForRun(loopy, runId)
+    if (run.status === "failed") throw new Error(run.error)
+    return run.output
 }
 
 export function gate(): { released: Promise<void>; release: () => void } {

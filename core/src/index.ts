@@ -1,5 +1,6 @@
 import * as z from "zod"
-import { EventDefinition, Loopy, RerunOptions, WorkflowOptions } from "./loopy"
+import { EventDefinition, Loopy } from "./loopy"
+import type { RerunOptions, WorkflowOptions, Workflows } from "./workflows"
 import type { WorkflowRuns } from "./runs"
 import type { Artifacts } from "./artifacts"
 import type { AISessions } from "./ai/sessions"
@@ -8,6 +9,10 @@ let instance: Loopy | undefined
 
 export function loopy(): Loopy {
     return (instance ??= new Loopy())
+}
+
+export function workflows(): Workflows {
+    return loopy().workflows
 }
 
 export function runs(): WorkflowRuns {
@@ -30,12 +35,20 @@ export function registerWorkflow<I extends z.ZodTypeAny, O extends z.ZodTypeAny>
     loopy().registerWorkflow(name, options, workflowFn)
 }
 
-export function start(name: string, input: any, rerun?: RerunOptions): Promise<void> {
-    return loopy().start(name, input, rerun)
+export function start(name: string, input: any): string {
+    return loopy().start(name, input)
 }
 
-export function run<O>(name: string, key: string, workflowFn: () => Promise<O>, rerun?: RerunOptions): Promise<O> {
-    return loopy().run(name, key, workflowFn, rerun)
+export function resume(runId: string): string {
+    return loopy().resume(runId)
+}
+
+export function rerun(runId: string, options: RerunOptions): string {
+    return loopy().rerun(runId, options)
+}
+
+export function run<O>(name: string, key: string, workflowFn: () => Promise<O>): Promise<O> {
+    return loopy().run(name, key, workflowFn)
 }
 
 export function step<T extends z.ZodTypeAny>(
@@ -61,3 +74,5 @@ export function waitFor<T extends z.ZodTypeAny>(key: string, schema: T): Promise
 export function waitForAny(defs: EventDefinition<any>[]): Promise<any> {
     return loopy().waitForAny(defs)
 }
+
+export type { RerunOptions, WorkflowOptions } from "./workflows"
