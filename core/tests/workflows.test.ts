@@ -104,7 +104,12 @@ test("workflow output is validated against the output schema", async () => {
     expect(run.error).toBeDefined()
     // and when the failed workflow key is started again
     // then it is rejected and directs the caller to rerun
-    expect(() => loopy.start("double", { id: "x", value: 1 })).toThrow(/has failed.*rerun/)
+    expect(() => loopy.start("double", { id: "x", value: 1 })).toThrow(
+        expect.objectContaining({
+            message: expect.stringMatching(/has failed.*rerun/),
+            code: "workflow_run_failed"
+        })
+    )
 })
 
 test("start of a succeeded workflow returns the existing run ID", async () => {
@@ -260,17 +265,37 @@ test("resume rejects missing, terminal, and unregistered runs", async () => {
 
     // when resume targets an unknown run
     // then it is rejected as missing
-    expect(() => loopy.resume("missing")).toThrow(/not found/)
+    expect(() => loopy.resume("missing")).toThrow(
+        expect.objectContaining({
+            message: expect.stringMatching(/not found/),
+            code: "workflow_run_not_found"
+        })
+    )
     // and when resume targets the succeeded run
     // then it is rejected as terminal
-    expect(() => loopy.resume(runId)).toThrow(/cannot be resumed/)
+    expect(() => loopy.resume(runId)).toThrow(
+        expect.objectContaining({
+            message: expect.stringMatching(/cannot be resumed/),
+            code: "workflow_run_not_resumable"
+        })
+    )
     // and when resume targets the failed run
     // then it is also rejected as terminal
-    expect(() => loopy.resume(failedId)).toThrow(/cannot be resumed/)
+    expect(() => loopy.resume(failedId)).toThrow(
+        expect.objectContaining({
+            message: expect.stringMatching(/cannot be resumed/),
+            code: "workflow_run_not_resumable"
+        })
+    )
     // and when a reopened instance has not registered the workflow
     const second = reopen()
     // then resume is rejected as unregistered
-    expect(() => second.resume(runId)).toThrow(/not registered/)
+    expect(() => second.resume(runId)).toThrow(
+        expect.objectContaining({
+            message: expect.stringMatching(/not registered/),
+            code: "workflow_not_registered"
+        })
+    )
 })
 
 test("resume rejects a non-latest attempt", async () => {
@@ -292,7 +317,12 @@ test("resume rejects a non-latest attempt", async () => {
 
     // when resume targets the older attempt
     // then it is rejected because only the latest attempt is eligible
-    expect(() => loopy.resume(firstId)).toThrow(/not the latest attempt/)
+    expect(() => loopy.resume(firstId)).toThrow(
+        expect.objectContaining({
+            message: expect.stringMatching(/not the latest attempt/),
+            code: "workflow_run_not_latest"
+        })
+    )
 })
 
 test("start of an unregistered workflow is rejected", async () => {
@@ -301,7 +331,12 @@ test("start of an unregistered workflow is rejected", async () => {
 
     // when starting a workflow name that was never registered
     // then it rejects with a "not registered" error
-    expect(() => loopy.start("missing", {})).toThrow(/not registered/)
+    expect(() => loopy.start("missing", {})).toThrow(
+        expect.objectContaining({
+            message: expect.stringMatching(/not registered/),
+            code: "workflow_not_registered"
+        })
+    )
 })
 
 test("duplicate workflow registration throws", () => {
@@ -311,8 +346,80 @@ test("duplicate workflow registration throws", () => {
 
     // when registering a workflow with the same name again
     // then it throws an "already registered" error
-    expect(() => loopy.registerWorkflow("double", options, async () => ({ doubled: 0 }))).toThrow(/already registered/)
+    expect(() => loopy.registerWorkflow("double", options, async () => ({ doubled: 0 }))).toThrow(
+        expect.objectContaining({
+            message: expect.stringMatching(/already registered/),
+            code: "workflow_already_registered"
+        })
+    )
 })
+
+test("workflow registration rejects non-JSON-compatible input and output schemas", () => {
+    // given a loopy instance and schemas containing JSON-incompatible dates
+    const { loopy } = tempLoopy()
+
+    // when registering workflows with an incompatible input or output schema
+    // then each registration identifies the incompatible side
+    expect(() =>
+        loopy.registerWorkflow(
+            "date-input",
+            { input: z.date(), output: z.string(), key: (value) => value.toISOString() },
+            async (value) => value.toISOString()
+        )
+    ).toThrow(
+        expect.objectContaining({
+            message: expect.stringMatching(/Workflow "date-input" input schema.*z\.date/),
+            code: "schema_not_json_compatible"
+        })
+    )
+    expect(() =>
+        loopy.registerWorkflow(
+            "date-output",
+            { input: z.string(), output: z.date(), key: (value) => value },
+            async (value) => new Date(value)
+        )
+    ).toThrow(
+        expect.objectContaining({
+            message: expect.stringMatching(/Workflow "date-output" output schema.*z\.date/),
+            code: "schema_not_json_compatible"
+        })
+    )
+    // and neither failed workflow is registered
+    expect(loopy.workflows.list()).toEqual([])
+})
+
+test("registered workflows can be listed and inspected", () => {
+    // given workflows registered out of alphabetical order
+    const { loopy } = tempLoopy()
+    loopy.registerWorkflow("zeta", options, async () => ({ doubled: 0 }))
+    loopy.registerWorkflow("alpha", options, async () => ({ doubled: 0 }))
+
+    // when listing and getting the registered workflows
+    const listed = loopy.workflows.list()
+    const definition = loopy.workflows.get("alpha")
+
+    // then names are returned in alphabetical order
+    expect(listed).toEqual([{ name: "alpha" }, { name: "zeta" }])
+    // and the definition exposes the generated JSON schemas
+    expect(definition).toEqual({
+        name: "alpha",
+        inputSchema: withoutMetaSchema(z.toJSONSchema(options.input, { io: "input" })),
+        outputSchema: withoutMetaSchema(z.toJSONSchema(options.output, { io: "output" }))
+    })
+    // and getting an unknown workflow fails
+    expect(() => loopy.workflows.get("missing")).toThrow(
+        expect.objectContaining({
+            message: expect.stringMatching(/not registered/),
+            code: "workflow_not_registered"
+        })
+    )
+})
+
+function withoutMetaSchema(schema: z.core.JSONSchema.JSONSchema): z.core.JSONSchema.JSONSchema {
+    const without = { ...schema }
+    delete without.$schema
+    return without
+}
 
 test("a non-idempotent input transform runs once per attempt instead of compounding", async () => {
     // given a workflow whose input schema bumps value by one via a transform

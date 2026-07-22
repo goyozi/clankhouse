@@ -1,0 +1,29 @@
+{
+    "name": "@loopy/server",
+    "version": "1.0.0",
+    "type": "module",
+    "main": "./src/index.ts",
+    "exports": {
+        ".": "./src/index.ts",
+        "./proto": "./src/gen/loopy/server/v1/server_pb.ts"
+    },
+    "scripts": {
+        "test": "vitest run --config vitest.config.ts",
+        "typecheck": "tsc -p tsconfig.json --noEmit",
+        "proto:generate": "buf generate && prettier --write src/gen",
+        "proto:lint": "buf lint",
+        "proto:check": "buf lint && buf generate && prettier --write src/gen && git diff --exit-code -- src/gen"
+    },
+    "dependencies": {
+        "@bufbuild/protobuf": "^2.12.1",
+        "@connectrpc/connect": "^2.1.2",
+        "@connectrpc/connect-node": "^2.1.2",
+        "@loopy/core": "workspace:*",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@bufbuild/buf": "^1.71.0",
+        "@bufbuild/protoc-gen-es": "^2.12.1",
+        "@loopy/test-utils": "workspace:*"
+    }
+}

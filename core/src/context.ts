@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks"
 import type { Loopy } from "./loopy"
+import { LoopyError } from "./errors"
 
 export type RunContext = {
     loopy: Loopy
@@ -16,6 +17,6 @@ export const runContext = new AsyncLocalStorage<RunContext>()
 
 export function requireContext(): RunContext {
     const ctx = runContext.getStore()
-    if (!ctx) throw new Error("Must be called inside a workflow run")
+    if (!ctx) throw new LoopyError("workflow_context_required", "Must be called inside a workflow run")
     return ctx
 }

@@ -80,20 +80,44 @@ test("llm output is validated exactly once per call", async () => {
     expect(validations).toBe(1)
 })
 
+test("an invalid LLM reply schema fails before steps, sessions, or provider calls", async () => {
+    // given a fake LLM and a non-JSON reply schema
+    const { loopy } = tempLoopy()
+    let invocations = 0
+    const llm = new FakeLLM(() => {
+        invocations++
+        return new Date()
+    })
+
+    // when the LLM call is set up
+    const promise = testRun(loopy, async () => llm.call("stamp", { prompt: "p", output: z.date() }))
+
+    // then the guard fails before any durable or provider side effect
+    await expect(promise).rejects.toThrow(/LLM "stamp" output schema.*z\.date/)
+    expect(invocations).toBe(0)
+    expect(loopy.db.prepare("SELECT COUNT(*) AS n FROM steps").get()).toEqual({ n: 0 })
+    expect(loopy.db.prepare("SELECT COUNT(*) AS n FROM sessions").get()).toEqual({ n: 0 })
+})
+
 test("replay skips the model invocation", async () => {
     // given a reopenable loopy instance and a fake llm counting invocations
     const { loopy, reopen } = tempLoopy()
     let invocations = 0
+    let transforms = 0
     const llm = new FakeLLM(() => {
         invocations++
         return { summary: "s" }
+    })
+    const replySchema = outputSchema.transform((value) => {
+        transforms++
+        return { summary: `${value.summary}!` }
     })
     // and gates to coordinate when the run has reached the llm call and when it may finish
     const parked = gate()
     const reached = gate()
     // and a workflow body that calls the llm, signals it was reached, then optionally blocks
     const body = (l: Loopy, block: boolean) => async () => {
-        const summary = await llm.call("summarize", { prompt: "p", output: outputSchema })
+        const summary = await llm.call("summarize", { prompt: "p", output: replySchema })
         reached.release()
         if (block) await parked.released
         return summary
@@ -106,10 +130,14 @@ test("replay skips the model invocation", async () => {
 
     // when the loopy instance is reopened and the run replayed to completion
     const second = reopen()
-    // then the replayed run returns the same result without re-blocking
-    expect(await testRun(second, body(second, false))).toEqual({ summary: "s" })
+    // then the replayed run transforms the stored raw reply once and returns the same result
+    expect(await testRun(second, body(second, false))).toEqual({ summary: "s!" })
+    expect(transforms).toBe(2)
     // and the model is not invoked again during replay
     expect(invocations).toBe(1)
+    // and the step stores ordinary provider JSON rather than the transformed result
+    const run = await second.runs.get((await second.runs.list())[0].id)
+    expect(run.steps[0].outputJson).toBe(JSON.stringify({ summary: "s" }))
     // and only one session was persisted across both runs
     expect(second.db.prepare("SELECT COUNT(*) AS n FROM sessions").get()).toEqual({ n: 1 })
 })

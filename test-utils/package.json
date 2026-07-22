@@ -8,6 +8,7 @@
         ".": "./src/index.ts"
     },
     "dependencies": {
-        "@loopy/core": "workspace:*"
+        "@loopy/core": "workspace:*",
+        "zod": "catalog:"
     }
 }

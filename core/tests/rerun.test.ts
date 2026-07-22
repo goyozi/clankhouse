@@ -6,10 +6,10 @@ import { gate, runOutput, tempLoopy, testRun } from "@loopy/test-utils"
 import type { Loopy } from "@loopy/core/loopy"
 
 const input = z.object({ id: z.string(), value: z.number() })
-const options = { input, output: z.any(), key: (value: z.infer<typeof input>) => value.id }
+const options = { input, output: z.json(), key: (value: z.infer<typeof input>) => value.id }
 const testInput = { id: "test-key", value: 1 }
 
-function register(loopy: Loopy, body: (value: z.infer<typeof input>) => Promise<unknown>): void {
+function register(loopy: Loopy, body: (value: z.infer<typeof input>) => Promise<z.infer<typeof options.output>>): void {
     loopy.registerWorkflow("test-workflow", options, body)
 }
 
@@ -207,7 +207,12 @@ test("rerun requires an existing run ID", async () => {
     register(loopy, async () => 1)
     // when rerun is called with an unknown ID
     // then it is rejected because the run does not exist
-    expect(() => loopy.rerun("missing", { from: "a" })).toThrow(/not found/)
+    expect(() => loopy.rerun("missing", { from: "a" })).toThrow(
+        expect.objectContaining({
+            message: expect.stringMatching(/not found/),
+            code: "workflow_run_not_found"
+        })
+    )
 })
 
 test("rerun from an unknown step is rejected", async () => {
@@ -220,7 +225,12 @@ test("rerun from an unknown step is rejected", async () => {
     await expect(runOutput(loopy, firstId)).rejects.toThrow("boom")
     // when rerun targets a step that never existed
     // then it is rejected without creating an attempt
-    expect(() => loopy.rerun(firstId, { from: "nope" })).toThrow(/not found/)
+    expect(() => loopy.rerun(firstId, { from: "nope" })).toThrow(
+        expect.objectContaining({
+            message: expect.stringMatching(/not found/),
+            code: "workflow_step_not_found"
+        })
+    )
     expect(await loopy.runs.list()).toHaveLength(1)
 })
 
@@ -235,7 +245,12 @@ test("rerun while the run is active is rejected", async () => {
     const firstId = loopy.start("test-workflow", testInput)
     // when rerun is requested while the source is active
     // then it is rejected due to concurrent attempts
-    expect(() => loopy.rerun(firstId, { from: "a" })).toThrow(/concurrent attempts/)
+    expect(() => loopy.rerun(firstId, { from: "a" })).toThrow(
+        expect.objectContaining({
+            message: expect.stringMatching(/concurrent attempts/),
+            code: "workflow_run_in_progress"
+        })
+    )
     // and the original run is allowed to complete
     parked.release()
     expect(await runOutput(loopy, firstId)).toBe(1)
@@ -250,6 +265,7 @@ test("rerun of an interrupted run is rejected", async () => {
         await loopy.step("a", z.number(), async () => 1)
         reached.release()
         await parked.released
+        return null
     })
     const firstId = loopy.start("test-workflow", testInput)
     await reached.released
@@ -257,7 +273,12 @@ test("rerun of an interrupted run is rejected", async () => {
     register(second, async () => 1)
     // when rerun is requested against the persisted interrupted attempt
     // then it is rejected due to concurrent attempts
-    expect(() => second.rerun(firstId, { from: "a" })).toThrow(/concurrent attempts/)
+    expect(() => second.rerun(firstId, { from: "a" })).toThrow(
+        expect.objectContaining({
+            message: expect.stringMatching(/concurrent attempts/),
+            code: "workflow_run_in_progress"
+        })
+    )
 })
 
 test("rerun of a non-latest attempt is rejected", async () => {
@@ -277,7 +298,12 @@ test("rerun of a non-latest attempt is rejected", async () => {
     expect(await runOutput(loopy, secondId)).toBe("published")
     // when rerun targets the older first attempt
     // then it is rejected because only the latest attempt is eligible
-    expect(() => loopy.rerun(firstId, { from: "publish" })).toThrow(/not the latest attempt/)
+    expect(() => loopy.rerun(firstId, { from: "publish" })).toThrow(
+        expect.objectContaining({
+            message: expect.stringMatching(/not the latest attempt/),
+            code: "workflow_run_not_latest"
+        })
+    )
 })
 
 test("rerun validates persisted input before creating an attempt", async () => {

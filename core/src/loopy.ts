@@ -8,9 +8,8 @@ import { Artifacts } from "./artifacts"
 import { AISessions } from "./ai/sessions"
 import type { ActiveSets } from "./runtime"
 import { Engine } from "./engine"
-import { Events } from "./events"
+import { Events, type EventDefinition } from "./events"
 import { Notifier } from "./watch"
-import { runContext } from "./context"
 import { Workflows, type RerunOptions, type WorkflowOptions } from "./workflows"
 
 export class Loopy {
@@ -28,15 +27,15 @@ export class Loopy {
      */
     constructor(loopyDir?: string) {
         this.loopyDir = resolveLoopyDir(loopyDir)
-        mkdirSync(this.loopyDir, { recursive: true })
+        mkdirSync(this.loopyDir, { recursive: true, mode: 0o700 })
         this.db = openDatabase(path.join(this.loopyDir, "loopy.db"))
         const notifier = new Notifier()
         const active: ActiveSets = { runs: new Map(), steps: new Set(), sessions: new Set() }
         this.engine = new Engine(this.db, active, notifier)
-        this.workflows = new Workflows(this, this.loopyDir, this.db, this.engine, active)
-        this.events = new Events(this.db)
-        this.runs = new WorkflowRuns(this.db, active, notifier)
         this.artifacts = new Artifacts(this.loopyDir, this.db, this.engine)
+        this.workflows = new Workflows(this, this.db, this.engine, active, this.artifacts)
+        this.events = new Events(this.db, this.engine)
+        this.runs = new WorkflowRuns(this.db, active, notifier)
         this.sessions = new AISessions(this.db, active)
     }
 
@@ -71,8 +70,13 @@ export class Loopy {
     /**
      * Starts a workflow run and awaits its completion. Promise resolves when run is **finished**.
      */
-    run<O>(name: string, key: string, workflowFn: () => Promise<O>): Promise<O> {
-        return this.workflows.run(name, key, workflowFn)
+    run<T extends z.ZodTypeAny>(
+        name: string,
+        key: string,
+        output: T,
+        workflowFn: () => Promise<z.infer<T>>
+    ): Promise<z.infer<T>> {
+        return this.workflows.run(name, key, output, workflowFn)
     }
 
     /**
@@ -99,17 +103,7 @@ export class Loopy {
      * @see Loopy.waitForAny
      */
     async emit(key: string, event: any): Promise<void> {
-        const ctx = runContext.getStore()
-        if (!ctx) return this.events.emit(key, event)
-        await this.engine.executeStep({
-            kind: "event",
-            name: `emit:${key}`,
-            schema: z.void(),
-            execute: async (handle) => {
-                await this.events.emit(key, event, `${ctx.workflowName}/${ctx.runKey}/${handle.stepKey}`)
-                handle.set("event_key", key)
-            }
-        })
+        return this.events.emit(key, event)
     }
 
     /**
@@ -118,8 +112,7 @@ export class Loopy {
      * In case of schema validation errors, the promise is rejected.
      */
     async waitFor<T extends z.ZodTypeAny>(key: string, schema: T): Promise<z.infer<T>> {
-        const result = await this.waitForEventStep([{ key, schema }], `wait:${key}`)
-        return result.event
+        return this.events.waitFor(key, schema)
     }
 
     /**
@@ -130,24 +123,8 @@ export class Loopy {
      * Resolves to { key, event } so callers know which definition matched.
      */
     async waitForAny(defs: EventDefinition<any>[]): Promise<any> {
-        if (defs.length === 0) throw new Error("waitForAny requires at least one event definition")
-        return this.waitForEventStep(defs, `wait:${defs.map((d) => d.key).join("+")}`)
-    }
-
-    private waitForEventStep(defs: EventDefinition<any>[], stepName: string): Promise<{ key: string; event: any }> {
-        const variants = defs.map((d) => z.object({ key: z.literal(d.key), event: d.schema }))
-        const schema = variants.length === 1 ? variants[0] : z.union(variants)
-        return this.engine.executeStep({
-            kind: "event",
-            name: stepName,
-            schema,
-            execute: async (handle) => {
-                const result = await this.events.waitForEvent(defs, handle.stepId)
-                handle.set("event_key", result.key)
-                return result
-            }
-        })
+        return this.events.waitForAny(defs)
     }
 }
 
-export type EventDefinition<T extends z.ZodTypeAny> = { key: string; schema: T }
+export type { EventDefinition } from "./events"

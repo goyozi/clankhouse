@@ -1,6 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import * as path from "node:path"
 import { BaseCodingAgent, type CodingAgentInvocation } from "./base-agent"
+import { LoopyError } from "../errors"
 
 export type FakeWrite = {
     file: string
@@ -31,7 +32,9 @@ export async function applyChange(change: FakeChange, baseDir: string): Promise<
         await writeFile(target, change.text)
     } else if ("oldText" in change) {
         const content = await readFile(target, "utf8")
-        if (!content.includes(change.oldText)) throw new Error(`oldText not found in ${change.file}`)
+        if (!content.includes(change.oldText)) {
+            throw new LoopyError("fake_agent_edit_text_not_found", `oldText not found in ${change.file}`)
+        }
         await writeFile(
             target,
             content.replace(change.oldText, () => change.newText)

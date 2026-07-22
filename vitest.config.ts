@@ -4,6 +4,6 @@ import { testDefaults } from "./vitest.shared"
 export default defineConfig({
     test: {
         ...testDefaults,
-        include: ["core/tests/**/*.test.ts", "claude/tests/**/*.test.ts"]
+        include: ["core/tests/**/*.test.ts", "claude/tests/**/*.test.ts", "server/tests/**/*.test.ts"]
     }
 })

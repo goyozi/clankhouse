@@ -18,6 +18,31 @@ test("uses explicitly provided directory and creates the database", () => {
     loopy.close()
 })
 
+test("creates new loopy directories with owner-only permissions", () => {
+    // given a nested loopy directory that does not exist
+    const dir = path.join(tempDir("loopy-dir-"), "private")
+
+    // when a Loopy instance creates it
+    const loopy = new Loopy(dir)
+
+    // then the directory is accessible only by its owner
+    expect(fs.statSync(dir).mode & 0o777).toBe(0o700)
+    loopy.close()
+})
+
+test("does not change permissions on an existing loopy directory", () => {
+    // given an existing loopy directory with broader permissions
+    const dir = tempDir("loopy-existing-")
+    fs.chmodSync(dir, 0o755)
+
+    // when a Loopy instance uses it
+    const loopy = new Loopy(dir)
+
+    // then the existing directory permissions remain unchanged
+    expect(fs.statSync(dir).mode & 0o777).toBe(0o755)
+    loopy.close()
+})
+
 test("falls back to $LOOPY_DIR", () => {
     // given the LOOPY_DIR env var pointing at a temp directory
     const dir = path.join(tempDir("loopy-dir-"), "from-env")

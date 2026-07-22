@@ -23,8 +23,7 @@ test("instructed output uses unique nonce tags and renders the schema", () => {
     expect(instructedSchema(first.prompt)).toEqual({
         type: "object",
         properties: { done: { type: "boolean" } },
-        required: ["done"],
-        additionalProperties: false
+        required: ["done"]
     })
 })
 
@@ -74,6 +73,9 @@ test("instructed output rejects missing or mismatched tags", () => {
     expect(collectMissingMessage).toThrow("did not return the instructed output tags")
     expect(collectMissingTags).toThrow("did not return the instructed output tags")
     expect(collectMismatchedTags).toThrow("did not return the instructed output tags")
+    expect(collectMissingMessage).toThrow(expect.objectContaining({ code: "coding_agent_output_missing" }))
+    expect(collectMissingTags).toThrow(expect.objectContaining({ code: "coding_agent_output_missing" }))
+    expect(collectMismatchedTags).toThrow(expect.objectContaining({ code: "coding_agent_output_missing" }))
 })
 
 test("instructed output rejects empty or non-JSON tag contents", () => {
@@ -88,6 +90,8 @@ test("instructed output rejects empty or non-JSON tag contents", () => {
     // then each payload is rejected as invalid JSON
     expect(collectEmpty).toThrow("returned invalid JSON between the instructed output tags")
     expect(collectInvalid).toThrow("returned invalid JSON between the instructed output tags")
+    expect(collectEmpty).toThrow(expect.objectContaining({ code: "coding_agent_output_invalid" }))
+    expect(collectInvalid).toThrow(expect.objectContaining({ code: "coding_agent_output_invalid" }))
 })
 
 test("instructed output tolerates a markdown code fence around the tagged JSON", () => {

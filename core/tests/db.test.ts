@@ -11,6 +11,7 @@ function runRow(overrides: Partial<RunRow> & Pick<RunRow, "id">): RunRow {
         input: null,
         output: null,
         error: null,
+        error_code: null,
         status: "succeeded",
         started_at: "2026-01-01T00:00:00.000Z",
         ended_at: null,
@@ -169,6 +170,7 @@ test("resetStep clears output, error, timestamps, and every linkage column", () 
     sql.setStepColumn(loopy.db, "s", "artifact_id", "art-1")
     sql.setStepColumn(loopy.db, "s", "event_key", "evt-1")
     sql.succeedStep(loopy.db, "s", "42", "2026-01-02T00:00:00.000Z")
+    sql.failStep(loopy.db, "s", "Duplicate step", "workflow_step_duplicate", "2026-01-02T00:00:00.000Z")
 
     // when the step is reset for re-execution
     sql.resetStep(loopy.db, "s", "2026-01-03T00:00:00.000Z")
@@ -178,6 +180,7 @@ test("resetStep clears output, error, timestamps, and every linkage column", () 
     expect(step.status).toBe("interrupted")
     expect(step.output).toBeNull()
     expect(step.error).toBeNull()
+    expect(step.error_code).toBeNull()
     expect(step.ended_at).toBeNull()
     expect(step.started_at).toBe("2026-01-03T00:00:00.000Z")
     // and no linkage from the previous attempt lingers
@@ -185,6 +188,33 @@ test("resetStep clears output, error, timestamps, and every linkage column", () 
     expect(step.snapshot_ref).toBeNull()
     expect(step.artifact_id).toBeNull()
     expect(step.event_key).toBeNull()
+})
+
+test("copyStep preserves a failed step's error code", () => {
+    // given a coded failed step and a destination run
+    const { loopy } = tempLoopy()
+    sql.insertRun(loopy.db, runRow({ id: "source" }))
+    sql.insertRun(loopy.db, runRow({ id: "destination" }))
+    sql.insertStep(loopy.db, {
+        id: "source-step",
+        run_id: "source",
+        key: "coded",
+        name: "coded",
+        seq: 0,
+        kind: "custom",
+        started_at: "2026-01-01T00:00:00.000Z"
+    })
+    sql.failStep(loopy.db, "source-step", "invalid output", "coding_agent_output_invalid", "2026-01-02T00:00:00.000Z")
+    const source = sql.findStep(loopy.db, "source", "coded")!
+
+    // when the step row is copied to the destination run
+    sql.copyStep(loopy.db, { ...source, id: "destination-step", run_id: "destination" })
+
+    // then its message and stable code are both retained
+    expect(sql.findStep(loopy.db, "destination", "coded")).toMatchObject({
+        error: "invalid output",
+        error_code: "coding_agent_output_invalid"
+    })
 })
 
 test("findDeliverableEvent matches any of the given keys and picks the oldest", () => {

@@ -1,6 +1,7 @@
 import * as z from "zod"
 import { expect, test } from "vitest"
 import { Loopy } from "@loopy/core/loopy"
+import { LoopyError } from "@loopy/core/errors"
 import { gate, tempLoopy, testRun } from "@loopy/test-utils"
 
 test("runs a workflow with durable steps and persists results", async () => {
@@ -8,7 +9,7 @@ test("runs a workflow with durable steps and persists results", async () => {
     const { loopy } = tempLoopy()
 
     // when a workflow with two durable steps runs
-    const result = await loopy.run("wf", "wf-1", async () => {
+    const result = await loopy.run("wf", "wf-1", z.number(), async () => {
         const a = await loopy.step("a", z.number(), async () => 1)
         const b = await loopy.step("b", z.number(), async () => a + 1)
         return a + b
@@ -89,10 +90,48 @@ test("replayed step output is validated against the provided schema", async () =
     // when resuming replays step "a" with a mismatched schema
     // then the run rejects because the replayed output fails validation
     await expect(
-        testRun(second, async () => {
-            await second.step("a", z.string(), async () => "nope")
-        })
+        testRun(
+            second,
+            async () => {
+                await second.step("a", z.string(), async () => "nope")
+            },
+            { output: z.void() }
+        )
     ).rejects.toThrow()
+})
+
+test("a succeeded low-level run is fully validated by the replay schema", async () => {
+    // given a succeeded low-level run with a numeric output
+    const { loopy } = tempLoopy()
+    expect(await loopy.run("wf", "key", z.number(), async () => 7)).toBe(7)
+    let calls = 0
+
+    // when the same durable result is requested with an incompatible schema
+    const replay = loopy.run("wf", "key", z.string(), async () => {
+        calls++
+        return "new"
+    })
+
+    // then replay validates the parsed stored JSON and does not execute the replacement body
+    await expect(replay).rejects.toThrow()
+    expect(calls).toBe(0)
+})
+
+test("an invalid low-level run schema fails before creating or executing the run", async () => {
+    // given a low-level workflow body and a non-JSON output schema
+    const { loopy } = tempLoopy()
+    let calls = 0
+
+    // when run setup validates the schema
+    const promise = loopy.run("wf", "key", z.date(), async () => {
+        calls++
+        return new Date()
+    })
+
+    // then it rejects before the body runs or a run row is inserted
+    await expect(promise).rejects.toThrow(/Workflow "wf" output schema.*z\.date/)
+    expect(calls).toBe(0)
+    expect(loopy.db.prepare("SELECT COUNT(*) AS n FROM runs").get()).toEqual({ n: 0 })
 })
 
 test("prefix namespaces nested steps", async () => {
@@ -100,15 +139,19 @@ test("prefix namespaces nested steps", async () => {
     const { loopy } = tempLoopy()
 
     // when a workflow nests prefixes and steps at different levels
-    await testRun(loopy, async () => {
-        await loopy.prefix("outer", async () => {
-            await loopy.prefix("inner", async () => {
-                await loopy.step("a", z.number(), async () => 1)
+    await testRun(
+        loopy,
+        async () => {
+            await loopy.prefix("outer", async () => {
+                await loopy.prefix("inner", async () => {
+                    await loopy.step("a", z.number(), async () => 1)
+                })
+                await loopy.step("b", z.number(), async () => 2)
             })
-            await loopy.step("b", z.number(), async () => 2)
-        })
-        await loopy.step("a", z.number(), async () => 3)
-    })
+            await loopy.step("a", z.number(), async () => 3)
+        },
+        { output: z.void() }
+    )
 
     // then each step key is namespaced by its enclosing prefixes
     const [meta] = await loopy.runs.list()
@@ -121,20 +164,24 @@ test("prefix supports loops and concurrent branches", async () => {
     const { loopy } = tempLoopy()
 
     // when a workflow uses prefixes inside a loop and inside concurrent branches
-    await testRun(loopy, async () => {
-        for (let i = 0; i < 3; i++) {
-            await loopy.prefix(`iter-${i}`, async () => {
-                await loopy.step("work", z.number(), async () => i)
-            })
-        }
-        await Promise.all(
-            [1, 2].map((n) =>
-                loopy.prefix(`branch-${n}`, async () => {
-                    await loopy.step("work", z.number(), async () => n)
+    await testRun(
+        loopy,
+        async () => {
+            for (let i = 0; i < 3; i++) {
+                await loopy.prefix(`iter-${i}`, async () => {
+                    await loopy.step("work", z.number(), async () => i)
                 })
+            }
+            await Promise.all(
+                [1, 2].map((n) =>
+                    loopy.prefix(`branch-${n}`, async () => {
+                        await loopy.step("work", z.number(), async () => n)
+                    })
+                )
             )
-        )
-    })
+        },
+        { output: z.void() }
+    )
 
     // then every loop iteration and branch produces a distinctly keyed step
     const [meta] = await loopy.runs.list()
@@ -159,7 +206,10 @@ test("duplicate step key fails the run", async () => {
             await loopy.step("a", z.number(), async () => 1)
             await loopy.step("a", z.number(), async () => 2)
         })
-    ).rejects.toThrow(/Duplicate step/)
+    ).rejects.toMatchObject({
+        message: expect.stringMatching(/Duplicate step/),
+        code: "workflow_step_duplicate"
+    })
     // and the run is recorded as failed
     const [meta] = await loopy.runs.list()
     expect(meta.status).toBe("failed")
@@ -171,7 +221,53 @@ test("step outside a workflow run is rejected", async () => {
 
     // when a step is invoked outside of a workflow run
     // then it rejects, complaining it must run inside a workflow run
-    await expect(loopy.step("a", z.number(), async () => 1)).rejects.toThrow(/inside a workflow run/)
+    await expect(loopy.step("a", z.number(), async () => 1)).rejects.toMatchObject({
+        message: expect.stringMatching(/inside a workflow run/),
+        code: "workflow_context_required"
+    })
+})
+
+test("persists LoopyError codes on failed runs and steps but leaves ordinary errors uncoded", async () => {
+    // given one coded failure and one ordinary failure inside durable steps
+    const { loopy } = tempLoopy()
+    const coded = testRun(
+        loopy,
+        async () =>
+            loopy.step("coded", z.never(), async () => {
+                throw new LoopyError("event_definitions_empty", "coded failure")
+            }),
+        { key: "coded" }
+    )
+    const ordinary = testRun(
+        loopy,
+        async () =>
+            loopy.step("ordinary", z.never(), async () => {
+                throw new Error("ordinary failure")
+            }),
+        { key: "ordinary" }
+    )
+
+    // when both runs fail
+    await expect(coded).rejects.toThrow("coded failure")
+    await expect(ordinary).rejects.toThrow("ordinary failure")
+    const codedId = (await loopy.runs.list({ key: "coded" }))[0]!.id
+    const ordinaryId = (await loopy.runs.list({ key: "ordinary" }))[0]!.id
+    const codedRun = await loopy.runs.get(codedId)
+    const ordinaryRun = await loopy.runs.get(ordinaryId)
+
+    // then only the LoopyError code is exposed and stored at both failure levels
+    expect(codedRun).toMatchObject({ error: "coded failure", errorCode: "event_definitions_empty" })
+    expect(codedRun.steps[0]).toMatchObject({
+        error: "coded failure",
+        errorCode: "event_definitions_empty"
+    })
+    expect(ordinaryRun).toMatchObject({ error: "ordinary failure" })
+    expect(ordinaryRun.errorCode).toBeUndefined()
+    expect(ordinaryRun.steps[0]!.errorCode).toBeUndefined()
+    expect(loopy.db.prepare("SELECT error_code FROM runs WHERE id = ?").get(codedId)).toEqual({
+        error_code: "event_definitions_empty"
+    })
+    expect(loopy.db.prepare("SELECT error_code FROM runs WHERE id = ?").get(ordinaryId)).toEqual({ error_code: null })
 })
 
 test("a void step resumes without failing the run", async () => {
@@ -210,9 +306,9 @@ test("a run resolving undefined returns undefined on later calls too", async () 
 
     // when the workflow runs for the first time
     // then it resolves undefined
-    expect(await testRun(loopy, body)).toBeUndefined()
+    expect(await testRun(loopy, body, { output: z.void() })).toBeUndefined()
     // and when it runs again with a fresh key it still resolves undefined
-    expect(await testRun(loopy, body)).toBeUndefined()
+    expect(await testRun(loopy, body, { output: z.void() })).toBeUndefined()
 })
 
 test("workflows with the same key do not alias each other's runs", async () => {
@@ -220,8 +316,8 @@ test("workflows with the same key do not alias each other's runs", async () => {
     const { loopy } = tempLoopy()
 
     // when two different workflows run under the same key
-    expect(await loopy.run("wfA", "k", async () => "A")).toBe("A")
-    expect(await loopy.run("wfB", "k", async () => "B")).toBe("B")
+    expect(await loopy.run("wfA", "k", z.string(), async () => "A")).toBe("A")
+    expect(await loopy.run("wfB", "k", z.string(), async () => "B")).toBe("B")
 
     // then both runs are listed separately under that key, each its own first attempt
     const runs = await loopy.runs.list({ key: "k" })
@@ -297,23 +393,25 @@ test("running status is an in-memory overlay on interrupted", async () => {
     expect(run.output).toBe("done")
 })
 
-test("a step output preserves its Date type across replay", async () => {
-    // given a workflow whose step returns a Date validated by a z.date() schema
-    const { loopy, reopen } = tempLoopy()
-    const parked = gate()
-    const reached = gate()
-    const when = new Date("2026-07-07T10:00:00.000Z")
-    const body = (l: Loopy, block: boolean) => async () => {
-        const stamped = await l.step("stamp", z.date(), async () => when)
-        reached.release()
-        if (block) await parked.released
-        return stamped.toISOString()
-    }
-    // when the first run computes the step and then parks before completing
-    testRun(loopy, body(loopy, true)).catch(() => {})
-    await reached.released
-    // and the process is reopened, replaying the succeeded step from storage
-    const second = reopen()
-    // then the replayed step yields the same Date and re-validates without error
-    expect(await testRun(second, body(second, false))).toBe(when.toISOString())
+test("a non-JSON step schema fails before the step executes", async () => {
+    // given a workflow whose step schema contains a Date
+    const { loopy } = tempLoopy()
+    let calls = 0
+
+    // when the workflow reaches the invalid step schema
+    const promise = testRun(
+        loopy,
+        async () => {
+            await loopy.step("stamp", z.date(), async () => {
+                calls++
+                return new Date("2026-07-07T10:00:00.000Z")
+            })
+        },
+        { output: z.void() }
+    )
+
+    // then schema setup fails before execution or step persistence
+    await expect(promise).rejects.toThrow(/Durable step "stamp" output schema.*z\.date/)
+    expect(calls).toBe(0)
+    expect(loopy.db.prepare("SELECT COUNT(*) AS n FROM steps").get()).toEqual({ n: 0 })
 })

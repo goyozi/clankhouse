@@ -8,7 +8,7 @@ import { uniqueName } from "@loopy/core/util"
 import { runGit, runOutput, tempGitRepo, tempLoopy, testRun } from "@loopy/test-utils"
 
 const outputSchema = z.object({ done: z.boolean() })
-const workflowOptions = { input: z.void(), output: z.any(), key: () => "test-key" }
+const workflowOptions = { input: z.null(), output: z.json(), key: () => "test-key" }
 
 test("FakeCodingAgent applies changes and snapshots the worktree", async () => {
     // given a fake coding agent that edits two files and returns a typed output
@@ -79,7 +79,7 @@ test("agent step replay restores the worktree snapshot", async () => {
     loopy.registerWorkflow("test-workflow", workflowOptions, body)
 
     // when the workflow runs and the publish step throws
-    const firstId = loopy.start("test-workflow", undefined)
+    const firstId = loopy.start("test-workflow", null)
     await expect(runOutput(loopy, firstId)).rejects.toThrow("boom")
 
     // then discarding the worktree's uncommitted changes removes the agent's edit
@@ -96,6 +96,44 @@ test("agent step replay restores the worktree snapshot", async () => {
     expect(invocations).toBe(1)
     // and the worktree snapshot from the earlier agent step is restored
     expect(fs.readFileSync(path.join(worktree.path, "src/hello.ts"), "utf8")).toBe("export const hi = 1\n")
+})
+
+test("agent replay transforms the persisted raw reply once per execution", async () => {
+    // given an agent with a transformed reply schema and a later step that initially fails
+    const { loopy } = tempLoopy()
+    const repo = await tempGitRepo()
+    const repository = new GitRepository(repo.path)
+    let invocations = 0
+    let transforms = 0
+    const agent = new FakeCodingAgent(() => {
+        invocations++
+        return { changes: [], output: { done: true } }
+    })
+    const replySchema = outputSchema.transform((value) => {
+        transforms++
+        return { done: value.done, transformed: true }
+    })
+    let publishImpl: () => string = () => {
+        throw new Error("boom")
+    }
+    loopy.registerWorkflow("test-workflow", workflowOptions, async () => {
+        const worktree = await repository.worktree({ base: "main" })
+        await agent.run("implement", { prompt: "do it", output: replySchema, worktree })
+        return loopy.step("publish", z.string(), async () => publishImpl())
+    })
+
+    // when the failed workflow reruns from the later step
+    const firstId = loopy.start("test-workflow", null)
+    await expect(runOutput(loopy, firstId)).rejects.toThrow("boom")
+    publishImpl = () => "published"
+    const secondId = loopy.rerun(firstId, { from: "publish" })
+    expect(await runOutput(loopy, secondId)).toBe("published")
+
+    // then replay re-applies the transform without invoking the agent or replacing the raw reply
+    expect(invocations).toBe(1)
+    expect(transforms).toBe(2)
+    const run = await loopy.runs.get(secondId)
+    expect(run.steps[0].outputJson).toBe(JSON.stringify({ done: true }))
 })
 
 test("agent step replay fails loudly when its worktree snapshot is missing", async () => {
@@ -118,7 +156,7 @@ test("agent step replay fails loudly when its worktree snapshot is missing", asy
     loopy.registerWorkflow("test-workflow", workflowOptions, body)
 
     // when the workflow runs and the publish step throws
-    const firstId = loopy.start("test-workflow", undefined)
+    const firstId = loopy.start("test-workflow", null)
     await expect(runOutput(loopy, firstId)).rejects.toThrow("boom")
     // and the agent step's snapshot ref is lost before replay (e.g. the ref was pruned)
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
@@ -129,6 +167,7 @@ test("agent step replay fails loudly when its worktree snapshot is missing", asy
     // then replaying the agent step refuses to proceed rather than silently skipping the restore
     const secondId = loopy.rerun(firstId, { from: "publish" })
     await expect(runOutput(loopy, secondId)).rejects.toThrow(/no worktree snapshot/)
+    expect(await loopy.runs.get(secondId)).toMatchObject({ errorCode: "coding_agent_snapshot_missing" })
 })
 
 test("snapshot refs stay distinct for step keys that sanitize to the same string", async () => {
@@ -186,17 +225,20 @@ test("edit with missing oldText fails the step and the session", async () => {
     }))
 
     // when the agent runs the edit
-    await expect(
-        testRun(loopy, async () => {
-            const worktree = await repository.worktree({ base: "main" })
-            return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
-        })
-    ).rejects.toThrow(/oldText not found/)
+    const result = testRun(loopy, async () => {
+        const worktree = await repository.worktree({ base: "main" })
+        return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
+    })
+    await expect(result).rejects.toMatchObject({
+        message: expect.stringMatching(/oldText not found/),
+        code: "fake_agent_edit_text_not_found"
+    })
 
     // then the agent step is marked failed
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
     const step = run.steps[0]
     expect(step.status).toBe("failed")
+    expect(step.errorCode).toBe("fake_agent_edit_text_not_found")
     if (step.kind !== "agent") throw new Error("unreachable")
     // and the session is marked failed
     expect((await loopy.sessions.get(step.sessionId!)).status).toBe("failed")

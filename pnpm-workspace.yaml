@@ -3,10 +3,12 @@ packages:
     - claude
     - codex
     - test-utils
+    - server
 
 catalog:
     zod: ^4.4.3
 
 allowBuilds:
+    "@bufbuild/buf": true
     better-sqlite3: true
     esbuild: true

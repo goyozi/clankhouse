@@ -37,3 +37,7 @@ export function uniqueName(value: string): string {
 export function errorMessage(e: unknown): string {
     return e instanceof Error ? e.message : String(e)
 }
+
+export function isNodeError(error: unknown, code: string): error is NodeJS.ErrnoException {
+    return error instanceof Error && "code" in error && error.code === code
+}

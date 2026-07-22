@@ -1,4 +1,5 @@
 import Database from "better-sqlite3"
+import type { LoopyErrorCode } from "./errors"
 
 export type Db = Database.Database
 type Statement = Database.Statement
@@ -67,6 +68,7 @@ CREATE TABLE IF NOT EXISTS runs (
     input         TEXT,
     output        TEXT,
     error         TEXT,
+    error_code    TEXT,
     status        TEXT NOT NULL CHECK (status IN ('interrupted','succeeded','failed')),
     started_at    TEXT NOT NULL,
     ended_at      TEXT,
@@ -84,6 +86,7 @@ export type RunRow = {
     input: string | null
     output: string | null
     error: string | null
+    error_code: LoopyErrorCode | null
     status: PersistedStatus
     started_at: string
     ended_at: string | null
@@ -114,7 +117,7 @@ function prepareRunStatements(db: Db): RunStatements {
         ),
         findById: db.prepare("SELECT * FROM runs WHERE id = ?"),
         succeed: db.prepare("UPDATE runs SET status = 'succeeded', output = ?, ended_at = ? WHERE id = ?"),
-        fail: db.prepare("UPDATE runs SET status = 'failed', error = ?, ended_at = ? WHERE id = ?")
+        fail: db.prepare("UPDATE runs SET status = 'failed', error = ?, error_code = ?, ended_at = ? WHERE id = ?")
     }
 }
 
@@ -142,8 +145,8 @@ export function succeedRun(db: Db, id: string, output: string | null, endedAt: s
     statements(db).runs.succeed.run(output, endedAt, id)
 }
 
-export function failRun(db: Db, id: string, error: string, endedAt: string): void {
-    statements(db).runs.fail.run(error, endedAt, id)
+export function failRun(db: Db, id: string, error: string, errorCode: LoopyErrorCode | null, endedAt: string): void {
+    statements(db).runs.fail.run(error, errorCode, endedAt, id)
 }
 
 export function listRuns(db: Db, filter: ListRunsFilter): RunRow[] {
@@ -189,6 +192,7 @@ CREATE TABLE IF NOT EXISTS steps (
     status       TEXT NOT NULL CHECK (status IN ('interrupted','succeeded','failed')),
     output       TEXT,
     error        TEXT,
+    error_code   TEXT,
     session_id   TEXT REFERENCES sessions(id),
     snapshot_ref TEXT,
     artifact_id  TEXT REFERENCES artifacts(id),
@@ -214,6 +218,7 @@ export type StepRow = {
     status: PersistedStatus
     output: string | null
     error: string | null
+    error_code: LoopyErrorCode | null
     session_id: string | null
     snapshot_ref: string | null
     artifact_id: string | null
@@ -251,13 +256,13 @@ function prepareStepStatements(db: Db): StepStatements {
         insert: db.prepare(
             "INSERT INTO steps (id, run_id, key, name, seq, kind, status, started_at) VALUES (?, ?, ?, ?, ?, ?, 'interrupted', ?)"
         ),
-        copy: db.prepare(`INSERT INTO steps (id, run_id, key, name, seq, kind, status, output, error, session_id, snapshot_ref, artifact_id, event_key, started_at, ended_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
-        reset: db.prepare(`UPDATE steps SET status = 'interrupted', output = NULL, error = NULL,
+        copy: db.prepare(`INSERT INTO steps (id, run_id, key, name, seq, kind, status, output, error, error_code, session_id, snapshot_ref, artifact_id, event_key, started_at, ended_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+        reset: db.prepare(`UPDATE steps SET status = 'interrupted', output = NULL, error = NULL, error_code = NULL,
             session_id = NULL, snapshot_ref = NULL, artifact_id = NULL, event_key = NULL,
             started_at = ?, ended_at = NULL WHERE id = ?`),
         succeed: db.prepare("UPDATE steps SET status = 'succeeded', output = ?, ended_at = ? WHERE id = ?"),
-        fail: db.prepare("UPDATE steps SET status = 'failed', error = ?, ended_at = ? WHERE id = ?"),
+        fail: db.prepare("UPDATE steps SET status = 'failed', error = ?, error_code = ?, ended_at = ? WHERE id = ?"),
         setColumn: {
             session_id: setColumn("session_id"),
             snapshot_ref: setColumn("snapshot_ref"),
@@ -307,6 +312,7 @@ export function copyStep(db: Db, row: StepRow): void {
         row.status,
         row.output,
         row.error,
+        row.error_code,
         row.session_id,
         row.snapshot_ref,
         row.artifact_id,
@@ -324,8 +330,8 @@ export function succeedStep(db: Db, id: string, output: string | null, endedAt: 
     statements(db).steps.succeed.run(output, endedAt, id)
 }
 
-export function failStep(db: Db, id: string, error: string, endedAt: string): void {
-    statements(db).steps.fail.run(error, endedAt, id)
+export function failStep(db: Db, id: string, error: string, errorCode: LoopyErrorCode | null, endedAt: string): void {
+    statements(db).steps.fail.run(error, errorCode, endedAt, id)
 }
 
 export function setStepColumn(db: Db, id: string, column: StepColumn, value: string): void {

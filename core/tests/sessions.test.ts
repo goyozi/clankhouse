@@ -108,7 +108,10 @@ test("stream on a missing session throws", async () => {
 
     // when streaming an unknown session id
     // then it throws a not found error
-    await expect(loopy.sessions.stream("nope").next()).rejects.toThrow(/not found/)
+    await expect(loopy.sessions.stream("nope").next()).rejects.toMatchObject({
+        message: expect.stringMatching(/not found/),
+        code: "ai_session_not_found"
+    })
 })
 
 test("stream with an unknown or foreign afterMessageId throws", async () => {
@@ -124,14 +127,16 @@ test("stream with an unknown or foreign afterMessageId throws", async () => {
 
     // when streaming with an unknown afterMessageId
     // then it throws a message not found error
-    await expect(loopy.sessions.stream(recorder.id, { afterMessageId: "nope" }).next()).rejects.toThrow(
-        /Message not found/
-    )
+    await expect(loopy.sessions.stream(recorder.id, { afterMessageId: "nope" }).next()).rejects.toMatchObject({
+        message: expect.stringMatching(/Message not found/),
+        code: "ai_session_message_not_found"
+    })
     // and when streaming with another session's message id
     // then it also throws a message not found error
-    await expect(loopy.sessions.stream(recorder.id, { afterMessageId: foreignId }).next()).rejects.toThrow(
-        /Message not found/
-    )
+    await expect(loopy.sessions.stream(recorder.id, { afterMessageId: foreignId }).next()).rejects.toMatchObject({
+        message: expect.stringMatching(/Message not found/),
+        code: "ai_session_message_not_found"
+    })
 })
 
 test("breaking out of a stream deregisters the listener without breaking the recorder", async () => {
@@ -159,7 +164,10 @@ test("get on a missing session throws", async () => {
 
     // when getting an unknown session id
     // then it throws a not found error
-    await expect(loopy.sessions.get("nope")).rejects.toThrow(/not found/)
+    await expect(loopy.sessions.get("nope")).rejects.toMatchObject({
+        message: expect.stringMatching(/not found/),
+        code: "ai_session_not_found"
+    })
 })
 
 class ParkingLLM extends BaseLanguageModel {

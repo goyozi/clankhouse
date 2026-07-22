@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto"
 import * as z from "zod"
+import { LoopyError } from "../errors"
+import { jsonSchema } from "../json-schema"
 
 export type PreparedInstructedOutput = {
     prompt: string
@@ -7,11 +9,13 @@ export type PreparedInstructedOutput = {
 }
 
 export function prepareInstructedOutput(prompt: string, output: z.ZodTypeAny): PreparedInstructedOutput {
-    if (output instanceof z.ZodVoid) {
-        return { prompt, collect: () => undefined }
-    }
-    const jsonSchema = z.toJSONSchema(output)
-    delete jsonSchema.$schema
+    const instructedSchema = jsonSchema({
+        schema: output,
+        io: "input",
+        role: "Coding agent instructed output schema",
+        allowTopLevelVoid: true
+    })
+    if (instructedSchema === undefined) return { prompt, collect: () => undefined }
     const tagName = `loopy_structured_output_${randomUUID().replaceAll("-", "_")}`
     const openingTag = `<${tagName}>`
     const closingTag = `</${tagName}>`
@@ -26,7 +30,7 @@ ${closingTag}
 The JSON must conform to this JSON Schema:
 
 \`\`\`json
-${JSON.stringify(jsonSchema, null, 2)}
+${JSON.stringify(instructedSchema, null, 2)}
 \`\`\`
 Write only raw JSON between the tags — no markdown fences, no comments, no surrounding prose.
 You may include prose outside the tags.`,
@@ -42,11 +46,17 @@ You may include prose outside the tags.`,
 
 function extractTaggedOutput(finalMessage: string | undefined, openingTag: string, closingTag: string): string {
     if (finalMessage === undefined) {
-        throw new Error("Coding agent did not return the instructed output tags in its final response")
+        throw new LoopyError(
+            "coding_agent_output_missing",
+            "Coding agent did not return the instructed output tags in its final response"
+        )
     }
     const blocks = tagBlocks(finalMessage, openingTag, closingTag)
     if (blocks.length === 0) {
-        throw new Error("Coding agent did not return the instructed output tags in its final response")
+        throw new LoopyError(
+            "coding_agent_output_missing",
+            "Coding agent did not return the instructed output tags in its final response"
+        )
     }
     return blocks.findLast((block) => block !== "") ?? blocks[blocks.length - 1]
 }
@@ -74,6 +84,6 @@ function parseJson(text: string, message: string): unknown {
     try {
         return JSON.parse(text)
     } catch (error) {
-        throw new Error(message, { cause: error })
+        throw new LoopyError("coding_agent_output_invalid", message, { cause: error })
     }
 }

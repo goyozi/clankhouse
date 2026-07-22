@@ -1,5 +1,7 @@
 We are working on Loopy, a local-first durable AI workflow framework.
 
+Note: since we're pre-0.1 without any real world users, there's no need to maintain backwards compatibility and do database migrations.
+
 ## Modules
 
 core:

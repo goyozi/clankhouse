@@ -1,8 +1,9 @@
-import type { Artifact } from "./artifacts"
+import { toArtifact, type Artifact } from "./artifacts"
 import * as sql from "./db"
-import { decode } from "./codec"
+import { LoopyError } from "./errors"
+import type { LoopyErrorCode } from "./errors"
 import { observableStatus, type ActiveSets } from "./runtime"
-import type { ArtifactRow, Db, ListRunsFilter, RunRow, StepRow } from "./db"
+import type { Db, ListRunsFilter, RunRow, StepRow } from "./db"
 import { watch, type Notifier } from "./watch"
 
 export class WorkflowRuns {
@@ -47,15 +48,16 @@ export class WorkflowRuns {
 
     async get(id: string): Promise<WorkflowRun> {
         const row = sql.findRunById(this.db, id)
-        if (!row) throw new Error(`Workflow run not found: ${id}`)
+        if (!row) throw new LoopyError("workflow_run_not_found", `Workflow run not found: ${id}`)
         const stepRows = sql.findStepsByRun(this.db, id)
         const artifactRows = sql.findArtifactsByRun(this.db, id)
         return {
             ...this.toMetadata(row),
-            ...(row.output !== null ? { output: decode(row.output) } : {}),
+            ...(row.output !== null ? { output: JSON.parse(row.output), outputJson: row.output } : {}),
             ...(row.error !== null ? { error: row.error } : {}),
+            ...(row.error_code !== null ? { errorCode: row.error_code } : {}),
             steps: stepRows.map((s) => this.toStep(s)),
-            artifacts: artifactRows.map((a) => this.toArtifact(a))
+            artifacts: artifactRows.map(toArtifact)
         }
     }
 
@@ -73,7 +75,9 @@ export class WorkflowRuns {
         runId: string,
         options?: { fromStepId?: string; signal?: AbortSignal }
     ): AsyncGenerator<RunStreamItem, void, void> {
-        if (!sql.findRunById(this.db, runId)) throw new Error(`Workflow run not found: ${runId}`)
+        if (!sql.findRunById(this.db, runId)) {
+            throw new LoopyError("workflow_run_not_found", `Workflow run not found: ${runId}`)
+        }
         const seen = new Map<string, string>()
         let watermark = this.resolveWatermark(runId, options?.fromStepId)
         let sawActiveStep = false
@@ -122,7 +126,9 @@ export class WorkflowRuns {
     private resolveWatermark(runId: string, fromStepId: string | undefined): number {
         if (fromStepId === undefined) return 0
         const row = sql.findStepById(this.db, fromStepId)
-        if (!row || row.run_id !== runId) throw new Error(`Step not found in run ${runId}: ${fromStepId}`)
+        if (!row || row.run_id !== runId) {
+            throw new LoopyError("workflow_step_not_found", `Step not found in run ${runId}: ${fromStepId}`)
+        }
         return row.seq
     }
 
@@ -148,17 +154,20 @@ export class WorkflowRuns {
             status: observableStatus(row.status, this.active.steps.has(row.id)),
             startedAt: new Date(row.started_at),
             ...(row.ended_at !== null ? { endedAt: new Date(row.ended_at) } : {}),
-            ...(row.error !== null ? { error: row.error } : {})
+            ...(row.error !== null ? { error: row.error } : {}),
+            ...(row.error_code !== null ? { errorCode: row.error_code } : {})
         }
-        const output = row.output !== null ? decode(row.output) : undefined
+        const output = row.output !== null ? JSON.parse(row.output) : undefined
+        const outputJson = row.output ?? undefined
         switch (row.kind) {
             case "custom":
-                return { ...base, kind: "custom", output }
+                return { ...base, kind: "custom", output, ...(outputJson !== undefined ? { outputJson } : {}) }
             case "artifact":
                 return {
                     ...base,
                     kind: "artifact",
                     output,
+                    ...(outputJson !== undefined ? { outputJson } : {}),
                     ...(row.artifact_id !== null ? { artifactId: row.artifact_id } : {})
                 }
             case "llm":
@@ -166,6 +175,7 @@ export class WorkflowRuns {
                     ...base,
                     kind: "llm",
                     output,
+                    ...(outputJson !== undefined ? { outputJson } : {}),
                     ...(row.session_id !== null ? { sessionId: row.session_id } : {})
                 }
             case "agent":
@@ -173,6 +183,7 @@ export class WorkflowRuns {
                     ...base,
                     kind: "agent",
                     output,
+                    ...(outputJson !== undefined ? { outputJson } : {}),
                     ...(row.session_id !== null ? { sessionId: row.session_id } : {}),
                     ...(row.snapshot_ref !== null ? { snapshotRef: row.snapshot_ref } : {})
                 }
@@ -181,19 +192,9 @@ export class WorkflowRuns {
                     ...base,
                     kind: "event",
                     output,
+                    ...(outputJson !== undefined ? { outputJson } : {}),
                     ...(row.event_key !== null ? { eventKey: row.event_key } : {})
                 }
-        }
-    }
-
-    private toArtifact(row: ArtifactRow): Artifact {
-        return {
-            id: row.id,
-            runId: row.run_id,
-            name: row.name,
-            file: row.file,
-            kind: row.kind,
-            ...(row.mime_type !== null ? { mimeType: row.mime_type } : {})
         }
     }
 }
@@ -203,6 +204,7 @@ function fingerprint(row: StepRow, status: ObservableStepStatus): string {
         status,
         row.output,
         row.error,
+        row.error_code,
         row.session_id,
         row.snapshot_ref,
         row.artifact_id,
@@ -227,6 +229,8 @@ type StepBase = {
     endedAt?: Date
     status: ObservableStepStatus
     error?: string
+    errorCode?: LoopyErrorCode
+    outputJson?: string
 }
 
 export type CustomStep = StepBase & { kind: "custom"; output?: unknown }
@@ -237,6 +241,7 @@ export type AgentStep = StepBase & {
     sessionId?: string
     snapshotRef?: string
     output?: unknown
+    outputJson?: string
 }
 export type EventStep = StepBase & { kind: "event"; eventKey?: string; output?: unknown }
 
@@ -265,7 +270,9 @@ export type WorkflowRun = {
     endedAt?: Date
     status: ObservableRunStatus
     output?: unknown
+    outputJson?: string
     error?: string
+    errorCode?: LoopyErrorCode
     steps: Step[]
     artifacts: Artifact[]
 }

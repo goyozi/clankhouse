@@ -1,6 +1,7 @@
 import * as sql from "../db"
 import type { Db, SessionMessageRow } from "../db"
 import { observableStatus, type ActiveSets } from "../runtime"
+import { LoopyError } from "../errors"
 import { newId, nowIso } from "../util"
 import { Notifier, watch } from "../watch"
 
@@ -16,7 +17,7 @@ export class AISessions {
 
     async get(id: string): Promise<AISession> {
         const row = sql.findSessionById(this.db, id)
-        if (!row) throw new Error(`AI session not found: ${id}`)
+        if (!row) throw new LoopyError("ai_session_not_found", `AI session not found: ${id}`)
         return {
             id: row.id,
             kind: row.kind,
@@ -33,12 +34,17 @@ export class AISessions {
         id: string,
         options?: { afterMessageId?: string; signal?: AbortSignal }
     ): AsyncGenerator<AISessionMessage, void, void> {
-        if (!sql.findSessionById(this.db, id)) throw new Error(`AI session not found: ${id}`)
+        if (!sql.findSessionById(this.db, id)) {
+            throw new LoopyError("ai_session_not_found", `AI session not found: ${id}`)
+        }
         let lastSeq = -1
         if (options?.afterMessageId !== undefined) {
             const row = sql.findSessionMessageById(this.db, options.afterMessageId)
             if (!row || row.session_id !== id)
-                throw new Error(`Message not found in session ${id}: ${options.afterMessageId}`)
+                throw new LoopyError(
+                    "ai_session_message_not_found",
+                    `Message not found in session ${id}: ${options.afterMessageId}`
+                )
             lastSeq = row.seq
         }
         const drain = () => {

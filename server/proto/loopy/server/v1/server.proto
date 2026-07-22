@@ -1,0 +1,246 @@
+syntax = "proto3";
+
+package loopy.server.v1;
+
+import "google/protobuf/timestamp.proto";
+
+service LoopyService {
+  rpc ListWorkflows(ListWorkflowsRequest) returns (ListWorkflowsResponse);
+  rpc GetWorkflow(GetWorkflowRequest) returns (GetWorkflowResponse);
+  rpc StartRun(StartRunRequest) returns (StartRunResponse);
+  rpc ListRuns(ListRunsRequest) returns (ListRunsResponse);
+  rpc GetRun(GetRunRequest) returns (GetRunResponse);
+  rpc WatchRun(WatchRunRequest) returns (stream WatchRunResponse);
+  rpc ResumeRun(ResumeRunRequest) returns (ResumeRunResponse);
+  rpc RerunRun(RerunRunRequest) returns (RerunRunResponse);
+  rpc EmitEvent(EmitEventRequest) returns (EmitEventResponse);
+  rpc GetArtifact(GetArtifactRequest) returns (GetArtifactResponse);
+  rpc ReadArtifact(ReadArtifactRequest) returns (stream ReadArtifactResponse);
+  rpc GetSession(GetSessionRequest) returns (GetSessionResponse);
+  rpc WatchSession(WatchSessionRequest) returns (stream WatchSessionResponse);
+}
+
+enum ExecutionStatus {
+  EXECUTION_STATUS_UNSPECIFIED = 0;
+  EXECUTION_STATUS_INTERRUPTED = 1;
+  EXECUTION_STATUS_RUNNING = 2;
+  EXECUTION_STATUS_SUCCEEDED = 3;
+  EXECUTION_STATUS_FAILED = 4;
+}
+
+enum StepKind {
+  STEP_KIND_UNSPECIFIED = 0;
+  STEP_KIND_CUSTOM = 1;
+  STEP_KIND_ARTIFACT = 2;
+  STEP_KIND_LLM = 3;
+  STEP_KIND_AGENT = 4;
+  STEP_KIND_EVENT = 5;
+}
+
+enum ArtifactKind {
+  ARTIFACT_KIND_UNSPECIFIED = 0;
+  ARTIFACT_KIND_TEXT = 1;
+  ARTIFACT_KIND_BINARY = 2;
+}
+
+enum SessionKind {
+  SESSION_KIND_UNSPECIFIED = 0;
+  SESSION_KIND_LLM = 1;
+  SESSION_KIND_CODING_AGENT = 2;
+}
+
+enum SessionRole {
+  SESSION_ROLE_UNSPECIFIED = 0;
+  SESSION_ROLE_SYSTEM = 1;
+  SESSION_ROLE_USER = 2;
+  SESSION_ROLE_ASSISTANT = 3;
+  SESSION_ROLE_TOOL = 4;
+  SESSION_ROLE_TOOL_RESULT = 5;
+}
+
+message WorkflowSummary {
+  string name = 1;
+}
+
+message WorkflowDefinition {
+  string name = 1;
+  string input_schema_json = 2;
+  optional string output_schema_json = 3;
+}
+
+message Artifact {
+  string id = 1;
+  string run_id = 2;
+  string name = 3;
+  string file = 4;
+  ArtifactKind kind = 5;
+  optional string mime_type = 6;
+}
+
+message Step {
+  string id = 1;
+  string run_id = 2;
+  string key = 3;
+  string name = 4;
+  uint32 seq = 5;
+  StepKind kind = 6;
+  ExecutionStatus status = 7;
+  google.protobuf.Timestamp started_at = 8;
+  google.protobuf.Timestamp ended_at = 9;
+  optional string error = 10;
+  optional string output_json = 11;
+  optional string session_id = 12;
+  optional string snapshot_ref = 13;
+  optional string artifact_id = 14;
+  optional string event_key = 15;
+  optional string error_code = 16;
+}
+
+message RunMetadata {
+  string id = 1;
+  string key = 2;
+  uint32 attempt = 3;
+  string workflow_name = 4;
+  google.protobuf.Timestamp started_at = 5;
+  google.protobuf.Timestamp ended_at = 6;
+  ExecutionStatus status = 7;
+}
+
+message WorkflowRun {
+  RunMetadata metadata = 1;
+  optional string output_json = 2;
+  optional string error = 3;
+  repeated Step steps = 4;
+  repeated Artifact artifacts = 5;
+  optional string error_code = 6;
+}
+
+message SessionMessage {
+  string id = 1;
+  string session_id = 2;
+  SessionRole role = 3;
+  string content = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+message Session {
+  string id = 1;
+  SessionKind kind = 2;
+  string provider = 3;
+  string model = 4;
+  ExecutionStatus status = 5;
+  google.protobuf.Timestamp started_at = 6;
+  google.protobuf.Timestamp ended_at = 7;
+  repeated SessionMessage messages = 8;
+}
+
+message ListWorkflowsRequest {}
+
+message ListWorkflowsResponse {
+  repeated WorkflowSummary workflows = 1;
+}
+
+message GetWorkflowRequest {
+  string name = 1;
+}
+
+message GetWorkflowResponse {
+  WorkflowDefinition workflow = 1;
+}
+
+message StartRunRequest {
+  string workflow_name = 1;
+  optional string input_json = 2;
+}
+
+message StartRunResponse {
+  string run_id = 1;
+}
+
+message ListRunsRequest {
+  optional string workflow_name = 1;
+  optional string key = 2;
+  repeated ExecutionStatus statuses = 3;
+  optional uint32 limit = 4;
+}
+
+message ListRunsResponse {
+  repeated RunMetadata runs = 1;
+}
+
+message GetRunRequest {
+  string run_id = 1;
+}
+
+message GetRunResponse {
+  WorkflowRun run = 1;
+}
+
+message WatchRunRequest {
+  string run_id = 1;
+  optional string from_step_id = 2;
+}
+
+message WatchRunResponse {
+  oneof item {
+    Step step = 1;
+    RunMetadata run = 2;
+  }
+}
+
+message ResumeRunRequest {
+  string run_id = 1;
+}
+
+message ResumeRunResponse {
+  string run_id = 1;
+}
+
+message RerunRunRequest {
+  string run_id = 1;
+  string from_step_key = 2;
+}
+
+message RerunRunResponse {
+  string run_id = 1;
+}
+
+message EmitEventRequest {
+  string key = 1;
+  optional string input_json = 2;
+}
+
+message EmitEventResponse {}
+
+message GetArtifactRequest {
+  string artifact_id = 1;
+}
+
+message GetArtifactResponse {
+  Artifact artifact = 1;
+}
+
+message ReadArtifactRequest {
+  string artifact_id = 1;
+}
+
+message ReadArtifactResponse {
+  bytes chunk = 1;
+}
+
+message GetSessionRequest {
+  string session_id = 1;
+}
+
+message GetSessionResponse {
+  Session session = 1;
+}
+
+message WatchSessionRequest {
+  string session_id = 1;
+  optional string after_message_id = 2;
+}
+
+message WatchSessionResponse {
+  SessionMessage message = 1;
+}

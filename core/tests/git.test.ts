@@ -262,10 +262,16 @@ test("snapshot rejects invalid ref names", async () => {
 
     // when snapshotting with a name containing a space
     // then it rejects with an invalid snapshot name error
-    await expect(worktree.snapshot("bad name")).rejects.toThrow(/Invalid snapshot name/)
+    await expect(worktree.snapshot("bad name")).rejects.toMatchObject({
+        message: expect.stringMatching(/Invalid snapshot name/),
+        code: "git_snapshot_name_invalid"
+    })
     // and when snapshotting with a name containing ".."
     // then it also rejects with an invalid snapshot name error
-    await expect(worktree.snapshot("bad..name")).rejects.toThrow(/Invalid snapshot name/)
+    await expect(worktree.snapshot("bad..name")).rejects.toMatchObject({
+        message: expect.stringMatching(/Invalid snapshot name/),
+        code: "git_snapshot_name_invalid"
+    })
 })
 
 test("restore returns to the same commit when the worktree was fully committed", async () => {

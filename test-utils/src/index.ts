@@ -6,6 +6,7 @@ import { promisify } from "node:util"
 import { onTestFinished } from "vitest"
 import { Loopy } from "@loopy/core/loopy"
 import type { WorkflowRun } from "@loopy/core/runs"
+import * as z from "zod"
 
 const execFileAsync = promisify(execFile)
 
@@ -89,8 +90,13 @@ export async function tempGitRepo(): Promise<TempGitRepo> {
     return repo
 }
 
-export function testRun<O>(loopy: Loopy, body: () => Promise<O>, opts: { key?: string } = {}): Promise<O> {
-    return loopy.run("test-workflow", opts.key ?? "test-key", body)
+export function testRun<O>(
+    loopy: Loopy,
+    body: () => Promise<O>,
+    opts: { key?: string; output?: z.ZodType<O> } = {}
+): Promise<O> {
+    const output = opts.output ?? (z.json() as unknown as z.ZodType<O>)
+    return loopy.run("test-workflow", opts.key ?? "test-key", output, body)
 }
 
 export async function waitForRun(loopy: Loopy, runId: string): Promise<WorkflowRun> {

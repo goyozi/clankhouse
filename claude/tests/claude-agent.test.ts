@@ -18,7 +18,7 @@ import {
 } from "@loopy/test-utils"
 
 const outputSchema = z.object({ done: z.boolean() })
-const workflowOptions = { input: z.void(), output: z.any(), key: () => "test-key" }
+const workflowOptions = { input: z.null(), output: z.json(), key: () => "test-key" }
 const liveOutputSchema = z.array(
     z.discriminatedUnion("kind", [
         z.object({
@@ -121,10 +121,14 @@ test("ClaudeAgent runs a void-output step without instructed output framing", as
     let worktree!: Worktree
 
     // when the agent runs with a void output schema
-    const result = await testRun(loopy, async () => {
-        worktree = await repository.worktree({ base: "main" })
-        return agent.run("implement", { prompt: "do it", output: z.void(), worktree })
-    })
+    const result = await testRun(
+        loopy,
+        async () => {
+            worktree = await repository.worktree({ base: "main" })
+            return agent.run("implement", { prompt: "do it", output: z.void(), worktree })
+        },
+        { output: z.void() }
+    )
 
     // then it returns nothing and the SDK receives the bare prompt with no output framing
     expect(result).toBeUndefined()
@@ -228,8 +232,7 @@ test("ClaudeAgent passes default options to the SDK", async () => {
     expect(instructedSchema(calls[0].prompt)).toEqual({
         type: "object",
         properties: { done: { type: "boolean" } },
-        required: ["done"],
-        additionalProperties: false
+        required: ["done"]
     })
     // and the worktree is configured without native structured output or generated directories
     const options = calls[0].options!
@@ -312,16 +315,14 @@ test("a non-JSON-representable output schema fails the step without invoking the
                 worktree
             })
         })
-    ).rejects.toThrow("Date cannot be represented in JSON Schema")
+    ).rejects.toThrow(/Coding agent "implement" output schema.*when z\.date\(\)/)
 
     // then the SDK is never invoked
     expect(calls).toHaveLength(0)
-    // and the agent step and the session are marked failed
+    // and no agent step or session was created
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-    const step = run.steps[0]
-    expect(step.status).toBe("failed")
-    if (step.kind !== "agent") throw new Error("unreachable")
-    expect((await loopy.sessions.get(step.sessionId!)).status).toBe("failed")
+    expect(run.steps).toHaveLength(0)
+    expect(loopy.db.prepare("SELECT COUNT(*) AS n FROM sessions").get()).toEqual({ n: 0 })
 })
 
 test("an error result fails the step and the session", async () => {
@@ -500,7 +501,7 @@ test("claude agent step replay restores the worktree without re-invoking the SDK
     loopy.registerWorkflow("test-workflow", workflowOptions, body)
 
     // when the workflow runs and the publish step throws
-    const firstId = loopy.start("test-workflow", undefined)
+    const firstId = loopy.start("test-workflow", null)
     await expect(runOutput(loopy, firstId)).rejects.toThrow("boom")
     // and the worktree's uncommitted changes are discarded
     await runGit(worktree.path, ["reset", "--hard"])

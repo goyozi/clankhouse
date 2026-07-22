@@ -1,11 +1,10 @@
 import * as z from "zod"
 import { expect, test } from "vitest"
 import { Loopy } from "@loopy/core/loopy"
-import { decode } from "@loopy/core/codec"
 import { gate, runOutput, tempLoopy, testRun } from "@loopy/test-utils"
 
 const approval = z.object({ ok: z.boolean() })
-const workflowOptions = { input: z.void(), output: z.any(), key: () => "test-key" }
+const workflowOptions = { input: z.null(), output: z.json(), key: () => "test-key" }
 
 test("waitFor receives an emitted event and records an event step", async () => {
     // given a fresh loopy instance and a synchronization gate
@@ -27,7 +26,7 @@ test("waitFor receives an emitted event and records an event step", async () => 
         key: string
         payload: string
     }[]
-    expect(rows.map((r) => ({ key: r.key, payload: decode(r.payload) }))).toEqual([
+    expect(rows.map((r) => ({ key: r.key, payload: JSON.parse(r.payload) }))).toEqual([
         { key: "approval", payload: { ok: true } }
     ])
     // and the run records a single event step
@@ -54,9 +53,23 @@ test("schema violation rejects the wait and fails the run", async () => {
     // when an event is emitted with a payload that violates the schema
     await loopy.emit("approval", { ok: "nope" })
     // then the wait rejects with a schema validation error
-    await expect(promise).rejects.toThrow(/schema validation/)
+    await expect(promise).rejects.toMatchObject({
+        message: expect.stringMatching(/schema validation/),
+        code: "event_schema_validation_failed"
+    })
     // and the run is marked as failed
     expect((await loopy.runs.list())[0].status).toBe("failed")
+})
+
+test("emitting an undefined payload rejects with a coded error and persists nothing", async () => {
+    // given a fresh loopy instance
+    const { loopy } = tempLoopy()
+    // when an event is emitted without a JSON-serializable payload
+    const promise = loopy.emit("approval", undefined)
+    // then the emit rejects with the event_payload_required code
+    await expect(promise).rejects.toMatchObject({ code: "event_payload_required" })
+    // and no event is written to the events table
+    expect(loopy.db.prepare("SELECT COUNT(*) AS n FROM events").get()).toEqual({ n: 0 })
 })
 
 test("waitForAny resolves with the first matching event", async () => {
@@ -85,7 +98,26 @@ test("waitForAny requires at least one definition", async () => {
     const { loopy } = tempLoopy()
     // when a workflow calls waitForAny with no event definitions
     // then it rejects requiring at least one definition
-    await expect(testRun(loopy, async () => loopy.waitForAny([]))).rejects.toThrow(/at least one/)
+    await expect(testRun(loopy, async () => loopy.waitForAny([]))).rejects.toMatchObject({
+        message: expect.stringMatching(/at least one/),
+        code: "event_definitions_empty"
+    })
+})
+
+test("an invalid event schema fails before a step or waiter is registered", async () => {
+    // given an event wait whose payload schema is not JSON-compatible
+    const { loopy } = tempLoopy()
+
+    // when the invalid wait is set up
+    const invalid = testRun(loopy, async () => loopy.waitFor("go", z.date()), { key: "invalid" })
+
+    // then it fails before creating the durable step
+    await expect(invalid).rejects.toThrow(/Event "go" payload schema.*z\.date/)
+    expect(loopy.db.prepare("SELECT COUNT(*) AS n FROM steps").get()).toEqual({ n: 0 })
+    // and the key remains available for a valid waiter
+    const valid = testRun(loopy, async () => loopy.waitFor("go", z.string()), { key: "valid" })
+    await loopy.emit("go", "ready")
+    expect(await valid).toBe("ready")
 })
 
 test("a second wait on an already-waited key is rejected", async () => {
@@ -106,7 +138,10 @@ test("a second wait on an already-waited key is rejected", async () => {
         key: "key-2"
     })
     // then the second wait rejects
-    await expect(second).rejects.toThrow(/already registered/)
+    await expect(second).rejects.toMatchObject({
+        message: expect.stringMatching(/already registered/),
+        code: "event_wait_already_registered"
+    })
     // and the second run is marked as failed
     expect((await loopy.runs.list({ key: "key-2" }))[0].status).toBe("failed")
     // and when the event is emitted
@@ -125,14 +160,19 @@ test("emit without waiters still persists the event", async () => {
 })
 
 test("a received event is replayed deterministically on resume", async () => {
-    // given a workflow body that waits for "approval" then blocks
+    // given a workflow body that transforms a raw "approval" event then blocks
     const { loopy, reopen } = tempLoopy()
     const parked = gate()
     const waiting = gate()
     const received = gate()
+    let transforms = 0
+    const transformedApproval = approval.transform((event) => {
+        transforms++
+        return { ok: !event.ok }
+    })
     const body = (l: Loopy, block: boolean) => async () => {
         waiting.release()
-        const event = await l.waitFor("approval", approval)
+        const event = await l.waitFor("approval", transformedApproval)
         received.release()
         if (block) await parked.released
         return event.ok
@@ -144,8 +184,11 @@ test("a received event is replayed deterministically on resume", async () => {
     await received.released
     // and the process is reopened, replaying the workflow
     const second = reopen()
-    // then the resumed run completes with the same event payload without blocking
-    expect(await testRun(second, body(second, false))).toBe(true)
+    // then the resumed run transforms the persisted raw envelope once without compounding
+    expect(await testRun(second, body(second, false))).toBe(false)
+    expect(transforms).toBe(2)
+    const run = await second.runs.get((await second.runs.list())[0].id)
+    expect(run.steps[0].outputJson).toBe(JSON.stringify({ key: "approval", event: { ok: true } }))
     // and the event was not duplicated in the store
     expect(second.db.prepare("SELECT COUNT(*) AS n FROM events").get()).toEqual({ n: 1 })
 })
@@ -251,21 +294,21 @@ test("an event consumed before the wait step persisted is redelivered on resume"
     expect(second.db.prepare("SELECT COUNT(*) AS n FROM events").get()).toEqual({ n: 1 })
 })
 
-test("an event payload preserves its Date type for the waiter", async () => {
-    // given a workflow waiting for an event whose schema expects a Date field
+test("an event payload preserves an ISO datetime string for the waiter", async () => {
+    // given a workflow waiting for an event whose schema expects an ISO datetime string
     const { loopy } = tempLoopy()
     const waiting = gate()
-    const at = new Date("2026-07-07T12:00:00.000Z")
+    const at = "2026-07-07T12:00:00.000Z"
     const promise = testRun(loopy, async () => {
         waiting.release()
-        const event = await loopy.waitFor("scheduled", z.object({ at: z.date() }))
-        return event.at.toISOString()
+        const event = await loopy.waitFor("scheduled", z.object({ at: z.iso.datetime() }))
+        return event.at
     })
     await waiting.released
-    // when the event is emitted carrying a Date payload
+    // when the event is emitted carrying the ISO string
     await loopy.emit("scheduled", { at })
-    // then the waiter receives a real Date that satisfies z.date(), not an ISO string
-    expect(await promise).toBe(at.toISOString())
+    // then the waiter receives the same JSON string
+    expect(await promise).toBe(at)
 })
 
 test("re-emitting on rerun supersedes the previous unconsumed event", async () => {
@@ -281,7 +324,7 @@ test("re-emitting on rerun supersedes the previous unconsumed event", async () =
     }
     loopy.registerWorkflow("test-workflow", workflowOptions, body)
     // when the first attempt emits result=1 and the publish step throws
-    const firstId = loopy.start("test-workflow", undefined)
+    const firstId = loopy.start("test-workflow", null)
     await expect(runOutput(loopy, firstId)).rejects.toThrow("boom")
     // then a single unconsumed "result" event is stored
     expect(loopy.db.prepare("SELECT COUNT(*) AS n FROM events WHERE key = 'result'").get()).toEqual({ n: 1 })

@@ -1,5 +1,6 @@
 import * as z from "zod"
-import { EventDefinition, Loopy } from "./loopy"
+import { Loopy } from "./loopy"
+import type { EventDefinition } from "./events"
 import type { RerunOptions, WorkflowOptions, Workflows } from "./workflows"
 import type { WorkflowRuns } from "./runs"
 import type { Artifacts } from "./artifacts"
@@ -47,8 +48,13 @@ export function rerun(runId: string, options: RerunOptions): string {
     return loopy().rerun(runId, options)
 }
 
-export function run<O>(name: string, key: string, workflowFn: () => Promise<O>): Promise<O> {
-    return loopy().run(name, key, workflowFn)
+export function run<T extends z.ZodTypeAny>(
+    name: string,
+    key: string,
+    output: T,
+    workflowFn: () => Promise<z.infer<T>>
+): Promise<z.infer<T>> {
+    return loopy().run(name, key, output, workflowFn)
 }
 
 export function step<T extends z.ZodTypeAny>(
@@ -76,3 +82,5 @@ export function waitForAny(defs: EventDefinition<any>[]): Promise<any> {
 }
 
 export type { RerunOptions, WorkflowOptions } from "./workflows"
+export { LoopyError } from "./errors"
+export type { LoopyErrorCode } from "./errors"

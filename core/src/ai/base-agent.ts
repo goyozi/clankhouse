@@ -1,5 +1,6 @@
 import * as z from "zod"
 import { requireContext } from "../context"
+import { LoopyError } from "../errors"
 import type { Worktree } from "../git"
 import { uniqueName } from "../util"
 import type { CodingAgent, CodingRunOptions } from "./coding-agent"
@@ -41,12 +42,15 @@ export abstract class BaseCodingAgent implements CodingAgent {
     }
 
     async run<T extends z.ZodTypeAny>(stepName: string, options: CodingRunOptions<T>): Promise<z.infer<T>> {
+        const role = `Coding agent "${stepName}" output schema`
         const ctx = requireContext()
         let session: SessionRecorder | undefined
         return ctx.loopy.engine.executeStep({
             kind: "agent",
             name: stepName,
             schema: options.output,
+            schemaIo: "input",
+            schemaRole: role,
             execute: async (handle) => {
                 const prompt = await renderPrompt(options.prompt)
                 session = ctx.loopy.sessions.create({
@@ -73,7 +77,10 @@ export abstract class BaseCodingAgent implements CodingAgent {
             onError: async () => session?.fail(),
             onReplay: async (row) => {
                 if (row.snapshot_ref === null) {
-                    throw new Error(`Agent step "${row.key}" has no worktree snapshot to restore`)
+                    throw new LoopyError(
+                        "coding_agent_snapshot_missing",
+                        `Agent step "${row.key}" has no worktree snapshot to restore`
+                    )
                 }
                 await options.worktree.restoreRef(row.snapshot_ref)
             }

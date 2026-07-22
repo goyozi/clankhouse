@@ -15,10 +15,10 @@
         "better-sqlite3": "^12.11.1",
         "handlebars": "^4.7.9",
         "nanoid": "^5.1.16",
-        "superjson": "^2.2.6",
         "zod": "catalog:"
     },
     "devDependencies": {
-        "@loopy/test-utils": "workspace:*"
+        "@loopy/test-utils": "workspace:*",
+        "fast-check": "^4.9.0"
     }
 }

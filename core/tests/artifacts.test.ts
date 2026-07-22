@@ -70,10 +70,30 @@ test("writeBinary pumps the stream into an artifact file", async () => {
     })
 
     // then reading the artifact back yields the original mime type
-    const result = await loopy.artifacts.readBinary(artifact.id)
+    const result = await loopy.artifacts.read(artifact.id)
     expect(result.mimeType).toBe("application/octet-stream")
     // and the streamed bytes match what was written
     expect(await collect(result.stream)).toEqual(Buffer.from(data))
+})
+
+test("artifact metadata and bytes can be read without knowing the artifact kind", async () => {
+    // given a text artifact with a mime type
+    const { loopy } = tempLoopy()
+    let artifact!: Artifact
+    await testRun(loopy, async () => {
+        artifact = await loopy.artifacts.writeText("report", "hello", "text/plain")
+        return null
+    })
+
+    // when getting its metadata and reading its generic byte stream
+    const metadata = await loopy.artifacts.get(artifact.id)
+    const content = await loopy.artifacts.read(artifact.id)
+
+    // then metadata is returned independently of a run lookup
+    expect(metadata).toEqual(artifact)
+    // and the content retains its mime type and original bytes
+    expect(content.mimeType).toBe("text/plain")
+    expect(await collect(content.stream)).toEqual(Buffer.from("hello"))
 })
 
 test("artifact writes are replayed without duplicating rows after resume", async () => {
@@ -131,5 +151,23 @@ test("reading a missing artifact throws", async () => {
 
     // when reading an artifact id that was never created
     // then it rejects with a not found error
-    await expect(loopy.artifacts.readText("nope")).rejects.toThrow(/not found/)
+    await expect(loopy.artifacts.readText("nope")).rejects.toMatchObject({
+        message: expect.stringMatching(/not found/),
+        code: "artifact_not_found"
+    })
+})
+
+test("reading an artifact with a missing backing file throws a coded error", async () => {
+    // given an artifact whose persisted file has been deleted
+    const { loopy } = tempLoopy()
+    const artifact = await testRun(loopy, async () => loopy.artifacts.writeText("report", "hello"))
+    fs.unlinkSync(path.join(loopy.loopyDir, artifact.file))
+
+    // when reading its generic or text content
+    const content = loopy.artifacts.read(artifact.id)
+    const text = loopy.artifacts.readText(artifact.id)
+
+    // then both reject with the artifact not found code
+    await expect(content).rejects.toMatchObject({ code: "artifact_not_found" })
+    await expect(text).rejects.toMatchObject({ code: "artifact_not_found" })
 })

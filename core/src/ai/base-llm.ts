@@ -25,12 +25,15 @@ export abstract class BaseLanguageModel implements LanguageModel {
     protected abstract invoke(invocation: LanguageModelInvocation): Promise<unknown>
 
     async call<T extends z.ZodTypeAny>(stepName: string, options: ModelCallOptions<T>): Promise<z.infer<T>> {
+        const role = `LLM "${stepName}" output schema`
         const loopy = requireContext().loopy
         let session: SessionRecorder | undefined
         return loopy.engine.executeStep({
             kind: "llm",
             name: stepName,
             schema: options.output,
+            schemaIo: "input",
+            schemaRole: role,
             execute: async (handle) => {
                 const prompt = await renderPrompt(options.prompt)
                 session = loopy.sessions.create({

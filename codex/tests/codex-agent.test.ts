@@ -18,7 +18,7 @@ import {
 import { fakeCodex } from "./fake-codex-sdk"
 
 const outputSchema = z.object({ done: z.boolean() })
-const workflowOptions = { input: z.void(), output: z.any(), key: () => "test-key" }
+const workflowOptions = { input: z.null(), output: z.json(), key: () => "test-key" }
 const liveOutputSchema = z.array(
     z.discriminatedUnion("kind", [
         z.object({
@@ -126,10 +126,14 @@ test("CodexAgent runs a void-output step without instructed output framing", asy
     let worktree!: Worktree
 
     // when the agent runs with a void output schema
-    const result = await testRun(loopy, async () => {
-        worktree = await repository.worktree({ base: "main" })
-        return agent.run("implement", { prompt: "do it", output: z.void(), worktree })
-    })
+    const result = await testRun(
+        loopy,
+        async () => {
+            worktree = await repository.worktree({ base: "main" })
+            return agent.run("implement", { prompt: "do it", output: z.void(), worktree })
+        },
+        { output: z.void() }
+    )
 
     // then it returns nothing and the SDK receives the bare prompt with no output framing
     expect(result).toBeUndefined()
@@ -315,8 +319,7 @@ test("CodexAgent passes locked default options to the SDK", async () => {
     const jsonSchema = {
         type: "object",
         properties: { done: { type: "boolean" } },
-        required: ["done"],
-        additionalProperties: false
+        required: ["done"]
     }
     // and the thread is locked to the worktree without approvals or generated output directories
     expect(threadOptions).toEqual([
@@ -490,17 +493,15 @@ test("a non-JSON-representable output schema fails before starting a Codex threa
                 worktree
             })
         })
-    ).rejects.toThrow("Date cannot be represented in JSON Schema")
+    ).rejects.toThrow(/Coding agent "implement" output schema.*when z\.date\(\)/)
 
     // then the SDK thread and turn are never started
     expect(threadOptions).toHaveLength(0)
     expect(runCalls).toHaveLength(0)
-    // and the durable step and session are failed
+    // and no durable step or session was created
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-    const step = run.steps[0]
-    expect(step.status).toBe("failed")
-    if (step.kind !== "agent") throw new Error("unreachable")
-    expect((await loopy.sessions.get(step.sessionId!)).status).toBe("failed")
+    expect(run.steps).toHaveLength(0)
+    expect(loopy.db.prepare("SELECT COUNT(*) AS n FROM sessions").get()).toEqual({ n: 0 })
 })
 
 test("a failed Codex turn fails the durable step and preserves recorded messages", async () => {
@@ -710,7 +711,7 @@ test("codex agent step replay restores the worktree without re-invoking the SDK"
     loopy.registerWorkflow("test-workflow", workflowOptions, body)
 
     // when the workflow fails after the agent and its changes are discarded
-    const firstId = loopy.start("test-workflow", undefined)
+    const firstId = loopy.start("test-workflow", null)
     await expect(runOutput(loopy, firstId)).rejects.toThrow("boom")
     await runGit(worktree.path, ["reset", "--hard"])
     await runGit(worktree.path, ["clean", "-fd"])

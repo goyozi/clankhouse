@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises"
 import * as os from "node:os"
 import * as path from "node:path"
 import { runContext } from "./context"
+import { LoopyError } from "./errors"
 import { exists, resolveLoopyDir, uniqueName } from "./util"
 
 export class GitRepository {
@@ -116,7 +117,10 @@ async function resetTo(cwd: string, ref: string): Promise<void> {
 
 function validateRefSuffix(name: string): void {
     if (!/^[A-Za-z0-9._-]+$/.test(name) || name.includes("..")) {
-        throw new Error(`Invalid snapshot name "${name}"; use only letters, digits, ".", "_" and "-"`)
+        throw new LoopyError(
+            "git_snapshot_name_invalid",
+            `Invalid snapshot name "${name}"; use only letters, digits, ".", "_" and "-"`
+        )
     }
 }
 
