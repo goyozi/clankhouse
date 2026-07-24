@@ -9,7 +9,8 @@ import type { AISessions } from "./ai/sessions"
 let instance: Loopy | undefined
 
 export function loopy(): Loopy {
-    return (instance ??= new Loopy())
+    if (instance === undefined || instance.closed) instance = new Loopy()
+    return instance
 }
 
 export function workflows(): Workflows {

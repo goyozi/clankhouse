@@ -24,7 +24,7 @@ import {
     WatchRunResponseSchema,
     WatchSessionResponseSchema
 } from "@loopy/server/proto"
-import { serve, type LoopyServer } from "@loopy/server"
+import { listen, type LoopyServer } from "@loopy/server"
 import { gate, tempDir, tempGitRepo, tempLoopy, testRun, waitForRun } from "@loopy/test-utils"
 import { expect, onTestFinished, test } from "vitest"
 import * as z from "zod"
@@ -94,7 +94,7 @@ function serverEnv(server: LoopyServer): NodeJS.ProcessEnv {
 }
 
 async function testServer(loopy: Loopy): Promise<LoopyServer> {
-    const server = await serve(loopy, { port: 0 })
+    const server = await listen(loopy, { port: 0 })
     onTestFinished(() => server.close())
     return server
 }
@@ -538,7 +538,7 @@ test("resume reconnects to an interrupted run and prints only its run ID", async
             async () => (await instance.waitFor("resume-event", z.object({ value: z.number() }))).value
         )
     register(loopy)
-    const firstServer = await serve(loopy, { port: 0 })
+    const firstServer = await listen(loopy, { port: 0 })
     const firstEnv = serverEnv(firstServer)
     const startedResult = await runCliCommand(["runs", "start", "resume", "--input", "-", "--json"], {
         env: firstEnv,

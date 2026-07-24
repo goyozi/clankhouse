@@ -21,6 +21,7 @@ export class Loopy {
     readonly db: Db
     readonly engine: Engine
     readonly events: Events
+    private isClosed = false
 
     /**
      * @param loopyDir path in which all Loopy-managed files are stored. Defaults to $LOOPY_DIR, if present, or ~/.loopy otherwise
@@ -39,7 +40,13 @@ export class Loopy {
         this.sessions = new AISessions(this.db, active)
     }
 
+    get closed(): boolean {
+        return this.isClosed
+    }
+
     close(): void {
+        if (this.isClosed) return
+        this.isClosed = true
         this.db.close()
     }
 

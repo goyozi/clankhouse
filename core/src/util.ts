@@ -2,7 +2,7 @@ import { createHash } from "node:crypto"
 import { access } from "node:fs/promises"
 import * as os from "node:os"
 import * as path from "node:path"
-import { nanoid } from "nanoid"
+import { customAlphabet } from "nanoid"
 
 export function resolveLoopyDir(dir?: string): string {
     return dir ?? process.env.LOOPY_DIR ?? path.join(os.homedir(), ".loopy")
@@ -17,8 +17,11 @@ export async function exists(target: string): Promise<boolean> {
     }
 }
 
+const idAlphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+const generateId = customAlphabet(idAlphabet, 21)
+
 export function newId(): string {
-    return nanoid()
+    return generateId()
 }
 
 export function nowIso(): string {

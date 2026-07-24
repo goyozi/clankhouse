@@ -32,6 +32,24 @@ test("importing the package does not create the loopy dir until first use", asyn
     })
 })
 
+test("a closed singleton is replaced instead of handed out again", async () => {
+    await withLoopyDir("loopy-reopen-", async () => {
+        // given the cached singleton instance
+        const mod = await import("@loopy/core")
+        const first = mod.loopy()
+
+        // when it is closed and the singleton is requested again
+        first.close()
+        const second = mod.loopy()
+
+        // then a usable instance replaces the closed one
+        expect(second).not.toBe(first)
+        expect(second.closed).toBe(false)
+        expect(await second.runs.list()).toEqual([])
+        second.close()
+    })
+})
+
 test("top-level workflow functions delegate to the singleton loopy instance", async () => {
     await withLoopyDir("loopy-index-", async () => {
         // given the lazily-created singleton instance

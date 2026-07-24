@@ -7,7 +7,7 @@ import type { Loopy } from "@loopy/core/loopy"
 import { bearerAuth } from "./auth"
 import { resolveCredentials } from "./credentials"
 import { LoopyService } from "./gen/loopy/server/v1/server_pb"
-import { listen } from "./listen"
+import { listen as bindServer } from "./listen"
 import { loopyService } from "./service"
 
 export type ServeOptions = {
@@ -26,7 +26,62 @@ export type LoopyServer = {
     close(): Promise<void>
 }
 
+/**
+ * Starts a Loopy server and takes full ownership of the loopy instance:
+ * - handles SIGINT and SIGTERM
+ * - closes Loopy on shutdown and on startup failure
+ * - terminates the process with the received signal after cleanup
+ *
+ * @see listen
+ */
 export async function serve(loopy: Loopy = defaultLoopy(), options: ServeOptions = {}): Promise<LoopyServer> {
+    let server: LoopyServer
+    try {
+        server = await listen(loopy, options)
+    } catch (error) {
+        loopy.close()
+        throw error
+    }
+
+    const closeListener = server.close
+    const reportError = options.onError ?? reportServerError
+    let closePromise: Promise<void> | undefined
+    const removeSignalHandlers = () => {
+        process.off("SIGINT", handleSignal)
+        process.off("SIGTERM", handleSignal)
+    }
+    const close = () => {
+        closePromise ??= (async () => {
+            try {
+                await closeListener()
+            } finally {
+                removeSignalHandlers()
+                loopy.close()
+            }
+        })()
+        return closePromise
+    }
+    const handleSignal = (signal: NodeJS.Signals) => {
+        close()
+            .catch((error: unknown) => {
+                reportError(error instanceof Error ? error : new Error(String(error)))
+            })
+            .finally(() => {
+                process.kill(process.pid, signal)
+            })
+    }
+    process.once("SIGINT", handleSignal)
+    process.once("SIGTERM", handleSignal)
+    server.close = close
+    return server
+}
+
+/**
+ * Binds a Loopy server and returns a handle with no auto-cleanup or signal handling.
+ *
+ * @see serve
+ */
+export async function listen(loopy: Loopy = defaultLoopy(), options: ServeOptions = {}): Promise<LoopyServer> {
     const { host = "127.0.0.1", port = 7331, tls, onError = reportServerError } = options
 
     validateAddress(host, port, tls)
@@ -42,7 +97,7 @@ export async function serve(loopy: Loopy = defaultLoopy(), options: ServeOptions
     })
 
     const server = tls === undefined ? http.createServer(handler) : https.createServer(tls, handler)
-    await listen(server, port, host, onError)
+    await bindServer(server, port, host, onError)
 
     return createServerHandle(server, shutdown, host, tls === undefined ? "http" : "https", credentials)
 }
@@ -67,7 +122,7 @@ function createServerHandle(
         url: `${protocol}://${urlHost(host)}:${address.port}`,
         credentialsFile: credentials.file,
         close() {
-            closePromise ??= closeServer(server, shutdown)
+            closePromise ??= closeHttpServer(server, shutdown)
             return closePromise
         }
     }
@@ -110,7 +165,7 @@ function reportServerError(error: Error): void {
     console.error("Loopy server error", error)
 }
 
-function closeServer(server: http.Server | https.Server, shutdown: AbortController): Promise<void> {
+function closeHttpServer(server: http.Server | https.Server, shutdown: AbortController): Promise<void> {
     shutdown.abort(new ConnectError("Server shutting down", Code.Unavailable))
     return new Promise((resolve, reject) => {
         server.close((error) => {

@@ -5,6 +5,7 @@ packages:
     - test-utils
     - server
     - cli
+    - examples/*
 
 catalog:
     zod: ^4.4.3

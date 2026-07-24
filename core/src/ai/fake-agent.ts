@@ -61,7 +61,7 @@ export class FakeCodingAgent extends BaseCodingAgent {
             await applyChange(change, worktree.path)
             session.addMessage("tool", JSON.stringify(change))
         }
-        session.addMessage("assistant", JSON.stringify(result.output))
+        session.addMessage("assistant", JSON.stringify(result.output ?? null))
         return result.output
     }
 }

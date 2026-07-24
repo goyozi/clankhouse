@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process"
 import * as fs from "node:fs"
 import * as path from "node:path"
 import type { RequestOptions } from "node:https"
@@ -10,10 +11,10 @@ import { FakeLLM } from "@loopy/core/ai/fake-llm"
 import { GitRepository } from "@loopy/core/git"
 import type { Loopy } from "@loopy/core/loopy"
 import { ExecutionStatus, LoopyService, ReadArtifactRequestSchema, StepKind } from "@loopy/server/proto"
-import { runOutput, tempGitRepo, tempLoopy, testRun } from "@loopy/test-utils"
+import { runOutput, tempDir, tempGitRepo, tempLoopy, testRun } from "@loopy/test-utils"
 import { expect, onTestFinished, test } from "vitest"
 import * as z from "zod"
-import { serve, type LoopyServer } from "../src"
+import { listen, serve, type LoopyServer } from "../src"
 import { loopyService } from "../src/service"
 
 const fixtures = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures")
@@ -38,9 +39,19 @@ function rpcClient(server: LoopyServer, apiKey = server.apiKey, nodeOptions?: Re
 }
 
 async function testServer(loopy: Loopy): Promise<LoopyServer> {
-    const server = await serve(loopy, { port: 0 })
+    const server = await listen(loopy, { port: 0 })
     onTestFinished(() => server.close())
     return server
+}
+
+async function firstLine(stream: NodeJS.ReadableStream): Promise<string> {
+    let buffered = ""
+    for await (const chunk of stream) {
+        buffered += String(chunk)
+        const newline = buffered.indexOf("\n")
+        if (newline !== -1) return buffered.slice(0, newline)
+    }
+    throw new Error("Process ended before writing a line")
 }
 
 function json(value: unknown): string {
@@ -272,12 +283,84 @@ test("persists a private credential and authenticates unary and streaming RPCs",
     // when the server restarts over the same Loopy instance
     const apiKey = server.apiKey
     await server.close()
-    const restarted = await serve(loopy, { port: 0 })
+    const restarted = await listen(loopy, { port: 0 })
     onTestFinished(() => restarted.close())
 
     // then it reuses the credential and the underlying Loopy remains usable
     expect(restarted.apiKey).toBe(apiKey)
     expect(await loopy.runs.list()).toEqual([])
+})
+
+test("serve owns process signal handling and the Loopy lifecycle", async () => {
+    // given a fresh Loopy instance and the existing process signal listeners
+    const { loopy } = tempLoopy()
+    const existingSigint = process.listeners("SIGINT")
+    const existingSigterm = process.listeners("SIGTERM")
+
+    // when the high-level server starts
+    const server = await serve(loopy, { port: 0 })
+    onTestFinished(() => server.close())
+
+    // then it installs one handler for each termination signal and leaves Loopy usable
+    const sigintHandler = process.listeners("SIGINT").find((listener) => !existingSigint.includes(listener))
+    expect(sigintHandler).toBeDefined()
+    expect(process.listeners("SIGTERM").filter((listener) => !existingSigterm.includes(listener))).toHaveLength(1)
+    expect(loopy.closed).toBe(false)
+    expect(loopy.db.open).toBe(true)
+
+    // when close is called explicitly twice
+    await Promise.all([server.close(), server.close()])
+
+    // then transport and database cleanup happen once and both signal handlers are removed
+    expect(loopy.closed).toBe(true)
+    expect(loopy.db.open).toBe(false)
+    expect(process.listeners("SIGINT")).toEqual(existingSigint)
+    expect(process.listeners("SIGTERM")).toEqual(existingSigterm)
+})
+
+test("a served process shuts down and terminates on SIGINT while work keeps it alive", async () => {
+    // given a real server process with an active run stream and a pending timer holding its event loop open
+    const dir = tempDir("loopy-signal-")
+    const child = spawn(process.execPath, ["--import", "tsx", path.join(fixtures, "serve-signal.ts")], {
+        env: { ...process.env, LOOPY_DIR: dir },
+        stdio: ["ignore", "pipe", "pipe"]
+    })
+    onTestFinished(() => {
+        child.kill("SIGKILL")
+    })
+    const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) =>
+        child.once("exit", (code, signal) => resolve({ code, signal }))
+    )
+    const started = z
+        .object({ url: z.string(), apiKey: z.string(), runId: z.string() })
+        .parse(JSON.parse(await firstLine(child.stdout!)))
+    const client = createClient(
+        LoopyService,
+        createConnectTransport({ httpVersion: "1.1", baseUrl: started.url, interceptors: [bearer(started.apiKey)] })
+    )
+    const runStream = client.watchRun({ runId: started.runId })[Symbol.asyncIterator]()
+    await nextRunningStep(runStream, "wait:never")
+    const pending = runStream.next().catch((error: unknown) => error)
+
+    // when the process is interrupted
+    child.kill("SIGINT")
+
+    // then the active stream reports shutdown rather than a dropped connection
+    expect(await pending).toMatchObject({ code: Code.Unavailable })
+    // and the process terminates from the signal instead of outliving its closed database
+    expect(await exited).toMatchObject({ signal: "SIGINT" })
+})
+
+test("serve closes its Loopy instance when startup fails", async () => {
+    // given a fresh Loopy instance
+    const { loopy } = tempLoopy()
+
+    // when the high-level server is started with an invalid address
+    await expect(serve(loopy, { host: "", port: 0 })).rejects.toThrow(/host must not be empty/)
+
+    // then the instance it took ownership of is closed
+    expect(loopy.closed).toBe(true)
+    expect(loopy.db.open).toBe(false)
 })
 
 test("rejects malformed credential files without replacing them", async () => {
@@ -289,7 +372,7 @@ test("rejects malformed credential files without replacing them", async () => {
 
     // when starting a server
     // then startup fails without replacing the file contents
-    await expect(serve(loopy, { port: 0 })).rejects.toThrow(/malformed/)
+    await expect(listen(loopy, { port: 0 })).rejects.toThrow(/malformed/)
     expect(fs.readFileSync(credentialsFile, "utf8")).toBe("not-json")
     // and the credential file is still restricted to its owner
     expect(fs.statSync(credentialsFile).mode & 0o777).toBe(0o600)
@@ -316,7 +399,7 @@ test("resumes an interrupted run through a restarted server", async () => {
     // when a new Loopy instance and server resume the persisted run
     const second = reopen()
     register(second)
-    const secondServer = await serve(second, { port: 0 })
+    const secondServer = await listen(second, { port: 0 })
     onTestFinished(() => secondServer.close())
     const secondClient = rpcClient(secondServer)
     const resumed = await secondClient.resumeRun({ runId: started.runId })
@@ -341,10 +424,10 @@ test("requires TLS for public binds and serves a real HTTPS Connect request", as
 
     // when binding publicly without TLS
     // then startup is rejected before listening
-    await expect(serve(loopy, { host: "0.0.0.0", port: 0 })).rejects.toThrow(/TLS is required/)
+    await expect(listen(loopy, { host: "0.0.0.0", port: 0 })).rejects.toThrow(/TLS is required/)
 
     // when binding publicly with a valid certificate
-    const server = await serve(loopy, { host: "0.0.0.0", port: 0, tls: { key, cert } })
+    const server = await listen(loopy, { host: "0.0.0.0", port: 0, tls: { key, cert } })
     onTestFinished(() => server.close())
     const client = rpcClient({ ...server, url: `https://127.0.0.1:${server.port}` }, server.apiKey, { ca: cert })
 
@@ -617,7 +700,7 @@ test("closing a server rejects active streams without closing Loopy", async () =
             }
         })
     })
-    const server = await serve(loopy, { port: 0 })
+    const server = await listen(loopy, { port: 0 })
     onTestFinished(() => server.close())
     const client = rpcClient(server)
     const started = await client.startRun({ workflowName: "waiting", inputJson: "null" })

@@ -53,6 +53,34 @@ test("FakeCodingAgent applies changes and snapshots the worktree", async () => {
     expect(session.messages.at(-1)!.content).toBe(JSON.stringify({ done: true }))
 })
 
+test("FakeCodingAgent records a void output as JSON", async () => {
+    // given a fake coding agent that edits a file and returns no output
+    const { loopy } = tempLoopy()
+    const repo = await tempGitRepo()
+    const repository = new GitRepository(repo.path)
+    const agent = new FakeCodingAgent(() => ({
+        changes: [{ file: "src/hello.ts", text: "export const hi = 1\n" }],
+        output: undefined
+    }))
+
+    // when the agent runs inside a durable step with a void output schema
+    let result: unknown = "unset"
+    await testRun(loopy, async () => {
+        const worktree = await repository.worktree({ base: "main" })
+        result = await agent.run("implement", { prompt: "do it", output: z.void(), worktree })
+        return null
+    })
+
+    // then the step returns nothing
+    expect(result).toBeUndefined()
+    // and the final assistant message is parseable JSON rather than an empty string
+    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const step = run.steps[0]
+    if (step.kind !== "agent") throw new Error("unreachable")
+    const content = (await loopy.sessions.get(step.sessionId!)).messages.at(-1)!.content
+    expect(JSON.parse(content)).toBeNull()
+})
+
 test("agent step replay restores the worktree snapshot", async () => {
     // given a fake coding agent that counts invocations and edits one file
     const { loopy } = tempLoopy()

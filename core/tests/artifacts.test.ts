@@ -168,6 +168,8 @@ test("reading an artifact with a missing backing file throws a coded error", asy
     const text = loopy.artifacts.readText(artifact.id)
 
     // then both reject with the artifact not found code
-    await expect(content).rejects.toMatchObject({ code: "artifact_not_found" })
-    await expect(text).rejects.toMatchObject({ code: "artifact_not_found" })
+    await Promise.all([
+        expect(content).rejects.toMatchObject({ code: "artifact_not_found" }),
+        expect(text).rejects.toMatchObject({ code: "artifact_not_found" })
+    ])
 })
