@@ -4,6 +4,7 @@ packages:
     - codex
     - test-utils
     - server
+    - cli
 
 catalog:
     zod: ^4.4.3

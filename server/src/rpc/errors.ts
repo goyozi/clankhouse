@@ -21,6 +21,12 @@ export function notFound(kind: string, id: string): ConnectError {
     return new ConnectError(`${kind} not found: ${id}`, Code.NotFound)
 }
 
+export function throwIfAborted(signal: AbortSignal): void {
+    if (!signal.aborted) return
+    if (signal.reason instanceof ConnectError) throw signal.reason
+    throw new ConnectError("Request canceled", Code.Canceled, undefined, undefined, signal.reason)
+}
+
 export function toConnectError(error: unknown, mappings: ErrorMappings = {}): ConnectError {
     if (error instanceof ConnectError) return error
     if (error instanceof DOMException && error.name === "AbortError") {

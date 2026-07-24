@@ -1,7 +1,7 @@
 import { Code, ConnectError } from "@connectrpc/connect"
 import type { Loopy } from "@loopy/core/loopy"
 import { toSession, toSessionMessage } from "../mappers"
-import { notFound, required, toConnectError } from "./errors"
+import { notFound, required, throwIfAborted, toConnectError } from "./errors"
 import type { LoopyServiceImplementation } from "./types"
 
 type SessionHandlers = Pick<LoopyServiceImplementation, "getSession" | "watchSession">
@@ -27,6 +27,7 @@ export function sessionHandlers(loopy: Loopy): SessionHandlers {
                 })) {
                     yield { message: toSessionMessage(message) }
                 }
+                throwIfAborted(context.signal)
             } catch (error) {
                 throw toConnectError(error, {
                     ai_session_not_found: () => notFound("AI session", request.sessionId),

@@ -596,31 +596,52 @@ test("does not classify an ordinary error from message text", async () => {
     })
 })
 
-test("closing a server terminates active watches without closing Loopy", async () => {
-    // given a live run and an active Connect watch
+test("closing a server rejects active streams without closing Loopy", async () => {
+    // given a live run, session, artifact and active Connect streams
     const { loopy } = tempLoopy()
     loopy.registerWorkflow(
         "waiting",
         { input: z.null(), output: z.number(), key: () => "waiting" },
         async () => (await loopy.waitFor("never", z.object({ value: z.number() }))).value
     )
+    const recorder = loopy.sessions.create({ kind: "llm", provider: "fake", model: "fake" })
+    recorder.addMessage("assistant", "working")
+    let artifactCanceled = false
+    loopy.artifacts.read = async () => ({
+        stream: new ReadableStream<Uint8Array>({
+            start(controller) {
+                controller.enqueue(new Uint8Array([1]))
+            },
+            cancel() {
+                artifactCanceled = true
+            }
+        })
+    })
     const server = await serve(loopy, { port: 0 })
     onTestFinished(() => server.close())
     const client = rpcClient(server)
     const started = await client.startRun({ workflowName: "waiting", inputJson: "null" })
-    const watch = client.watchRun({ runId: started.runId })[Symbol.asyncIterator]()
-    await nextRunningStep(watch, "wait:never")
-    const pending = watch.next()
-
-    // when close is called twice while the stream is pending
-    await Promise.all([server.close(), server.close()])
-    const outcome = await pending.then(
-        (value) => value,
-        (error: unknown) => error
+    const runStream = client.watchRun({ runId: started.runId })[Symbol.asyncIterator]()
+    await nextRunningStep(runStream, "wait:never")
+    const sessionStream = client.watchSession({ sessionId: recorder.id })[Symbol.asyncIterator]()
+    await sessionStream.next()
+    const artifactStream = client.readArtifact({ artifactId: "artifact" })[Symbol.asyncIterator]()
+    await artifactStream.next()
+    const pending = [runStream.next(), sessionStream.next(), artifactStream.next()].map((result) =>
+        result.catch((error: unknown) => error)
     )
 
-    // then the watch terminates and the supplied Loopy database remains open
-    if (outcome instanceof ConnectError) expect([Code.Canceled, Code.Unavailable]).toContain(outcome.code)
-    else expect(outcome).toMatchObject({ done: true })
+    // when close is called twice while the streams are pending
+    await Promise.all([server.close(), server.close()])
+    const outcomes = await Promise.all(pending)
+
+    // then every stream reports shutdown and the supplied Loopy database remains open
+    expect(outcomes).toHaveLength(3)
+    for (const outcome of outcomes) {
+        expect(outcome).toBeInstanceOf(ConnectError)
+        expect(outcome).toMatchObject({ code: Code.Unavailable })
+    }
+    expect(artifactCanceled).toBe(true)
     expect((await loopy.runs.get(started.runId)).status).toBe("running")
+    expect((await loopy.sessions.get(recorder.id)).status).toBe("running")
 })

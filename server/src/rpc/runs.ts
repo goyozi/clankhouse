@@ -3,7 +3,7 @@ import type { Loopy } from "@loopy/core/loopy"
 import type { ListWorkflowOptions, ObservableRunStatus } from "@loopy/core/runs"
 import { ExecutionStatus, type ListRunsRequest } from "../gen/loopy/server/v1/server_pb"
 import { toRunMetadata, toStep, toWorkflowRun } from "../mappers"
-import { notFound, required, toConnectError } from "./errors"
+import { notFound, required, throwIfAborted, toConnectError } from "./errors"
 import type { LoopyServiceImplementation } from "./types"
 
 type RunHandlers = Pick<LoopyServiceImplementation, "listRuns" | "getRun" | "watchRun" | "resumeRun" | "rerunRun">
@@ -38,6 +38,7 @@ export function runHandlers(loopy: Loopy): RunHandlers {
                     if ("kind" in item) yield { item: { case: "step", value: toStep(item) } }
                     else yield { item: { case: "run", value: toRunMetadata(item) } }
                 }
+                throwIfAborted(context.signal)
             } catch (error) {
                 throw toConnectError(error, {
                     workflow_run_not_found: () => notFound("Workflow run", request.runId),
