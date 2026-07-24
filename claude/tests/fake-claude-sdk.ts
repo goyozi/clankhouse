@@ -8,7 +8,7 @@ import type {
     SDKSystemMessage,
     SDKUserMessage
 } from "@anthropic-ai/claude-agent-sdk"
-import type { QueryFunction } from "@loopy/claude/ai/claude-agent"
+import type { QueryFunction } from "@loopy/claude"
 import { applyChange, type FakeChange } from "@loopy/core/ai/fake-agent"
 import { taggedOutput } from "@loopy/test-utils"
 

@@ -2,7 +2,7 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { CodexAgent } from "@loopy/codex/ai/codex-agent"
+import { CodexAgent } from "@loopy/codex"
 import { GitRepository, Worktree } from "@loopy/core/git"
 import { uniqueName } from "@loopy/core/util"
 import {

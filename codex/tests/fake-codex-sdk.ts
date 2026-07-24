@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import type { CodexOptions, Input, ThreadEvent, ThreadItem, ThreadOptions, TurnOptions } from "@openai/codex-sdk"
-import type { CodexFactory } from "@loopy/codex/ai/codex-agent"
+import type { CodexFactory } from "@loopy/codex"
 import { applyChange, type FakeChange } from "@loopy/core/ai/fake-agent"
 import { taggedOutput } from "@loopy/test-utils"
 
