@@ -187,16 +187,18 @@ test("caches role-independent schemas and issues per schema and direction", () =
     expect(() => jsonSchema({ schema: invalid, io: "output", role: "Second issue" })).toThrow(/Second issue/)
 })
 
-test("allows void only for an explicitly permitted top-level output", () => {
+test("allows void only where top-level absence is explicitly permitted", () => {
     // given a top-level void schema
     const schema = z.void()
 
-    // when it is used for an allowed output contract
-    const generated = jsonSchema({ schema, io: "output", role: "Void output", allowTopLevelVoid: true })
+    // when it is used for allowed input and output contracts
+    const inputGenerated = jsonSchema({ schema, io: "input", role: "Void input", allowTopLevelVoid: true })
+    const outputGenerated = jsonSchema({ schema, io: "output", role: "Void output", allowTopLevelVoid: true })
 
     // then metadata is omitted
-    expect(generated).toBeUndefined()
-    // and the same schema is rejected at input and nested output positions
+    expect(inputGenerated).toBeUndefined()
+    expect(outputGenerated).toBeUndefined()
+    // and the same schema is rejected without explicit permission and at nested positions
     expect(() => jsonSchema({ schema, io: "input", role: "Void input" })).toThrow(
         expect.objectContaining({ code: "schema_not_json_compatible" })
     )
@@ -207,7 +209,7 @@ test("allows void only for an explicitly permitted top-level output", () => {
             role: "Nested void",
             allowTopLevelVoid: true
         })
-    ).toThrow(/Nested void.*value.*top-level output/)
+    ).toThrow(/Nested void.*value.*top-level absence/)
 })
 
 test("accepted input values retain their parsed meaning across JSON round trips", () => {

@@ -9,7 +9,7 @@ const workflow = createHelloWorldWorkflow(new CodexAgent({ model: "gpt-5.6-luna"
 registerWorkflow(
     "hello-world",
     {
-        input: z.null(),
+        input: z.void(),
         output: z.string(),
         key: () => randomUUID()
     },

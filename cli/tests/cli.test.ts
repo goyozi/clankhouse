@@ -25,7 +25,7 @@ import {
     WatchSessionResponseSchema
 } from "@loopy/server/proto"
 import { listen, type LoopyServer } from "@loopy/server"
-import { gate, tempDir, tempGitRepo, tempLoopy, testRun, waitForRun } from "@loopy/test-utils"
+import { gate, runOutput, tempDir, tempGitRepo, tempLoopy, testRun, waitForRun } from "@loopy/test-utils"
 import { expect, onTestFinished, test } from "vitest"
 import * as z from "zod"
 import { runCli } from "../src"
@@ -335,6 +335,45 @@ test("drives FakeLLM and FakeCodingAgent workflows through the complete CLI surf
     expect(rerunWatch.code).toBe(0)
     expect(await loopy.runs.get(rerun.runId)).toMatchObject({ attempt: 2, output: { published: "v2" } })
     expect({ llmCalls, agentCalls }).toEqual({ llmCalls: 1, agentCalls: 1 })
+})
+
+test("starts void-input workflows without an input file", async () => {
+    // given workflows with void and required inputs
+    const { loopy } = tempLoopy()
+    loopy.registerWorkflow(
+        "void-input",
+        { input: z.void(), output: z.string(), key: () => "void-input" },
+        async () => "done"
+    )
+    loopy.registerWorkflow(
+        "required-input",
+        { input: z.string(), output: z.void(), key: (input) => input },
+        async () => undefined
+    )
+    const server = await testServer(loopy)
+    const env = serverEnv(server)
+
+    // when both workflows are inspected and started without --input
+    const workflow = await runCliCommand(["workflows", "get", "void-input"], { env })
+    const voidOutputWorkflow = await runCliCommand(["workflows", "get", "required-input"], { env })
+    const startedResult = await runCliCommand(["runs", "start", "void-input", "--json"], { env })
+    const started = fromJsonString(StartRunResponseSchema, lines(startedResult.stdout)[0]!)
+    const output = await runOutput(loopy, started.runId)
+    const rejected = await runCliCommand(["runs", "start", "required-input", "--json"], { env })
+
+    // then the void workflow advertises and accepts absent input
+    expect(workflow.stdout.toString()).toContain("Input: none")
+    expect(startedResult.code).toBe(0)
+    expect(output).toBe("done")
+    // and an absent output schema is reported the same way as an absent input schema
+    expect(voidOutputWorkflow.stdout.toString()).toContain("Output: none")
+    // and a normal workflow rejects absent input with the reason the schema gave
+    expect(rejected.code).toBe(1)
+    expect(JSON.parse(rejected.stderr)).toMatchObject({
+        type: "error",
+        code: "invalid_argument",
+        message: "Workflow input is invalid: Invalid input: expected string, received undefined"
+    })
 })
 
 test("get --watch prints snapshots around live updates without duplicating included session history", async () => {

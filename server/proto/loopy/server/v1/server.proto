@@ -64,7 +64,7 @@ message WorkflowSummary {
 
 message WorkflowDefinition {
   string name = 1;
-  string input_schema_json = 2;
+  optional string input_schema_json = 2;
   optional string output_schema_json = 3;
 }
 

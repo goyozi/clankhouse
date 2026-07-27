@@ -37,7 +37,7 @@ export function registerWorkflow<I extends z.ZodTypeAny, O extends z.ZodTypeAny>
     loopy().registerWorkflow(name, options, workflowFn)
 }
 
-export function start(name: string, input: any): string {
+export function start(name: string, input?: any): string {
     return loopy().start(name, input)
 }
 

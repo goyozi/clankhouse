@@ -48,7 +48,7 @@ const unsupportedDefinitions = new Map<string, readonly [string, string]>([
     ["set", ["z.set()", "use z.array()"]],
     ["nan", ["z.nan()", "use a finite number or null sentinel"]],
     ["undefined", ["z.undefined()", "omit an optional object property or use z.null()"]],
-    ["void", ["z.void()", "use it only as a top-level output schema"]]
+    ["void", ["z.void()", "use it only where top-level absence is explicitly supported"]]
 ])
 const nonJsonTypes = new Set(["symbol", "file", "function", "promise", "custom"])
 const permissiveTypes = new Set(["catch", "success"])

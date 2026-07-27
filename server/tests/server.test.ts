@@ -62,6 +62,33 @@ function native(value: string | undefined): unknown {
     return value === undefined ? undefined : JSON.parse(value)
 }
 
+function registerApproval(instance: Loopy, value: z.ZodTypeAny): void {
+    instance.registerWorkflow(
+        "approval",
+        { input: z.object({ id: z.string(), value }), output: z.number(), key: (input) => input.id },
+        async (input) => {
+            await instance.step("record", z.number(), async () => 1)
+            return (await instance.waitFor(`approve:${input.id}`, z.object({ value: z.number() }))).value
+        }
+    )
+}
+
+async function reopenWithIncompatibleInput(
+    reopen: () => Loopy
+): Promise<{ loopy: Loopy; client: ReturnType<typeof rpcClient> }> {
+    const second = reopen()
+    registerApproval(second, z.string())
+    const server = await listen(second, { port: 0 })
+    onTestFinished(() => server.close())
+    return { loopy: second, client: rpcClient(server) }
+}
+
+function incompatibleInputOutcome(outcome: unknown): string {
+    expect(outcome).toBeInstanceOf(ConnectError)
+    expect(outcome).toMatchObject({ code: Code.FailedPrecondition })
+    return (outcome as ConnectError).rawMessage
+}
+
 async function nextRunningStep(
     iterator: AsyncIterator<{ item: { case: "step" | "run" | undefined; value?: unknown } }>,
     key: string
@@ -213,10 +240,10 @@ test("serves a FakeLLM and FakeCodingAgent workflow through the complete RPC sur
     expect({ llmCalls, agentCalls }).toEqual({ llmCalls: 1, agentCalls: 1 })
 })
 
-test("distinguishes absent void values from present JSON null across protobuf", async () => {
-    // given void and null workflows with matching durable steps
+test("distinguishes absent void schemas and values from present JSON null across protobuf", async () => {
+    // given void and null workflows with matching input, output, and durable step schemas
     const { loopy } = tempLoopy()
-    loopy.registerWorkflow("void-output", { input: z.null(), output: z.void(), key: () => "void" }, async () =>
+    loopy.registerWorkflow("void-output", { input: z.void(), output: z.void(), key: () => "void" }, async () =>
         loopy.step("void-step", z.void(), async () => undefined)
     )
     loopy.registerWorkflow("null-output", { input: z.null(), output: z.null(), key: () => "null" }, async () =>
@@ -228,16 +255,18 @@ test("distinguishes absent void values from present JSON null across protobuf", 
     // when their schemas and completed runs are read through protobuf
     const voidDefinition = (await client.getWorkflow({ name: "void-output" })).workflow!
     const nullDefinition = (await client.getWorkflow({ name: "null-output" })).workflow!
-    const voidId = (await client.startRun({ workflowName: "void-output", inputJson: "null" })).runId
+    const voidId = (await client.startRun({ workflowName: "void-output" })).runId
     const nullId = (await client.startRun({ workflowName: "null-output", inputJson: "null" })).runId
     await Promise.all([runOutput(loopy, voidId), runOutput(loopy, nullId)])
     const voidRun = (await client.getRun({ runId: voidId })).run!
     const nullRun = (await client.getRun({ runId: nullId })).run!
 
-    // then void omits its output schema and values while JSON null remains present as exact text
+    // then void omits its input and output schemas and values while JSON null remains present as exact text
+    expect(voidDefinition.inputSchemaJson).toBeUndefined()
     expect(voidDefinition.outputSchemaJson).toBeUndefined()
+    expect(nullDefinition.inputSchemaJson).toBeDefined()
     expect(nullDefinition.outputSchemaJson).toBeDefined()
-    expect(native(voidDefinition.inputSchemaJson)).not.toHaveProperty("$schema")
+    expect(native(nullDefinition.inputSchemaJson)).not.toHaveProperty("$schema")
     expect(native(nullDefinition.outputSchemaJson)).not.toHaveProperty("$schema")
     expect(voidRun.outputJson).toBeUndefined()
     expect(voidRun.steps[0].outputJson).toBeUndefined()
@@ -414,6 +443,77 @@ test("resumes an interrupted run through a restarted server", async () => {
     expect(resumed.runId).toBe(started.runId)
     expect(secondServer.apiKey).toBe(apiKey)
     expect(await runOutput(second, resumed.runId)).toBe(9)
+})
+
+test("startRun reports input persisted under an incompatible schema as a failed precondition", async () => {
+    // given an interrupted run persisted under a numeric input schema
+    const { loopy, reopen } = tempLoopy()
+    registerApproval(loopy, z.number())
+    const firstServer = await testServer(loopy)
+    const firstClient = rpcClient(firstServer)
+    const started = await firstClient.startRun({ workflowName: "approval", inputJson: json({ id: "a", value: 1 }) })
+    await nextRunningStep(firstClient.watchRun({ runId: started.runId })[Symbol.asyncIterator](), "wait:approve:a")
+    await firstServer.close()
+
+    // when the workflow is re-registered with a string-valued schema and started again with matching input
+    const { client } = await reopenWithIncompatibleInput(reopen)
+    const outcome = await client
+        .startRun({ workflowName: "approval", inputJson: json({ id: "a", value: "1" }) })
+        .catch((error: unknown) => error)
+
+    // then the persisted input is named as the failed precondition
+    const message = incompatibleInputOutcome(outcome)
+    expect(message).toContain('input no longer matches the input schema of workflow "approval"')
+    // and the caller's own valid input is not blamed for the stored mismatch
+    expect(message).not.toContain("Workflow input is invalid")
+})
+
+test("resumeRun reports input persisted under an incompatible schema as a failed precondition", async () => {
+    // given an interrupted run persisted under a numeric input schema
+    const { loopy, reopen } = tempLoopy()
+    registerApproval(loopy, z.number())
+    const firstServer = await testServer(loopy)
+    const firstClient = rpcClient(firstServer)
+    const started = await firstClient.startRun({ workflowName: "approval", inputJson: json({ id: "a", value: 1 }) })
+    await nextRunningStep(firstClient.watchRun({ runId: started.runId })[Symbol.asyncIterator](), "wait:approve:a")
+    await firstServer.close()
+
+    // when the workflow is re-registered with a string-valued schema and the run is resumed
+    const { loopy: second, client } = await reopenWithIncompatibleInput(reopen)
+    const outcome = await client.resumeRun({ runId: started.runId }).catch((error: unknown) => error)
+
+    // then the persisted input is named as the failed precondition
+    expect(incompatibleInputOutcome(outcome)).toContain(
+        `Run "${started.runId}" input no longer matches the input schema of workflow "approval"`
+    )
+    // and the attempt is left untouched rather than being dispatched
+    expect(await second.runs.get(started.runId)).toMatchObject({ status: "interrupted", attempt: 1 })
+})
+
+test("rerunRun reports input persisted under an incompatible schema as a failed precondition", async () => {
+    // given a succeeded run persisted under a numeric input schema
+    const { loopy, reopen } = tempLoopy()
+    registerApproval(loopy, z.number())
+    const firstServer = await testServer(loopy)
+    const firstClient = rpcClient(firstServer)
+    const started = await firstClient.startRun({ workflowName: "approval", inputJson: json({ id: "a", value: 1 }) })
+    await nextRunningStep(firstClient.watchRun({ runId: started.runId })[Symbol.asyncIterator](), "wait:approve:a")
+    await firstClient.emitEvent({ key: "approve:a", inputJson: json({ value: 7 }) })
+    await runOutput(loopy, started.runId)
+    await firstServer.close()
+
+    // when the workflow is re-registered with a string-valued schema and the run is rerun from its first step
+    const { loopy: second, client } = await reopenWithIncompatibleInput(reopen)
+    const outcome = await client
+        .rerunRun({ runId: started.runId, fromStepKey: "record" })
+        .catch((error: unknown) => error)
+
+    // then the persisted input is named as the failed precondition
+    expect(incompatibleInputOutcome(outcome)).toContain(
+        `Run "${started.runId}" input no longer matches the input schema of workflow "approval"`
+    )
+    // and no further attempt is recorded
+    expect(await second.runs.list({ workflowName: "approval" })).toHaveLength(1)
 })
 
 test("requires TLS for public binds and serves a real HTTPS Connect request", async () => {

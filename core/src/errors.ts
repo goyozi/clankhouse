@@ -1,6 +1,9 @@
+import type * as z from "zod"
+
 export type LoopyErrorCode =
     | "workflow_already_registered"
     | "workflow_not_registered"
+    | "workflow_input_incompatible"
     | "schema_not_json_compatible"
     | "workflow_run_not_found"
     | "workflow_run_failed"
@@ -31,4 +34,13 @@ export class LoopyError extends Error {
         this.name = "LoopyError"
         this.code = code
     }
+}
+
+export function formatZodError(error: z.ZodError): string {
+    return error.issues
+        .map((issue) => {
+            const path = issue.path.join(".")
+            return path.length === 0 ? issue.message : `${path}: ${issue.message}`
+        })
+        .join("; ")
 }

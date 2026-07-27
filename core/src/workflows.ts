@@ -5,7 +5,7 @@ import type { ActiveSets } from "./runtime"
 import * as sql from "./db"
 import type { Db, RunRow, StepRow } from "./db"
 import type { Artifacts } from "./artifacts"
-import { LoopyError } from "./errors"
+import { formatZodError, LoopyError } from "./errors"
 import { jsonSchema } from "./json-schema"
 import { newId, nowIso } from "./util"
 
@@ -36,8 +36,9 @@ export class Workflows {
         const inputSchema = jsonSchema({
             schema: options.input,
             io: "input",
-            role: `Workflow "${name}" input schema`
-        })!
+            role: `Workflow "${name}" input schema`,
+            allowTopLevelVoid: true
+        })
         const outputSchema = jsonSchema({
             schema: options.output,
             io: "output",
@@ -55,12 +56,12 @@ export class Workflows {
         const registered = this.requireRegistered(name)
         return {
             name,
-            inputSchema: registered.inputSchema,
+            ...(registered.inputSchema !== undefined ? { inputSchema: registered.inputSchema } : {}),
             ...(registered.outputSchema !== undefined ? { outputSchema: registered.outputSchema } : {})
         }
     }
 
-    start(name: string, input: any): string {
+    start(name: string, input?: any): string {
         const registered = this.requireRegistered(name)
         const parsed = registered.options.input.parse(input)
         const inputJson = JSON.stringify(input)
@@ -126,7 +127,16 @@ export class Workflows {
     }
 
     private parseStoredInput(registered: RegisteredWorkflow, runRow: RunRow): any {
-        return registered.options.input.parse(this.storedInput(runRow))
+        try {
+            return registered.options.input.parse(this.storedInput(runRow))
+        } catch (error) {
+            if (!(error instanceof z.ZodError)) throw error
+            throw new LoopyError(
+                "workflow_input_incompatible",
+                `Run "${runRow.id}" input no longer matches the input schema of workflow "${runRow.workflow_name}": ${formatZodError(error)}`,
+                { cause: error }
+            )
+        }
     }
 
     private storedInput(runRow: RunRow): unknown {
@@ -244,7 +254,7 @@ export class Workflows {
 type RegisteredWorkflow = {
     options: { input: z.ZodTypeAny; output: z.ZodTypeAny; key: (input: any) => string }
     fn: (input: any) => Promise<any>
-    inputSchema: z.core.JSONSchema.JSONSchema
+    inputSchema?: z.core.JSONSchema.JSONSchema
     outputSchema?: z.core.JSONSchema.JSONSchema
 }
 
@@ -259,7 +269,7 @@ export type RerunOptions = { from: string }
 export type WorkflowSummary = { name: string }
 
 export type WorkflowDefinition = WorkflowSummary & {
-    inputSchema: z.core.JSONSchema.JSONSchema
+    inputSchema?: z.core.JSONSchema.JSONSchema
     outputSchema?: z.core.JSONSchema.JSONSchema
 }
 

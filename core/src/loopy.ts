@@ -62,7 +62,7 @@ export class Loopy {
      * Starts a workflow run for a registered workflow and returns its ID after dispatching it.
      * Existing interrupted runs resume with their persisted input. Running and succeeded runs are no-ops.
      */
-    start(name: string, input: any): string {
+    start(name: string, input?: any): string {
         return this.workflows.start(name, input)
     }
 

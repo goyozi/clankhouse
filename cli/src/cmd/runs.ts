@@ -53,11 +53,20 @@ export function registerRuns(program: Command, runtime: Runtime): void {
     runs.command("start")
         .description("Start a workflow run")
         .argument("<workflow-name>")
-        .requiredOption("--input <file|->", "JSON input file, or - for stdin")
-        .action(async (workflowName: string, options: { input: string }, command: Command) => {
-            const inputJson = await readJsonInput(options.input, runtime.cwd, runtime.stdin, runtime.signal)
+        .option("--input <file|->", "JSON input file, or - for stdin")
+        .action(async (workflowName: string, options: { input?: string }, command: Command) => {
+            const inputJson =
+                options.input === undefined
+                    ? undefined
+                    : await readJsonInput(options.input, runtime.cwd, runtime.stdin, runtime.signal)
             const client = await runtime.client(command)
-            const response = await client.startRun({ workflowName, inputJson }, { signal: runtime.signal })
+            const response = await client.startRun(
+                {
+                    workflowName,
+                    ...(inputJson !== undefined ? { inputJson } : {})
+                },
+                { signal: runtime.signal }
+            )
             await runtime.emit(command, StartRunResponseSchema, response, () => `${response.runId}\n`)
         })
     runs.command("list")

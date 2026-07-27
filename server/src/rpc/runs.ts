@@ -56,7 +56,8 @@ export function runHandlers(loopy: Loopy): RunHandlers {
                     workflow_run_not_found: () => notFound("Workflow run", request.runId),
                     workflow_run_not_resumable: Code.FailedPrecondition,
                     workflow_run_not_latest: Code.FailedPrecondition,
-                    workflow_not_registered: Code.FailedPrecondition
+                    workflow_not_registered: Code.FailedPrecondition,
+                    workflow_input_incompatible: Code.FailedPrecondition
                 })
             }
         },
@@ -72,7 +73,8 @@ export function runHandlers(loopy: Loopy): RunHandlers {
                         new ConnectError("from_step_key does not identify a step in the run", Code.InvalidArgument),
                     workflow_run_in_progress: Code.FailedPrecondition,
                     workflow_run_not_latest: Code.FailedPrecondition,
-                    workflow_not_registered: Code.FailedPrecondition
+                    workflow_not_registered: Code.FailedPrecondition,
+                    workflow_input_incompatible: Code.FailedPrecondition
                 })
             }
         }

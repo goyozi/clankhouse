@@ -19,7 +19,6 @@ pnpm --filter @loopy/example-hello-world start
 Start and watch a run:
 
 ```sh
-printf 'null\n' > /tmp/loopy-hello-world-input.json
-RUN_ID=$(loopy runs start hello-world --input /tmp/loopy-hello-world-input.json)
+RUN_ID=$(loopy runs start hello-world)
 loopy runs get $RUN_ID --watch --include sessions
 ```

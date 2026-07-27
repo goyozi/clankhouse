@@ -1,4 +1,5 @@
 import { Code, ConnectError } from "@connectrpc/connect"
+import { formatZodError } from "@loopy/core/errors"
 import type { Loopy } from "@loopy/core/loopy"
 import * as z from "zod"
 import { notFound, parseJson, required, toConnectError } from "./errors"
@@ -18,7 +19,9 @@ export function workflowHandlers(loopy: Loopy): WorkflowHandlers {
                 return {
                     workflow: {
                         name: workflow.name,
-                        inputSchemaJson: JSON.stringify(workflow.inputSchema),
+                        ...(workflow.inputSchema !== undefined
+                            ? { inputSchemaJson: JSON.stringify(workflow.inputSchema) }
+                            : {}),
                         ...(workflow.outputSchema !== undefined
                             ? { outputSchemaJson: JSON.stringify(workflow.outputSchema) }
                             : {})
@@ -36,11 +39,18 @@ export function workflowHandlers(loopy: Loopy): WorkflowHandlers {
                 return { runId: loopy.start(request.workflowName, parseJson(request.inputJson, "input_json")) }
             } catch (error) {
                 if (error instanceof z.ZodError) {
-                    throw new ConnectError("Workflow input is invalid", Code.InvalidArgument)
+                    throw new ConnectError(
+                        `Workflow input is invalid: ${formatZodError(error)}`,
+                        Code.InvalidArgument,
+                        undefined,
+                        undefined,
+                        error
+                    )
                 }
                 throw toConnectError(error, {
                     workflow_not_registered: () => notFound("Workflow", request.workflowName),
-                    workflow_run_failed: Code.FailedPrecondition
+                    workflow_run_failed: Code.FailedPrecondition,
+                    workflow_input_incompatible: Code.FailedPrecondition
                 })
             }
         }

@@ -41,6 +41,33 @@ test("start validates input against the input schema", async () => {
     expect(await loopy.runs.list()).toHaveLength(0)
 })
 
+test("starts and reruns a workflow with omitted void input", async () => {
+    // given a workflow with a top-level void input
+    const { loopy } = tempLoopy()
+    const seen: unknown[] = []
+    loopy.registerWorkflow(
+        "void-input",
+        { input: z.void(), output: z.string(), key: () => "void-input" },
+        async (input) => {
+            seen.push(input)
+            return loopy.step("record", z.string(), async () => "done")
+        }
+    )
+
+    // when it is started without input and rerun from its durable step
+    const firstRunId = loopy.start("void-input")
+    await runOutput(loopy, firstRunId)
+    const secondRunId = loopy.rerun(firstRunId, { from: "record" })
+    await runOutput(loopy, secondRunId)
+
+    // then absence is preserved through registration, persistence, and replay
+    expect(seen).toEqual([undefined, undefined])
+    expect(loopy.workflows.get("void-input")).not.toHaveProperty("inputSchema")
+    expect(
+        loopy.db.prepare("SELECT input FROM runs WHERE workflow_name = ? ORDER BY attempt").all("void-input")
+    ).toEqual([{ input: null }, { input: null }])
+})
+
 test("start returns before the run finishes", async () => {
     // given a workflow that parks on a gate before completing
     const { loopy } = tempLoopy()
@@ -223,7 +250,12 @@ test("resume validates persisted input before dispatching the workflow", async (
 
     // when the interrupted run is resumed
     // then persisted input validation rejects before the workflow is dispatched
-    expect(() => second.resume(runId)).toThrow()
+    expect(() => second.resume(runId)).toThrow(
+        expect.objectContaining({
+            code: "workflow_input_incompatible",
+            message: `Run "${runId}" input no longer matches the input schema of workflow "double": value: Invalid input: expected string, received number`
+        })
+    )
     expect(workflowCalls).toBe(0)
     // and the original attempt remains interrupted
     expect((await second.runs.get(runId)).status).toBe("interrupted")

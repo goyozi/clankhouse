@@ -28,7 +28,7 @@ test("creates a distinct Git repository containing the fake agent implementation
     loopy.registerWorkflow(
         "hello-world",
         {
-            input: z.null(),
+            input: z.void(),
             output: z.string(),
             key: () => randomUUID()
         },
@@ -36,8 +36,8 @@ test("creates a distinct Git repository containing the fake agent implementation
     )
 
     // when the workflow is run twice
-    const firstRunId = loopy.start("hello-world", null)
-    const secondRunId = loopy.start("hello-world", null)
+    const firstRunId = loopy.start("hello-world")
+    const secondRunId = loopy.start("hello-world")
     directories.push(
         z.string().parse(await runOutput(loopy, firstRunId)),
         z.string().parse(await runOutput(loopy, secondRunId))
