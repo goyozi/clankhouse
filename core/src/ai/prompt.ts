@@ -1,15 +1,21 @@
 import { readFile, stat } from "node:fs/promises"
 import * as path from "node:path"
+import { fileURLToPath } from "node:url"
 import Handlebars from "handlebars"
 import { exists } from "../util"
 
 /**
- * Prompt may be passed directly as a string or read from a file.
- * Relative file paths are resolved against the project root
- * (the nearest directory containing package.json, starting from the working directory).
+ * Prompt can be passed directly or read from a file.
+ *
+ * Relative file paths are resolved against:
+ * - the nearest parent containing package.json, starting from the working directory
+ * - current working directory if parent containing package.json is not found
+ *
  * If vars is provided, the file is rendered as a Handlebars template.
+ *
+ * File URLs allow templates to be part of npm packages: `file: new URL(path, import.meta.url)`
  */
-export type Prompt = string | { file: string; vars?: any }
+export type Prompt = string | { file: string | URL; vars?: any }
 
 type CachedTemplate = {
     mtimeMs: number
@@ -22,7 +28,12 @@ const projectRoots = new Map<string, string>()
 
 export async function renderPrompt(prompt: Prompt): Promise<string> {
     if (typeof prompt === "string") return prompt
-    const file = path.isAbsolute(prompt.file) ? prompt.file : path.join(await projectRoot(), prompt.file)
+    const file =
+        prompt.file instanceof URL
+            ? fileURLToPath(prompt.file)
+            : path.isAbsolute(prompt.file)
+              ? prompt.file
+              : path.join(await projectRoot(), prompt.file)
     const cached = await loadTemplate(file)
     if (prompt.vars === undefined) return cached.content
     cached.compiled ??= Handlebars.compile(cached.content, { noEscape: true })

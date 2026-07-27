@@ -1,5 +1,6 @@
 import * as fs from "node:fs"
 import * as path from "node:path"
+import { pathToFileURL } from "node:url"
 import { expect, test } from "vitest"
 import { renderPrompt } from "@loopy/core/ai/prompt"
 import { tempDir } from "@loopy/test-utils"
@@ -37,6 +38,25 @@ test("template variables are not HTML-escaped", async () => {
     const rendered = await renderPrompt({ file, vars: { name: "O'Brien & <Co>" } })
     // then both the value and the surrounding template are passed through literally, without HTML entities
     expect(rendered).toBe('Dear O\'Brien & <Co>, use <tag> & "quotes"')
+})
+
+test("file URL prompt files resolve relative to an installed workflow module", async () => {
+    // given an installed workflow package with a template next to its module directory
+    const project = tempDir("loopy-package-prompt-")
+    const packageDir = path.join(project, "node_modules", "@scope", "workflow")
+    const templateDir = path.join(packageDir, "templates")
+    fs.mkdirSync(templateDir, { recursive: true })
+    fs.writeFileSync(path.join(templateDir, "greet.md"), "Hello {{name}} from the package!")
+    const moduleUrl = pathToFileURL(path.join(packageDir, "dist", "workflow.js"))
+
+    // when rendering a prompt located relative to the workflow module
+    const rendered = await renderPrompt({
+        file: new URL("../templates/greet.md", moduleUrl),
+        vars: { name: "World" }
+    })
+
+    // then the package template is found and rendered
+    expect(rendered).toBe("Hello World from the package!")
 })
 
 test("changed prompt files are re-read", async () => {
