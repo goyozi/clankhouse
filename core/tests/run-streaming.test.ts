@@ -94,7 +94,7 @@ test("stream exposes a failed step's LoopyError code", async () => {
     const done = testRun(loopy, async () =>
         loopy.step("coded", z.never(), async () => {
             await parked.released
-            throw new LoopyError("coding_agent_output_invalid", "invalid output")
+            throw new LoopyError("ai_output_invalid", "invalid output")
         })
     )
     const runId = await onlyRunId(loopy)
@@ -110,7 +110,7 @@ test("stream exposes a failed step's LoopyError code", async () => {
         name: "coded",
         status: "failed",
         error: "invalid output",
-        errorCode: "coding_agent_output_invalid"
+        errorCode: "ai_output_invalid"
     })
     await expect(done).rejects.toThrow("invalid output")
 })

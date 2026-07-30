@@ -21,7 +21,7 @@ export type CodingAgentInvocation = {
  * the persisted session and its messages, prompt rendering, output validation
  * and worktree snapshotting. Replaying a stored step restores the snapshot.
  * Implementations only provide `invoke`, driving the agent against the worktree
- * and recording all session messages they can (system/user/assistant/tool),
+ * and recording all session messages they can (system/user/assistant/reasoning/tool),
  * including the user's prompt. Providers can use `invokeWithInstructedOutput`
  * for the shared instructed-output prompt and parser.
  */
@@ -35,7 +35,7 @@ export abstract class BaseCodingAgent implements CodingAgent {
         invocation: CodingAgentInvocation,
         run: (prompt: string) => Promise<string | undefined>
     ): Promise<unknown> {
-        const prepared = prepareInstructedOutput(invocation.prompt, invocation.output)
+        const prepared = prepareInstructedOutput(invocation.prompt, invocation.output, "coding-agent")
         invocation.session.addMessage("user", prepared.prompt)
         const finalMessage = await run(prepared.prompt)
         return prepared.collect(finalMessage)

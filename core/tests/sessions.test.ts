@@ -4,11 +4,12 @@ import { BaseLanguageModel, type LanguageModelInvocation } from "@loopy/core/ai/
 import { gate, tempLoopy, testRun } from "@loopy/test-utils"
 
 test("get returns the session with ordered messages and stream yields them in order", async () => {
-    // given a session with system, user, and assistant messages that has succeeded
+    // given a session with system, user, reasoning, and assistant messages that has succeeded
     const { loopy } = tempLoopy()
     const recorder = loopy.sessions.create({ kind: "llm", provider: "fake", model: "m" })
     recorder.addMessage("system", "sys")
     recorder.addMessage("user", "hi")
+    recorder.addMessage("reasoning", "think")
     recorder.addMessage("assistant", "hello")
     recorder.succeed()
 
@@ -21,12 +22,14 @@ test("get returns the session with ordered messages and stream yields them in or
     expect(session.messages.map((m) => [m.role, m.content])).toEqual([
         ["system", "sys"],
         ["user", "hi"],
+        ["reasoning", "think"],
         ["assistant", "hello"]
     ])
     // and streaming the session yields the same messages in order
     expect((await Array.fromAsync(loopy.sessions.stream(recorder.id))).map((m) => m.content)).toEqual([
         "sys",
         "hi",
+        "think",
         "hello"
     ])
 })
@@ -183,7 +186,7 @@ class ParkingLLM extends BaseLanguageModel {
 
     protected async invoke({ prompt, session }: LanguageModelInvocation): Promise<unknown> {
         session.addMessage("user", prompt)
-        session.addMessage("assistant", "thinking...")
+        session.addMessage("reasoning", "thinking...")
         this.reached()
         await this.parked
         return { summary: "s" }
@@ -213,6 +216,7 @@ test("an active session is observed as running, and as interrupted after a crash
     expect(observed.status).toBe("interrupted")
     // and its messages up to the crash are preserved
     expect(observed.messages.map((m) => m.content)).toEqual(["p", "thinking..."])
+    expect(observed.messages.map((m) => m.role)).toEqual(["user", "reasoning"])
     // and streaming the session replays the same messages
     expect((await Array.fromAsync(second.sessions.stream(sessionId))).map((m) => m.content)).toEqual([
         "p",

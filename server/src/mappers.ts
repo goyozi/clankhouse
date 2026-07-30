@@ -149,6 +149,8 @@ function toSessionRole(role: AISessionMessage["role"]): SessionRole {
             return SessionRole.USER
         case "assistant":
             return SessionRole.ASSISTANT
+        case "reasoning":
+            return SessionRole.REASONING
         case "tool":
             return SessionRole.TOOL
         case "tool_result":

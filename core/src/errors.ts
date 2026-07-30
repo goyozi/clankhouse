@@ -21,8 +21,11 @@ export type LoopyErrorCode =
     | "ai_session_not_found"
     | "ai_session_message_not_found"
     | "coding_agent_snapshot_missing"
-    | "coding_agent_output_missing"
-    | "coding_agent_output_invalid"
+    | "ai_output_missing"
+    | "ai_output_invalid"
+    | "llm_response_incomplete"
+    | "llm_response_failed"
+    | "llm_response_invalid"
     | "fake_agent_edit_text_not_found"
     | "git_snapshot_name_invalid"
 

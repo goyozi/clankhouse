@@ -1,0 +1,21 @@
+{
+    "name": "@loopy/anthropic",
+    "version": "1.0.0",
+    "type": "module",
+    "main": "./src/index.ts",
+    "exports": {
+        ".": "./src/index.ts"
+    },
+    "scripts": {
+        "test": "vitest run --config vitest.config.ts",
+        "typecheck": "tsc -p tsconfig.json --noEmit"
+    },
+    "dependencies": {
+        "@anthropic-ai/sdk": "^0.115.0",
+        "@loopy/core": "workspace:*",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@loopy/test-utils": "workspace:*"
+    }
+}

@@ -82,7 +82,7 @@ test("CodexAgent maps the SDK conversation to the session and snapshots the work
     expect(session.messages.map((message) => message.role)).toEqual([
         "user",
         "system",
-        "assistant",
+        "reasoning",
         "tool",
         "tool_result",
         "assistant"
@@ -244,7 +244,7 @@ test("CodexAgent records every supported SDK item type", async () => {
     expect(session.messages.map((message) => message.role)).toEqual([
         "user",
         "system",
-        "assistant",
+        "reasoning",
         "tool",
         "tool_result",
         "tool",
@@ -530,7 +530,7 @@ test("a failed Codex turn fails the durable step and preserves recorded messages
     if (step.kind !== "agent") throw new Error("unreachable")
     const session = await loopy.sessions.get(step.sessionId!)
     expect(session.status).toBe("failed")
-    expect(session.messages.map((message) => message.role)).toEqual(["user", "system", "assistant"])
+    expect(session.messages.map((message) => message.role)).toEqual(["user", "system", "reasoning"])
 })
 
 test("a fatal Codex stream event fails the durable step", async () => {
@@ -609,7 +609,7 @@ test("an untagged final agent response fails the step", async () => {
     })
 
     // then the missing tags are rejected
-    await expect(result).rejects.toThrow("Coding agent did not return the instructed output tags")
+    await expect(result).rejects.toThrow("AI did not return the instructed output tags")
 })
 
 test("invalid JSON inside the instructed tags fails the step", async () => {

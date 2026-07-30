@@ -121,8 +121,10 @@ function recordItemStarted(session: SessionRecorder, item: ThreadItem): void {
 }
 
 function recordItemCompleted(session: SessionRecorder, item: ThreadItem): void {
-    if (item.type === "agent_message" || item.type === "reasoning") {
+    if (item.type === "agent_message") {
         session.addMessage("assistant", item.text)
+    } else if (item.type === "reasoning") {
+        session.addMessage("reasoning", item.text)
     } else if (item.type === "todo_list") {
         session.addMessage("assistant", JSON.stringify({ todoList: item.items }))
     } else {

@@ -1,0 +1,21 @@
+{
+    "name": "@loopy/openai",
+    "version": "1.0.0",
+    "type": "module",
+    "main": "./src/index.ts",
+    "exports": {
+        ".": "./src/index.ts"
+    },
+    "scripts": {
+        "test": "vitest run --config vitest.config.ts",
+        "typecheck": "tsc -p tsconfig.json --noEmit"
+    },
+    "dependencies": {
+        "@loopy/core": "workspace:*",
+        "openai": "^6.49.0",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@loopy/test-utils": "workspace:*"
+    }
+}

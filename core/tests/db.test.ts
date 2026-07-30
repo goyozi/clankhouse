@@ -204,7 +204,7 @@ test("copyStep preserves a failed step's error code", () => {
         kind: "custom",
         started_at: "2026-01-01T00:00:00.000Z"
     })
-    sql.failStep(loopy.db, "source-step", "invalid output", "coding_agent_output_invalid", "2026-01-02T00:00:00.000Z")
+    sql.failStep(loopy.db, "source-step", "invalid output", "ai_output_invalid", "2026-01-02T00:00:00.000Z")
     const source = sql.findStep(loopy.db, "source", "coded")!
 
     // when the step row is copied to the destination run
@@ -213,7 +213,7 @@ test("copyStep preserves a failed step's error code", () => {
     // then its message and stable code are both retained
     expect(sql.findStep(loopy.db, "destination", "coded")).toMatchObject({
         error: "invalid output",
-        error_code: "coding_agent_output_invalid"
+        error_code: "ai_output_invalid"
     })
 })
 

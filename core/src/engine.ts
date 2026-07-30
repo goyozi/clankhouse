@@ -23,6 +23,7 @@ export type ExecuteStepOptions<T extends z.ZodTypeAny> = {
     schema: T
     schemaIo?: SchemaIo
     schemaRole?: string
+    allowTopLevelVoid?: boolean
     execute: (handle: StepHandle) => Promise<unknown>
     parse?: (value: unknown) => z.infer<T>
     onSuccess?: (handle: StepHandle, output: z.infer<T>) => Promise<void>
@@ -209,7 +210,7 @@ function validateStepSchema<T extends z.ZodTypeAny>(options: ExecuteStepOptions<
         schema: options.schema,
         io,
         role: options.schemaRole ?? `Durable step "${options.name}" output schema`,
-        allowTopLevelVoid: true
+        allowTopLevelVoid: options.allowTopLevelVoid ?? true
     })
     return io
 }

@@ -422,7 +422,7 @@ CREATE TABLE IF NOT EXISTS session_messages (
     id         TEXT PRIMARY KEY,
     session_id TEXT NOT NULL REFERENCES sessions(id),
     seq        INTEGER NOT NULL,
-    role       TEXT NOT NULL CHECK (role IN ('system','user','assistant','tool','tool_result')),
+    role       TEXT NOT NULL CHECK (role IN ('system','user','assistant','reasoning','tool','tool_result')),
     content    TEXT NOT NULL,
     created_at TEXT NOT NULL,
     UNIQUE (session_id, seq)
@@ -443,7 +443,7 @@ export type SessionMessageRow = {
     id: string
     session_id: string
     seq: number
-    role: "system" | "user" | "assistant" | "tool" | "tool_result"
+    role: "system" | "user" | "assistant" | "reasoning" | "tool" | "tool_result"
     content: string
     created_at: string
 }

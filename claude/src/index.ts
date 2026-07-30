@@ -103,7 +103,7 @@ function recordAssistantBlock(session: SessionRecorder, block: AssistantBlock): 
     if (block.type === "text") {
         session.addMessage("assistant", block.text)
     } else if (block.type === "thinking") {
-        session.addMessage("assistant", block.thinking)
+        session.addMessage("reasoning", block.thinking)
     } else if (block.type === "tool_use" || block.type === "server_tool_use" || block.type === "mcp_tool_use") {
         session.addMessage("tool", JSON.stringify({ id: block.id, tool: block.name, input: block.input }))
     }

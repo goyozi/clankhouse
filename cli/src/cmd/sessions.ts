@@ -87,6 +87,8 @@ function sessionRole(value: SessionRole): string {
             return "user"
         case SessionRole.ASSISTANT:
             return "assistant"
+        case SessionRole.REASONING:
+            return "reasoning"
         case SessionRole.TOOL:
             return "tool"
         case SessionRole.TOOL_RESULT:

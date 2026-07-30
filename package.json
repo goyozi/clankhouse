@@ -5,9 +5,9 @@
     "description": "",
     "type": "module",
     "scripts": {
-        "test": "pnpm --filter @loopy/core --filter @loopy/claude --filter @loopy/codex --filter @loopy/server --filter @loopy/cli --filter @loopy/example-hello-world test",
+        "test": "vitest run",
         "test:watch": "vitest",
-        "typecheck": "pnpm --filter @loopy/core --filter @loopy/claude --filter @loopy/codex --filter @loopy/server --filter @loopy/cli --filter @loopy/example-hello-world typecheck",
+        "typecheck": "pnpm -r --if-present typecheck",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "lint": "eslint .",

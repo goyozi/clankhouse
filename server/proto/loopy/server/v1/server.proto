@@ -56,6 +56,7 @@ enum SessionRole {
   SESSION_ROLE_ASSISTANT = 3;
   SESSION_ROLE_TOOL = 4;
   SESSION_ROLE_TOOL_RESULT = 5;
+  SESSION_ROLE_REASONING = 6;
 }
 
 message WorkflowSummary {

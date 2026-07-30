@@ -179,7 +179,7 @@ test("ClaudeAgent records every supported SDK message and block type", async () 
     expect(session.messages.map((m) => m.role)).toEqual([
         "user", // prompt
         "system", // init
-        "assistant", // thinking
+        "reasoning", // thinking
         "assistant", // text
         "tool", // tool_use
         "tool_result",
@@ -189,7 +189,7 @@ test("ClaudeAgent records every supported SDK message and block type", async () 
         "tool_result",
         "assistant" // structured output
     ])
-    // and the assistant thinking and text are preserved verbatim
+    // and the reasoning and assistant text are preserved verbatim
     expect(session.messages[2].content).toBe("Let me look around.")
     expect(session.messages[3].content).toBe("Here is my plan.")
     // and each tool call records its name, input and correlation id regardless of the tool kind
@@ -370,7 +370,7 @@ test("an untagged final response fails the step", async () => {
             const worktree = await repository.worktree({ base: "main" })
             return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
         })
-    ).rejects.toThrow("Coding agent did not return the instructed output tags")
+    ).rejects.toThrow("AI did not return the instructed output tags")
 
     // then the agent step and the session are marked failed
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)

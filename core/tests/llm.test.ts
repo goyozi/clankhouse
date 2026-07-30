@@ -99,6 +99,26 @@ test("an invalid LLM reply schema fails before steps, sessions, or provider call
     expect(loopy.db.prepare("SELECT COUNT(*) AS n FROM sessions").get()).toEqual({ n: 0 })
 })
 
+test("a void LLM reply schema fails before steps, sessions, or provider calls", async () => {
+    // given a fake LLM that counts invocations
+    const { loopy } = tempLoopy()
+    let invocations = 0
+    const llm = new FakeLLM(() => {
+        invocations++
+    })
+
+    // when the LLM call is set up with a void reply
+    const promise = testRun(loopy, async () => llm.call("notify", { prompt: "p", output: z.void() }), {
+        output: z.void()
+    })
+
+    // then the guard fails before any durable or provider side effect
+    await expect(promise).rejects.toThrow(/LLM "notify" output schema.*z\.void/)
+    expect(invocations).toBe(0)
+    expect(loopy.db.prepare("SELECT COUNT(*) AS n FROM steps").get()).toEqual({ n: 0 })
+    expect(loopy.db.prepare("SELECT COUNT(*) AS n FROM sessions").get()).toEqual({ n: 0 })
+})
+
 test("replay skips the model invocation", async () => {
     // given a reopenable loopy instance and a fake llm counting invocations
     const { loopy, reopen } = tempLoopy()

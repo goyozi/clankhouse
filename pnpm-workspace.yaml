@@ -2,6 +2,8 @@ packages:
     - core
     - claude
     - codex
+    - openai
+    - anthropic
     - test-utils
     - server
     - cli

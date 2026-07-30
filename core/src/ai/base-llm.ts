@@ -1,5 +1,6 @@
 import * as z from "zod"
 import { requireContext } from "../context"
+import { prepareInstructedOutput } from "./instructed-output"
 import type { LanguageModel, ModelCallOptions } from "./llm"
 import { renderPrompt } from "./prompt"
 import type { SessionRecorder } from "./sessions"
@@ -16,13 +17,23 @@ export type LanguageModelInvocation = {
  * session and its messages, prompt rendering and output validation.
  * Implementations only provide `invoke`, producing the structured output per
  * the provided output schema and recording all session messages they can
- * (system/user/assistant/tool), including the user's prompt.
+ * (system/user/assistant/reasoning/tool), including the user's prompt.
  */
 export abstract class BaseLanguageModel implements LanguageModel {
     abstract readonly provider: string
     abstract readonly model: string
 
     protected abstract invoke(invocation: LanguageModelInvocation): Promise<unknown>
+
+    protected async invokeWithInstructedOutput(
+        invocation: LanguageModelInvocation,
+        run: (prompt: string) => Promise<string | undefined>
+    ): Promise<unknown> {
+        const prepared = prepareInstructedOutput(invocation.prompt, invocation.output, "llm")
+        invocation.session.addMessage("user", prepared.prompt)
+        const finalMessage = await run(prepared.prompt)
+        return prepared.collect(finalMessage)
+    }
 
     async call<T extends z.ZodTypeAny>(stepName: string, options: ModelCallOptions<T>): Promise<z.infer<T>> {
         const role = `LLM "${stepName}" output schema`
@@ -34,6 +45,7 @@ export abstract class BaseLanguageModel implements LanguageModel {
             schema: options.output,
             schemaIo: "input",
             schemaRole: role,
+            allowTopLevelVoid: false,
             execute: async (handle) => {
                 const prompt = await renderPrompt(options.prompt)
                 session = loopy.sessions.create({
