@@ -380,6 +380,24 @@ test("a served process shuts down and terminates on SIGINT while work keeps it a
     expect(await exited).toMatchObject({ signal: "SIGINT" })
 })
 
+test("close returns without waiting out the keep-alive timeout of an abandoned stream", async () => {
+    // given a run watched through a stream the client stops consuming without cancelling
+    const { loopy } = tempLoopy()
+    registerApproval(loopy, z.number())
+    const server = await testServer(loopy)
+    const client = rpcClient(server)
+    const started = await client.startRun({ workflowName: "approval", inputJson: json({ id: "a", value: 1 }) })
+    await nextRunningStep(client.watchRun({ runId: started.runId })[Symbol.asyncIterator](), "wait:approve:a")
+
+    // when the server is closed while that connection is still open
+    const startedClosingAt = performance.now()
+    await server.close()
+    const closingTook = performance.now() - startedClosingAt
+
+    // then the socket left idle by the aborted stream is reaped instead of timing out
+    expect(closingTook).toBeLessThan(2000)
+})
+
 test("serve closes its Loopy instance when startup fails", async () => {
     // given a fresh Loopy instance
     const { loopy } = tempLoopy()

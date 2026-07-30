@@ -10,6 +10,9 @@ import { LoopyService } from "./gen/loopy/server/v1/server_pb"
 import { listen as bindServer } from "./listen"
 import { loopyService } from "./service"
 
+const IDLE_SWEEP_MS = 10
+const CLOSE_GRACE_MS = 1000
+
 export type ServeOptions = {
     host?: string
     port?: number
@@ -167,11 +170,18 @@ function reportServerError(error: Error): void {
 
 function closeHttpServer(server: http.Server | https.Server, shutdown: AbortController): Promise<void> {
     shutdown.abort(new ConnectError("Server shutting down", Code.Unavailable))
-    return new Promise((resolve, reject) => {
+    const closed = new Promise<void>((resolve, reject) => {
         server.close((error) => {
             if (error === undefined) resolve()
             else reject(error)
         })
+    })
+    server.closeIdleConnections()
+    const sweep = setInterval(() => server.closeIdleConnections(), IDLE_SWEEP_MS).unref()
+    const force = setTimeout(() => server.closeAllConnections(), CLOSE_GRACE_MS).unref()
+    return closed.finally(() => {
+        clearInterval(sweep)
+        clearTimeout(force)
     })
 }
 
