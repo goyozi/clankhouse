@@ -16,11 +16,10 @@ import * as os from "node:os"
 import * as path from "node:path"
 import { LoopyError } from "../errors"
 import { exists, isNodeError, newId } from "../util"
-import { execGit, execGitRaw, mustGit, mustGitRaw, type ProcessOutput } from "./exec"
+import * as git from "./client"
 
 const SNAPSHOT_FORMAT = Buffer.from("loopy-snapshot-v1")
 const RESCUE_REF_PREFIX = "refs/loopy/restore"
-const PATH_CHUNK_SIZE = 256
 const OBJECT_CHUNK_SIZE = 64
 
 export class Worktree {
@@ -31,15 +30,15 @@ export class Worktree {
     }
 
     async stage(files: string[]): Promise<void> {
-        await mustGit(this.path, ["add", "--", ...files])
+        await git.add(this.path, files)
     }
 
     async commit(message: string): Promise<void> {
-        await mustGit(this.path, ["commit", "-m", message])
+        await git.commit(this.path, message)
     }
 
     async push(upstreamBranchName: string): Promise<void> {
-        await mustGit(this.path, ["push", "origin", `HEAD:refs/heads/${upstreamBranchName}`])
+        await git.push(this.path, "origin", "HEAD", `refs/heads/${upstreamBranchName}`)
     }
 
     /**
@@ -71,7 +70,7 @@ export class Worktree {
     /** @internal */
     async snapshotRef(fullRef: string): Promise<string> {
         const state = await captureState(this.path, "loopy snapshot")
-        await mustGit(this.path, ["update-ref", fullRef, state.envelopeCommit])
+        await git.updateRef(this.path, fullRef, state.envelopeCommit)
         return fullRef
     }
 
@@ -80,23 +79,23 @@ export class Worktree {
         await restoreCapturedState(this.path, fullRef)
     }
 
-    async git(args: string[]): Promise<ProcessOutput> {
-        return execGit(this.path, args)
+    async git(args: string[]): Promise<git.ProcessOutput> {
+        return git.exec(this.path, args)
     }
 }
 
 export async function captureState(cwd: string, message: string): Promise<CapturedState> {
     const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "loopy-snapshot-"))
     try {
-        const head = (await mustGit(cwd, ["rev-parse", "HEAD^{commit}"])).stdout.trim()
+        const head = await git.revParse(cwd, "HEAD^{commit}")
         const normalizedIndex = await copyAndNormalizeIndex(cwd, temporaryDirectory)
         const indexBytes = await readFile(normalizedIndex)
         const indexedObjects = await listIndexedObjects(cwd, normalizedIndex)
         const checkoutTree = await captureCheckoutTree(cwd, normalizedIndex, temporaryDirectory)
         const rawTree = await captureRawTree(cwd, normalizedIndex, temporaryDirectory)
-        const workingCommit = await commitTree(cwd, checkoutTree, head, `${message} working tree`)
+        const workingCommit = await git.commitTree(cwd, checkoutTree, head, `${message} working tree`)
         const envelopeTree = await createEnvelopeTree(cwd, indexBytes, indexedObjects, rawTree)
-        const envelopeCommit = await commitTree(cwd, envelopeTree, workingCommit, `${message} envelope`)
+        const envelopeCommit = await git.commitTree(cwd, envelopeTree, workingCommit, `${message} envelope`)
         return { head, workingCommit, envelopeCommit }
     } finally {
         await rm(temporaryDirectory, { recursive: true, force: true })
@@ -115,7 +114,7 @@ async function restoreCapturedStateRecoverably(cwd: string, ref: string): Promis
     try {
         rescue = await captureState(cwd, "loopy restore rescue")
         rescueRef = `${RESCUE_REF_PREFIX}/${Date.now()}-${newId()}`
-        await mustGit(cwd, ["update-ref", rescueRef, rescue.envelopeCommit, ""])
+        await git.updateRef(cwd, rescueRef, rescue.envelopeCommit, "")
     } catch (error) {
         await disposePreparedState(target)
         throw error
@@ -137,7 +136,7 @@ async function restoreCapturedStateRecoverably(cwd: string, ref: string): Promis
     }
 
     try {
-        await mustGit(cwd, ["update-ref", "-d", rescueRef, rescue.envelopeCommit])
+        await git.deleteRef(cwd, rescueRef, rescue.envelopeCommit)
     } catch (cleanupError) {
         failure = restoreFailure("Snapshot restoration could not remove its rescue ref", [
             ...(failure === undefined ? [] : [failure]),
@@ -148,20 +147,19 @@ async function restoreCapturedStateRecoverably(cwd: string, ref: string): Promis
 }
 
 export async function removeStaleRescueRefs(cwd: string, olderThan: number): Promise<void> {
-    const output = await mustGit(cwd, ["for-each-ref", "--format=%(refname) %(objectname)", `${RESCUE_REF_PREFIX}/`])
-    for (const line of output.stdout.split("\n")) {
-        const match = /^refs\/loopy\/restore\/([0-9]+)-[0-9A-Za-z]{21} ([0-9a-f]{40}|[0-9a-f]{64})$/.exec(line)
+    for (const ref of await git.listRefs(cwd, `${RESCUE_REF_PREFIX}/`)) {
+        const match = /^refs\/loopy\/restore\/([0-9]+)-[0-9A-Za-z]{21}$/.exec(ref.name)
         if (match === null || Number(match[1]) >= olderThan) continue
-        await mustGit(cwd, ["update-ref", "-d", line.slice(0, line.indexOf(" ")), match[2]])
+        await git.deleteRef(cwd, ref.name, ref.oid)
     }
 }
 
 async function applyPreparedState(cwd: string, prepared: PreparedIndexRestore): Promise<void> {
     try {
-        await mustGit(cwd, ["reset", "--hard"])
-        await mustGit(cwd, ["clean", "-fd"])
-        await mustGit(cwd, ["checkout", "--detach", "--force", prepared.workingCommit])
-        await mustGit(cwd, ["reset", "--soft", prepared.head])
+        await git.resetHard(cwd)
+        await git.clean(cwd)
+        await git.checkoutDetached(cwd, prepared.workingCommit)
+        await git.resetSoft(cwd, prepared.head)
         await materializeRawTree(cwd, prepared.rawEntries)
         await rename(prepared.temporaryIndex, prepared.targetIndex)
     } finally {
@@ -178,103 +176,76 @@ function restoreFailure(message: string, causes: unknown[]): LoopyError {
 }
 
 async function copyAndNormalizeIndex(cwd: string, temporaryDirectory: string): Promise<string> {
-    const sourceIndex = (
-        await mustGit(cwd, ["rev-parse", "--path-format=absolute", "--git-path", "index"])
-    ).stdout.trim()
+    const sourceIndex = await git.resolveGitPath(cwd, "index")
     const temporaryIndex = path.join(temporaryDirectory, "index")
-    const env = { GIT_INDEX_FILE: temporaryIndex }
     if (await exists(sourceIndex)) {
         await copyFile(sourceIndex, temporaryIndex)
-        const sharedIndex = (
-            await mustGit(cwd, ["rev-parse", "--path-format=absolute", "--shared-index-path"])
-        ).stdout.trim()
-        if (sharedIndex.length > 0) {
+        const sharedIndex = await git.sharedIndexPath(cwd)
+        if (sharedIndex !== undefined) {
             await copyFile(sharedIndex, path.join(temporaryDirectory, path.basename(sharedIndex)))
         }
     } else {
-        await mustGit(cwd, ["read-tree", "--empty"], env)
+        await git.readTreeEmpty(cwd, temporaryIndex)
     }
-    await mustGit(
-        cwd,
-        ["update-index", "--no-split-index", "--no-untracked-cache", "--no-fsmonitor", "--force-write-index"],
-        env
-    )
+    await git.normalizeIndex(cwd, temporaryIndex)
     return temporaryIndex
 }
 
 async function listIndexedObjects(cwd: string, indexFile: string): Promise<IndexedObject[]> {
-    const output = await mustGit(cwd, ["ls-files", "--stage", "-z"], { GIT_INDEX_FILE: indexFile })
     const objects = new Map<string, IndexedObject>()
-    for (const entry of output.stdout.split("\0")) {
-        const match = /^([0-7]{6}) ([0-9a-f]+) [0-3]\t/.exec(entry)
-        if (match === null || /^0+$/.test(match[2])) continue
-        objects.set(match[2], { mode: match[1], oid: match[2] })
+    for (const entry of await git.listIndexEntries(cwd, indexFile)) {
+        if (/^0+$/.test(entry.oid)) continue
+        objects.set(entry.oid, { mode: entry.mode, oid: entry.oid })
     }
     return [...objects.values()]
 }
 
 async function captureCheckoutTree(cwd: string, normalizedIndex: string, temporaryDirectory: string): Promise<string> {
     const checkoutIndex = path.join(temporaryDirectory, "checkout-index")
-    const sourceEnv = { GIT_INDEX_FILE: normalizedIndex }
-    const env = { GIT_INDEX_FILE: checkoutIndex }
-    const entries = await mustGitRaw(cwd, ["ls-files", "--stage", "-z"], sourceEnv)
-    await mustGit(cwd, ["read-tree", "--empty"], env)
-    await mustGitRaw(cwd, ["update-index", "-z", "--index-info"], env, entries.stdout)
-    await mustGit(cwd, ["add", "-A"], env)
-    return (await mustGit(cwd, ["write-tree"], env)).stdout.trim()
+    await git.copyIndexEntries(cwd, normalizedIndex, checkoutIndex)
+    await git.addAll(cwd, checkoutIndex)
+    return git.writeTree(cwd, checkoutIndex)
 }
 
 async function captureRawTree(cwd: string, normalizedIndex: string, temporaryDirectory: string): Promise<string> {
     const workingIndex = path.join(temporaryDirectory, "raw-index")
-    const env = { GIT_INDEX_FILE: workingIndex }
     const indexedEntries = await listIndexedEntries(cwd, normalizedIndex)
-    const files = await listWorkingTreeFiles(cwd, normalizedIndex)
+    const files = await git.listTrackedAndUntrackedFiles(cwd, normalizedIndex)
     const config = await workingTreeConfig(cwd)
     const entries: PendingWorkingTreeEntry[] = []
-    await mustGit(cwd, ["read-tree", "--empty"], env)
+    await git.readTreeEmpty(cwd, workingIndex)
     for (const file of files) {
         const entry = await captureWorkingTreeEntry(cwd, file, indexedEntries.get(file), config)
         if (entry !== undefined) entries.push(entry)
     }
-    const fileOids = await hashWorkingTreeFiles(
+    const fileOids = await git.hashFiles(
         cwd,
         entries.flatMap((entry) => (entry.file === undefined ? [] : [entry.file]))
     )
     const indexEntries = entries.map((entry) => {
         const oid = entry.oid ?? fileOids.get(entry.file!)
         if (oid === undefined) throw new Error(`Could not hash working-tree file: ${entry.file}`)
-        return Buffer.from(`${entry.mode} ${oid}\t${entry.path}\0`)
+        return { mode: entry.mode, oid, path: entry.path }
     })
-    await mustGitRaw(cwd, ["update-index", "-z", "--index-info"], env, Buffer.concat(indexEntries))
-    return (await mustGit(cwd, ["write-tree"], env)).stdout.trim()
+    await git.updateIndexEntries(cwd, workingIndex, indexEntries)
+    return git.writeTree(cwd, workingIndex)
 }
 
-async function listIndexedEntries(cwd: string, indexFile: string): Promise<Map<string, IndexedEntry>> {
-    const output = await mustGit(cwd, ["ls-files", "--stage", "-z"], { GIT_INDEX_FILE: indexFile })
-    const entries = new Map<string, IndexedEntry>()
-    for (const record of output.stdout.split("\0")) {
-        const match = /^([0-7]{6}) ([0-9a-f]+) ([0-3])\t([\s\S]+)$/.exec(record)
-        if (match === null) continue
-        const entry = { mode: match[1], oid: match[2], stage: Number(match[3]) }
-        const existing = entries.get(match[4])
+async function listIndexedEntries(cwd: string, indexFile: string): Promise<Map<string, git.IndexEntry>> {
+    const entries = new Map<string, git.IndexEntry>()
+    for (const entry of await git.listIndexEntries(cwd, indexFile)) {
+        const existing = entries.get(entry.path)
         if (existing === undefined || entry.stage === 0 || (existing.stage !== 0 && entry.stage === 2)) {
-            entries.set(match[4], entry)
+            entries.set(entry.path, entry)
         }
     }
     return entries
 }
 
-async function listWorkingTreeFiles(cwd: string, indexFile: string): Promise<string[]> {
-    const output = await mustGit(cwd, ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], {
-        GIT_INDEX_FILE: indexFile
-    })
-    return [...new Set(output.stdout.split("\0").filter((file) => file.length > 0))].sort()
-}
-
 async function captureWorkingTreeEntry(
     cwd: string,
     file: string,
-    indexed: IndexedEntry | undefined,
+    indexed: git.IndexEntry | undefined,
     config: WorkingTreeConfig
 ): Promise<PendingWorkingTreeEntry | undefined> {
     const target = path.join(cwd, file)
@@ -285,43 +256,24 @@ async function captureWorkingTreeEntry(
     }
     if (stats.isSymbolicLink() || (indexed?.mode === "120000" && !config.symlinks)) {
         const content = stats.isSymbolicLink() ? await readlink(target, { encoding: "buffer" }) : await readFile(target)
-        return { path: file, mode: "120000", oid: await hashObject(cwd, content) }
+        return { path: file, mode: "120000", oid: await git.hashObject(cwd, content) }
     }
     if (!stats.isFile()) return undefined
     const executable = config.fileMode ? (stats.mode & 0o111) !== 0 : indexed?.mode === "100755"
     return { path: file, mode: executable ? "100755" : "100644", file }
 }
 
-async function hashWorkingTreeFiles(cwd: string, files: string[]): Promise<Map<string, string>> {
-    const oids = new Map<string, string>()
-    for (let offset = 0; offset < files.length; offset += PATH_CHUNK_SIZE) {
-        const chunk = files.slice(offset, offset + PATH_CHUNK_SIZE)
-        const output = await mustGit(cwd, ["hash-object", "-w", "--no-filters", "--", ...chunk])
-        const chunkOids = output.stdout.trimEnd().split("\n")
-        if (chunkOids.length !== chunk.length) throw new Error("Git returned an unexpected number of object IDs")
-        chunk.forEach((file, index) => oids.set(file, chunkOids[index]))
-    }
-    return oids
-}
-
 async function submoduleHead(target: string, fallback: string): Promise<string> {
-    const root = await execGit(target, ["rev-parse", "--show-toplevel"])
-    if (root.exitCode !== 0 || path.resolve(root.stdout.trim()) !== path.resolve(target)) return fallback
-    const head = await execGit(target, ["rev-parse", "HEAD^{commit}"])
-    return head.exitCode === 0 ? head.stdout.trim() : fallback
+    const root = await git.tryShowTopLevel(target)
+    if (root === undefined || path.resolve(root) !== path.resolve(target)) return fallback
+    return (await git.tryRevParse(target, "HEAD^{commit}")) ?? fallback
 }
 
 async function workingTreeConfig(cwd: string): Promise<WorkingTreeConfig> {
     return {
-        fileMode: await gitBoolean(cwd, "core.filemode", true),
-        symlinks: await gitBoolean(cwd, "core.symlinks", true)
+        fileMode: (await git.getBooleanConfig(cwd, "core.filemode")) ?? true,
+        symlinks: (await git.getBooleanConfig(cwd, "core.symlinks")) ?? true
     }
-}
-
-async function gitBoolean(cwd: string, key: string, fallback: boolean): Promise<boolean> {
-    const result = await execGit(cwd, ["config", "--bool", "--get", key])
-    if (result.exitCode !== 0) return fallback
-    return result.stdout.trim() === "true"
 }
 
 async function createEnvelopeTree(
@@ -330,54 +282,32 @@ async function createEnvelopeTree(
     indexedObjects: IndexedObject[],
     rawTree: string
 ): Promise<string> {
-    const formatOid = await hashObject(cwd, SNAPSHOT_FORMAT)
-    const indexOid = await hashObject(cwd, indexBytes)
-    const pinnedInput = Buffer.from(
-        indexedObjects.map(({ mode, oid }) => `${mode} ${objectType(mode)} ${oid}\t${oid}\0`).join("")
+    const formatOid = await git.hashObject(cwd, SNAPSHOT_FORMAT)
+    const indexOid = await git.hashObject(cwd, indexBytes)
+    const pinnedTree = await git.makeTree(
+        cwd,
+        indexedObjects.map(({ mode, oid }) => ({ mode, oid, path: oid })),
+        { allowMissing: true }
     )
-    const pinnedTree = (await mustGit(cwd, ["mktree", "-z", "--missing"], undefined, pinnedInput)).stdout.trim()
-    const envelopeInput = Buffer.from(
-        [
-            `100644 blob ${formatOid}\tformat\0`,
-            `100644 blob ${indexOid}\tindex\0`,
-            `040000 tree ${pinnedTree}\tpinned\0`,
-            `040000 tree ${rawTree}\tworking\0`
-        ].join("")
-    )
-    return (await mustGit(cwd, ["mktree", "-z"], undefined, envelopeInput)).stdout.trim()
-}
-
-function objectType(mode: string): "blob" | "commit" | "tree" {
-    if (mode === "040000") return "tree"
-    if (mode === "160000") return "commit"
-    return "blob"
-}
-
-async function hashObject(cwd: string, content: Buffer): Promise<string> {
-    return (await mustGit(cwd, ["hash-object", "-w", "--stdin"], undefined, content)).stdout.trim()
-}
-
-async function commitTree(cwd: string, tree: string, parent: string, message: string): Promise<string> {
-    return (await mustGit(cwd, ["commit-tree", tree, "-p", parent, "-m", message])).stdout.trim()
+    return git.makeTree(cwd, [
+        { mode: "100644", oid: formatOid, path: "format" },
+        { mode: "100644", oid: indexOid, path: "index" },
+        { mode: "040000", oid: pinnedTree, path: "pinned" },
+        { mode: "040000", oid: rawTree, path: "working" }
+    ])
 }
 
 async function readRawTreeEntries(cwd: string, treeish: string): Promise<RawTreeEntry[]> {
-    const output = await mustGit(cwd, ["ls-tree", "-r", "-z", "--full-tree", treeish])
-    const entries: RawTreeEntry[] = []
-    for (const record of output.stdout.split("\0")) {
-        if (record.length === 0) continue
-        const match = /^([0-7]{6}) ([a-z]+) ([0-9a-f]+)\t([\s\S]+)$/.exec(record)
-        if (match === null) throw new Error(`Snapshot contains an invalid tree entry: ${record}`)
-        if (match[2] === "blob") entries.push({ mode: match[1], oid: match[3], path: match[4] })
-    }
-    return entries
+    return (await git.listTree(cwd, treeish))
+        .filter((entry) => entry.type === "blob")
+        .map(({ mode, oid, path: entryPath }) => ({ mode, oid, path: entryPath }))
 }
 
 async function materializeRawTree(cwd: string, entries: RawTreeEntry[]): Promise<void> {
-    const symlinks = await gitBoolean(cwd, "core.symlinks", true)
+    const symlinks = (await git.getBooleanConfig(cwd, "core.symlinks")) ?? true
     for (let offset = 0; offset < entries.length; offset += OBJECT_CHUNK_SIZE) {
         const chunk = entries.slice(offset, offset + OBJECT_CHUNK_SIZE)
-        const contents = await readBlobs(
+        const contents = await git.readBlobs(
             cwd,
             chunk.map((entry) => entry.oid)
         )
@@ -385,29 +315,6 @@ async function materializeRawTree(cwd: string, entries: RawTreeEntry[]): Promise
             await materializeRawTreeEntry(cwd, chunk[index], contents[index], symlinks)
         }
     }
-}
-
-async function readBlobs(cwd: string, oids: string[]): Promise<Buffer[]> {
-    const input = Buffer.from(`${oids.join("\n")}\n`)
-    const output = (await mustGitRaw(cwd, ["cat-file", "--batch"], undefined, input)).stdout
-    const blobs: Buffer[] = []
-    let offset = 0
-    for (const oid of oids) {
-        const headerEnd = output.indexOf(0x0a, offset)
-        if (headerEnd === -1) throw new Error(`Git returned an invalid object header for ${oid}`)
-        const header = output.subarray(offset, headerEnd).toString("utf8")
-        const match = /^[0-9a-f]+ blob ([0-9]+)$/.exec(header)
-        if (match === null) throw new Error(`Git returned an invalid blob header for ${oid}: ${header}`)
-        const contentStart = headerEnd + 1
-        const contentEnd = contentStart + Number(match[1])
-        if (contentEnd >= output.length || output[contentEnd] !== 0x0a) {
-            throw new Error(`Git returned invalid blob content for ${oid}`)
-        }
-        blobs.push(output.subarray(contentStart, contentEnd))
-        offset = contentEnd + 1
-    }
-    if (offset !== output.length) throw new Error("Git returned unexpected trailing blob content")
-    return blobs
 }
 
 async function materializeRawTreeEntry(
@@ -468,29 +375,27 @@ async function lstatOrUndefined(target: string) {
 }
 
 async function prepareIndexRestore(cwd: string, ref: string): Promise<PreparedIndexRestore> {
-    const commit = (await mustGit(cwd, ["rev-parse", `${ref}^{commit}`])).stdout.trim()
-    const format = await execGitRaw(cwd, ["cat-file", "blob", `${commit}:format`])
-    if (format.exitCode !== 0 || !format.stdout.equals(SNAPSHOT_FORMAT)) {
+    const commit = await git.revParse(cwd, `${ref}^{commit}`)
+    const format = await git.tryReadBlob(cwd, `${commit}:format`)
+    if (format === undefined || !format.equals(SNAPSHOT_FORMAT)) {
         throw new LoopyError(
             "git_snapshot_format_unsupported",
             `Snapshot ${ref} is not in the supported loopy-snapshot-v1 format`
         )
     }
-    const index = await mustGitRaw(cwd, ["cat-file", "blob", `${commit}:index`])
-    const workingCommit = (await mustGit(cwd, ["rev-parse", `${commit}^`])).stdout.trim()
-    const head = (await mustGit(cwd, ["rev-parse", `${commit}^^`])).stdout.trim()
-    const rawTree = (await mustGit(cwd, ["rev-parse", `${commit}:working`])).stdout.trim()
-    await mustGit(cwd, ["rev-parse", `${workingCommit}^{tree}`, `${rawTree}^{tree}`])
+    const index = await git.readBlob(cwd, `${commit}:index`)
+    const workingCommit = await git.revParse(cwd, `${commit}^`)
+    const head = await git.revParse(cwd, `${commit}^^`)
+    const rawTree = await git.revParse(cwd, `${commit}:working`)
+    await git.revParse(cwd, [`${workingCommit}^{tree}`, `${rawTree}^{tree}`])
     const rawEntries = await readRawTreeEntries(cwd, rawTree)
     for (const entry of rawEntries) resolveSnapshotPath(cwd, entry.path)
-    const targetIndex = (
-        await mustGit(cwd, ["rev-parse", "--path-format=absolute", "--git-path", "index"])
-    ).stdout.trim()
+    const targetIndex = await git.resolveGitPath(cwd, "index")
     const temporaryDirectory = await mkdtemp(path.join(path.dirname(targetIndex), "loopy-index-restore-"))
     const temporaryIndex = path.join(temporaryDirectory, "index")
     try {
-        await writeFile(temporaryIndex, index.stdout)
-        await mustGit(cwd, ["ls-files", "--stage"], { GIT_INDEX_FILE: temporaryIndex })
+        await writeFile(temporaryIndex, index)
+        await git.validateIndex(cwd, temporaryIndex)
         return { commit, workingCommit, head, rawEntries, targetIndex, temporaryDirectory, temporaryIndex }
     } catch (error) {
         await rm(temporaryDirectory, { recursive: true, force: true })
@@ -515,8 +420,6 @@ function validateRefSuffix(name: string): void {
 type CapturedState = { head: string; workingCommit: string; envelopeCommit: string }
 
 type IndexedObject = { mode: string; oid: string }
-
-type IndexedEntry = { mode: string; oid: string; stage: number }
 
 type WorkingTreeConfig = { fileMode: boolean; symlinks: boolean }
 

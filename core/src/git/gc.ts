@@ -12,7 +12,7 @@ import {
     resolveCandidate,
     type ManagedCandidate
 } from "./repository"
-import { execGit, mustGit } from "./exec"
+import * as git from "./client"
 import { removeStaleRescueRefs } from "./worktree"
 
 const WORKTREE_GC_MIN_AGE_MS = 14 * 24 * 60 * 60 * 1000
@@ -81,21 +81,19 @@ async function candidateDirectories(worktreesRoot: string): Promise<string[]> {
 
 async function removeGitState(candidate: ManagedCandidate): Promise<void> {
     if (!(await exists(candidate.repositoryPath))) return
-    const seed = await execGit(candidate.repositoryPath, ["rev-parse", `${candidate.seedRef}^{commit}`])
-    if (seed.exitCode === 0 && seed.stdout.trim() !== candidate.seedOid) {
+    const seed = await git.tryRevParse(candidate.repositoryPath, `${candidate.seedRef}^{commit}`)
+    if (seed !== undefined && seed !== candidate.seedOid) {
         throw gcFailure(`Worktree seed ref changed: ${candidate.seedRef}`)
     }
     if (await isWorktreeRegistered(candidate.repositoryPath, candidate.path)) {
-        await mustGit(candidate.repositoryPath, ["worktree", "remove", "--force", candidate.path]).catch((error) => {
+        await git.worktreeRemove(candidate.repositoryPath, candidate.path).catch((error) => {
             throw gcFailure(`Could not remove worktree ${candidate.path}`, error)
         })
     }
-    if (seed.exitCode === 0) {
-        await mustGit(candidate.repositoryPath, ["update-ref", "-d", candidate.seedRef, candidate.seedOid]).catch(
-            (error) => {
-                throw gcFailure(`Could not delete worktree seed ref ${candidate.seedRef}`, error)
-            }
-        )
+    if (seed !== undefined) {
+        await git.deleteRef(candidate.repositoryPath, candidate.seedRef, candidate.seedOid).catch((error) => {
+            throw gcFailure(`Could not delete worktree seed ref ${candidate.seedRef}`, error)
+        })
     }
 }
 

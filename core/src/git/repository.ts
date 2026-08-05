@@ -4,7 +4,7 @@ import * as z from "zod"
 import { requireContext } from "../context"
 import { LoopyError } from "../errors"
 import { exists, isNodeError, newId } from "../util"
-import { mustGit } from "./exec"
+import * as git from "./client"
 import { captureState, restoreCapturedState, Worktree } from "./worktree"
 
 const CandidateIdSchema = z.string().regex(/^[0-9A-Za-z]{21}$/)
@@ -81,7 +81,7 @@ async function createWorktree(
     const seedMode = options.includeUncommitted === true ? "uncommitted" : "base"
     const seedOid =
         seedMode === "base"
-            ? (await mustGit(repositoryPath, ["rev-parse", `${options.base}^{commit}`])).stdout.trim()
+            ? await git.revParse(repositoryPath, `${options.base}^{commit}`)
             : (await captureState(repositoryPath, "loopy worktree seed")).envelopeCommit
     const manifest: CandidateManifest = {
         repositoryPath,
@@ -93,7 +93,7 @@ async function createWorktree(
     const pendingManifest = `${candidateManifestFile(candidate.root)}.tmp`
     await writeFile(pendingManifest, JSON.stringify(manifest))
     await rename(pendingManifest, candidateManifestFile(candidate.root))
-    await mustGit(repositoryPath, ["update-ref", candidate.seedRef, candidate.seedOid, ""])
+    await git.updateRef(repositoryPath, candidate.seedRef, candidate.seedOid, "")
     await materializeCandidate(candidate)
     return { id: candidate.id }
 }
@@ -114,7 +114,7 @@ async function restoreRecordedWorktree(
             return
         }
         if (await isWorktreeRegistered(repositoryPath, candidate.path)) {
-            await mustGit(repositoryPath, ["worktree", "remove", "--force", candidate.path])
+            await git.worktreeRemove(repositoryPath, candidate.path)
         }
         await materializeCandidate(candidate)
     } catch (error) {
@@ -123,15 +123,15 @@ async function restoreRecordedWorktree(
 }
 
 async function validateSeed(candidate: ManagedCandidate): Promise<void> {
-    const result = await mustGit(candidate.repositoryPath, ["rev-parse", `${candidate.seedRef}^{commit}`])
-    if (result.stdout.trim() !== candidate.seedOid) throw new Error("worktree seed ref changed")
+    const seedOid = await git.revParse(candidate.repositoryPath, `${candidate.seedRef}^{commit}`)
+    if (seedOid !== candidate.seedOid) throw new Error("worktree seed ref changed")
 }
 
 async function restoreCandidate(candidate: ManagedCandidate): Promise<void> {
     if (candidate.seedMode === "base") {
-        await mustGit(candidate.path, ["reset", "--hard"])
-        await mustGit(candidate.path, ["clean", "-fd"])
-        await mustGit(candidate.path, ["checkout", "--detach", "--force", candidate.seedOid])
+        await git.resetHard(candidate.path)
+        await git.clean(candidate.path)
+        await git.checkoutDetached(candidate.path, candidate.seedOid)
     } else {
         await restoreCapturedState(candidate.path, candidate.seedOid)
     }
@@ -139,15 +139,9 @@ async function restoreCandidate(candidate: ManagedCandidate): Promise<void> {
 
 async function materializeCandidate(candidate: ManagedCandidate): Promise<void> {
     if (candidate.seedMode === "base") {
-        await mustGit(candidate.repositoryPath, ["worktree", "add", "--detach", candidate.path, candidate.seedOid])
+        await git.worktreeAdd(candidate.repositoryPath, candidate.path, candidate.seedOid)
     } else {
-        await mustGit(candidate.repositoryPath, [
-            "worktree",
-            "add",
-            "--detach",
-            candidate.path,
-            `${candidate.seedOid}^`
-        ])
+        await git.worktreeAdd(candidate.repositoryPath, candidate.path, `${candidate.seedOid}^`)
         await restoreCapturedState(candidate.path, candidate.seedOid)
     }
 }
@@ -195,11 +189,9 @@ function candidateSeedRef(id: string): string {
 }
 
 export async function isWorktreeRegistered(repositoryPath: string, checkoutPath: string): Promise<boolean> {
-    const output = await mustGit(repositoryPath, ["worktree", "list", "--porcelain", "-z"])
     const expectedPath = await canonicalPath(checkoutPath)
-    for (const field of output.stdout.split("\0")) {
-        if (!field.startsWith("worktree ")) continue
-        if ((await canonicalPath(field.slice("worktree ".length))) === expectedPath) return true
+    for (const worktreePath of await git.listWorktreePaths(repositoryPath)) {
+        if ((await canonicalPath(worktreePath)) === expectedPath) return true
     }
     return false
 }
