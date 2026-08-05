@@ -53,6 +53,30 @@ test("FakeCodingAgent applies changes and snapshots the worktree", async () => {
     expect(session.messages.at(-1)!.content).toBe(JSON.stringify({ done: true }))
 })
 
+test("FakeCodingAgent skips the worktree snapshot when snapshots are disabled", async () => {
+    // given a fake coding agent and a shared repository checkout
+    const { loopy } = tempLoopy()
+    const repo = await tempGitRepo()
+    const worktree = new Worktree(repo.path)
+    const agent = new FakeCodingAgent(() => ({
+        changes: [{ file: "src/hello.ts", text: "export const hi = 1\n" }],
+        output: { done: true }
+    }))
+
+    // when the agent runs with snapshots disabled
+    const result = await testRun(loopy, () =>
+        agent.run("review", { prompt: "review it", output: outputSchema, worktree, snapshot: false })
+    )
+
+    // then the output and worktree changes are retained without creating an agent snapshot
+    expect(result).toEqual({ done: true })
+    expect(fs.readFileSync(path.join(worktree.path, "src/hello.ts"), "utf8")).toBe("export const hi = 1\n")
+    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
+    expect(step.snapshotRef).toBeUndefined()
+    expect(await runGit(worktree.path, ["for-each-ref", "--format=%(refname)", "refs/loopy/agent"])).toBe("")
+})
+
 test("FakeCodingAgent records a void output as JSON", async () => {
     // given a fake coding agent that edits a file and returns no output
     const { loopy } = tempLoopy()
@@ -125,6 +149,93 @@ test("agent step replay restores the worktree snapshot", async () => {
     // and the worktree snapshot from the earlier agent step is restored
     expect(fs.readFileSync(path.join(worktree.path, "src/hello.ts"), "utf8")).toBe("export const hi = 1\n")
 })
+
+test("snapshotless agent step replay returns stored output without restoring the worktree", async () => {
+    // given a snapshotless agent step on a shared checkout and a later step that initially fails
+    const { loopy } = tempLoopy()
+    const repo = await tempGitRepo()
+    const worktree = new Worktree(repo.path)
+    let invocations = 0
+    const agent = new FakeCodingAgent(() => {
+        invocations++
+        return {
+            changes: [{ file: "src/hello.ts", text: "export const hi = 1\n" }],
+            output: { done: true }
+        }
+    })
+    let publishImpl: () => string = () => {
+        throw new Error("boom")
+    }
+    loopy.registerWorkflow("test-workflow", workflowOptions, async () => {
+        await agent.run("review", {
+            prompt: "review it",
+            output: outputSchema,
+            worktree,
+            snapshot: false
+        })
+        return loopy.step("publish", z.string(), async () => publishImpl())
+    })
+    const firstId = loopy.start("test-workflow", null)
+    await expect(runOutput(loopy, firstId)).rejects.toThrow("boom")
+    await runGit(worktree.path, ["reset", "--hard"])
+    await runGit(worktree.path, ["clean", "-fd"])
+
+    // when the workflow reruns from the later step with snapshots still disabled
+    publishImpl = () => "published"
+    const secondId = loopy.rerun(firstId, { from: "publish" })
+    expect(await runOutput(loopy, secondId)).toBe("published")
+
+    // then the agent is not reinvoked and its discarded change is not restored
+    expect(invocations).toBe(1)
+    expect(fs.existsSync(path.join(worktree.path, "src/hello.ts"))).toBe(false)
+    const run = await loopy.runs.get(secondId)
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
+    expect(step.snapshotRef).toBeUndefined()
+})
+
+test.each([
+    { recordedSnapshot: true, replayedSnapshot: false },
+    { recordedSnapshot: false, replayedSnapshot: true }
+])(
+    "agent replay rejects a snapshot mode change from $recordedSnapshot to $replayedSnapshot",
+    async ({ recordedSnapshot, replayedSnapshot }) => {
+        // given a succeeded agent step and a later step that initially fails
+        const { loopy } = tempLoopy()
+        const repo = await tempGitRepo()
+        const worktree = new Worktree(repo.path)
+        let snapshot = recordedSnapshot
+        let invocations = 0
+        const agent = new FakeCodingAgent(() => {
+            invocations++
+            return {
+                changes: [{ file: "src/hello.ts", text: "export const hi = 1\n" }],
+                output: { done: true }
+            }
+        })
+        let publishImpl: () => string = () => {
+            throw new Error("boom")
+        }
+        loopy.registerWorkflow("test-workflow", workflowOptions, async () => {
+            await agent.run("review", { prompt: "review it", output: outputSchema, worktree, snapshot })
+            return loopy.step("publish", z.string(), async () => publishImpl())
+        })
+        const firstId = loopy.start("test-workflow", null)
+        await expect(runOutput(loopy, firstId)).rejects.toThrow("boom")
+        await runGit(worktree.path, ["reset", "--hard"])
+        await runGit(worktree.path, ["clean", "-fd"])
+
+        // when the workflow replays the agent step with the opposite snapshot mode
+        snapshot = replayedSnapshot
+        publishImpl = () => "published"
+        const secondId = loopy.rerun(firstId, { from: "publish" })
+        await expect(runOutput(loopy, secondId)).rejects.toThrow(/recorded with snapshots .* replay requested/)
+
+        // then replay fails with the stable mismatch code before invoking the agent or restoring its change
+        expect(invocations).toBe(1)
+        expect(fs.existsSync(path.join(worktree.path, "src/hello.ts"))).toBe(false)
+        expect(await loopy.runs.get(secondId)).toMatchObject({ errorCode: "coding_agent_snapshot_mismatch" })
+    }
+)
 
 test("agent replay transforms the persisted raw reply once per execution", async () => {
     // given an agent with a transformed reply schema and a later step that initially fails

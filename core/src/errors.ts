@@ -21,6 +21,7 @@ export type LoopyErrorCode =
     | "ai_session_not_found"
     | "ai_session_message_not_found"
     | "coding_agent_snapshot_missing"
+    | "coding_agent_snapshot_mismatch"
     | "ai_output_missing"
     | "ai_output_invalid"
     | "llm_response_incomplete"

@@ -14,7 +14,7 @@ export type { StepColumn } from "./db"
 export type StepHandle = {
     readonly stepId: string
     readonly stepKey: string
-    set(column: StepColumn, value: string): void
+    set(column: StepColumn, value: string | number): void
 }
 
 export type ExecuteStepOptions<T extends z.ZodTypeAny> = {

@@ -136,8 +136,8 @@ test("listRuns combines all filters", () => {
     expect(rows.map((r) => r.id)).toEqual(["b"])
 })
 
-test("resetStep clears output, error, timestamps, and every linkage column", () => {
-    // given a succeeded step carrying output and each of its linkage columns, with real session and artifact rows behind the foreign keys
+test("resetStep clears output, error, timestamps, and execution metadata", () => {
+    // given a succeeded step carrying output, disabled snapshots, and each linkage column
     const { loopy } = tempLoopy()
     sql.insertRun(loopy.db, runRow({ id: "r" }))
     sql.insertSession(loopy.db, {
@@ -167,6 +167,7 @@ test("resetStep clears output, error, timestamps, and every linkage column", () 
     })
     sql.setStepColumn(loopy.db, "s", "session_id", "sess-1")
     sql.setStepColumn(loopy.db, "s", "snapshot_ref", "refs/loopy/x")
+    sql.setStepColumn(loopy.db, "s", "snapshot_enabled", 0)
     sql.setStepColumn(loopy.db, "s", "artifact_id", "art-1")
     sql.setStepColumn(loopy.db, "s", "event_key", "evt-1")
     sql.succeedStep(loopy.db, "s", "42", "2026-01-02T00:00:00.000Z")
@@ -186,8 +187,34 @@ test("resetStep clears output, error, timestamps, and every linkage column", () 
     // and no linkage from the previous attempt lingers
     expect(step.session_id).toBeNull()
     expect(step.snapshot_ref).toBeNull()
+    expect(step.snapshot_enabled).toBe(1)
     expect(step.artifact_id).toBeNull()
     expect(step.event_key).toBeNull()
+})
+
+test("copyStep preserves the coding agent snapshot mode", () => {
+    // given a succeeded snapshotless agent step and a destination run
+    const { loopy } = tempLoopy()
+    sql.insertRun(loopy.db, runRow({ id: "source" }))
+    sql.insertRun(loopy.db, runRow({ id: "destination" }))
+    sql.insertStep(loopy.db, {
+        id: "source-step",
+        run_id: "source",
+        key: "review",
+        name: "review",
+        seq: 0,
+        kind: "agent",
+        started_at: "2026-01-01T00:00:00.000Z"
+    })
+    sql.setStepColumn(loopy.db, "source-step", "snapshot_enabled", 0)
+    sql.succeedStep(loopy.db, "source-step", JSON.stringify({ done: true }), "2026-01-02T00:00:00.000Z")
+    const source = sql.findStep(loopy.db, "source", "review")!
+
+    // when the step is copied into the destination run
+    sql.copyStep(loopy.db, { ...source, id: "destination-step", run_id: "destination" })
+
+    // then the copied step remains snapshotless
+    expect(sql.findStep(loopy.db, "destination", "review")!.snapshot_enabled).toBe(0)
 })
 
 test("copyStep preserves a failed step's error code", () => {

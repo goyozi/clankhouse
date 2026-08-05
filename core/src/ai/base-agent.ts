@@ -44,6 +44,7 @@ export abstract class BaseCodingAgent implements CodingAgent {
     async run<T extends z.ZodTypeAny>(stepName: string, options: CodingRunOptions<T>): Promise<z.infer<T>> {
         const role = `Coding agent "${stepName}" output schema`
         const ctx = requireContext()
+        const snapshot = options.snapshot ?? true
         let session: SessionRecorder | undefined
         return ctx.loopy.engine.executeStep({
             kind: "agent",
@@ -52,6 +53,7 @@ export abstract class BaseCodingAgent implements CodingAgent {
             schemaIo: "input",
             schemaRole: role,
             execute: async (handle) => {
+                handle.set("snapshot_enabled", snapshot ? 1 : 0)
                 const prompt = await renderPrompt(options.prompt)
                 session = ctx.loopy.sessions.create({
                     kind: "coding-agent",
@@ -68,14 +70,24 @@ export abstract class BaseCodingAgent implements CodingAgent {
                 })
             },
             onSuccess: async (handle) => {
-                const ref = await options.worktree.snapshotRef(
-                    `refs/loopy/agent/${uniqueName(`${ctx.workflowName}/${ctx.runKey}`)}/${ctx.attempt}/${uniqueName(handle.stepKey)}`
-                )
-                handle.set("snapshot_ref", ref)
+                if (snapshot) {
+                    const ref = await options.worktree.snapshotRef(
+                        `refs/loopy/agent/${uniqueName(`${ctx.workflowName}/${ctx.runKey}`)}/${ctx.attempt}/${uniqueName(handle.stepKey)}`
+                    )
+                    handle.set("snapshot_ref", ref)
+                }
                 session?.succeed()
             },
             onError: async () => session?.fail(),
             onReplay: async (row) => {
+                const recordedSnapshot = row.snapshot_enabled === 1
+                if (recordedSnapshot !== snapshot) {
+                    throw new LoopyError(
+                        "coding_agent_snapshot_mismatch",
+                        `Agent step "${row.key}" was recorded with snapshots ${recordedSnapshot ? "enabled" : "disabled"} but replay requested snapshots ${snapshot ? "enabled" : "disabled"}`
+                    )
+                }
+                if (!snapshot) return
                 if (row.snapshot_ref === null) {
                     throw new LoopyError(
                         "coding_agent_snapshot_missing",

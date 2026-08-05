@@ -195,6 +195,7 @@ CREATE TABLE IF NOT EXISTS steps (
     error_code   TEXT,
     session_id   TEXT REFERENCES sessions(id),
     snapshot_ref TEXT,
+    snapshot_enabled INTEGER NOT NULL DEFAULT 1 CHECK (snapshot_enabled IN (0, 1)),
     artifact_id  TEXT REFERENCES artifacts(id),
     event_key    TEXT,
     started_at   TEXT NOT NULL,
@@ -206,7 +207,7 @@ CREATE INDEX IF NOT EXISTS idx_steps_run_id_seq ON steps(run_id, seq);
 
 export type StepKind = "custom" | "artifact" | "llm" | "agent" | "event" | "worktree"
 
-export type StepColumn = "session_id" | "snapshot_ref" | "artifact_id" | "event_key"
+export type StepColumn = "session_id" | "snapshot_ref" | "snapshot_enabled" | "artifact_id" | "event_key"
 
 export type StepRow = {
     id: string
@@ -221,6 +222,7 @@ export type StepRow = {
     error_code: LoopyErrorCode | null
     session_id: string | null
     snapshot_ref: string | null
+    snapshot_enabled: 0 | 1
     artifact_id: string | null
     event_key: string | null
     started_at: string
@@ -256,16 +258,17 @@ function prepareStepStatements(db: Db): StepStatements {
         insert: db.prepare(
             "INSERT INTO steps (id, run_id, key, name, seq, kind, status, started_at) VALUES (?, ?, ?, ?, ?, ?, 'interrupted', ?)"
         ),
-        copy: db.prepare(`INSERT INTO steps (id, run_id, key, name, seq, kind, status, output, error, error_code, session_id, snapshot_ref, artifact_id, event_key, started_at, ended_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+        copy: db.prepare(`INSERT INTO steps (id, run_id, key, name, seq, kind, status, output, error, error_code, session_id, snapshot_ref, snapshot_enabled, artifact_id, event_key, started_at, ended_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
         reset: db.prepare(`UPDATE steps SET status = 'interrupted', output = NULL, error = NULL, error_code = NULL,
-            session_id = NULL, snapshot_ref = NULL, artifact_id = NULL, event_key = NULL,
+            session_id = NULL, snapshot_ref = NULL, snapshot_enabled = 1, artifact_id = NULL, event_key = NULL,
             started_at = ?, ended_at = NULL WHERE id = ?`),
         succeed: db.prepare("UPDATE steps SET status = 'succeeded', output = ?, ended_at = ? WHERE id = ?"),
         fail: db.prepare("UPDATE steps SET status = 'failed', error = ?, error_code = ?, ended_at = ? WHERE id = ?"),
         setColumn: {
             session_id: setColumn("session_id"),
             snapshot_ref: setColumn("snapshot_ref"),
+            snapshot_enabled: setColumn("snapshot_enabled"),
             artifact_id: setColumn("artifact_id"),
             event_key: setColumn("event_key")
         }
@@ -321,6 +324,7 @@ export function copyStep(db: Db, row: StepRow): void {
         row.error_code,
         row.session_id,
         row.snapshot_ref,
+        row.snapshot_enabled,
         row.artifact_id,
         row.event_key,
         row.started_at,
@@ -340,7 +344,7 @@ export function failStep(db: Db, id: string, error: string, errorCode: LoopyErro
     statements(db).steps.fail.run(error, errorCode, endedAt, id)
 }
 
-export function setStepColumn(db: Db, id: string, column: StepColumn, value: string): void {
+export function setStepColumn(db: Db, id: string, column: StepColumn, value: string | number): void {
     statements(db).steps.setColumn[column].run(value, id)
 }
 

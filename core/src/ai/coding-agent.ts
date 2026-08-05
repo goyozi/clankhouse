@@ -7,13 +7,14 @@ export type CodingRunOptions<T extends z.ZodTypeAny> = {
     prompt: Prompt
     output: T
     worktree: Worktree
+    snapshot?: boolean
 }
 
 export interface CodingAgent {
     /**
      * Durable step executing a coding agent session.
-     * Takes a snapshot after agent session ends.
-     * Re-running stored step restores the snapshot in addition to returning stored output.
+     * By default, takes a snapshot after the session ends and restores it when replaying the stored step.
+     * Pass `snapshot: false` to skip both operations. Replay rejects changes to the recorded snapshot mode.
      */
     run<T extends z.ZodTypeAny>(stepName: string, options: CodingRunOptions<T>): Promise<z.infer<T>>
 }
