@@ -11,6 +11,7 @@ import { Engine } from "./engine"
 import { Events, type EventDefinition } from "./events"
 import { Notifier } from "./watch"
 import { Workflows, type RerunOptions, type WorkflowOptions } from "./workflows"
+import { gcWorktrees, type WorktreeGcResult } from "./git"
 
 export class Loopy {
     readonly loopyDir: string
@@ -25,6 +26,9 @@ export class Loopy {
 
     /**
      * @param loopyDir path in which all Loopy-managed files are stored. Defaults to $LOOPY_DIR, if present, or ~/.loopy otherwise
+     * Note: Loopy assumes full ownership of provided path and may delete files inside.
+     *
+     * @see gc
      */
     constructor(loopyDir?: string) {
         this.loopyDir = resolveLoopyDir(loopyDir)
@@ -104,7 +108,7 @@ export class Loopy {
 
     /**
      * Emits provided event resolving or rejecting all waits for a given key.
-     * Inside a workflow run, the emit is a durable step and is not repeated on replay.
+     * Inside a workflow run, emit is a durable step and is not repeated on replay.
      *
      * @see Loopy.waitFor
      * @see Loopy.waitForAny
@@ -131,6 +135,17 @@ export class Loopy {
      */
     async waitForAny(defs: EventDefinition<any>[]): Promise<any> {
         return this.events.waitForAny(defs)
+    }
+
+    /**
+     * Cleans up dangling (unassigned) worktrees older than 14 days.
+     * Limitations:
+     * - Does not (yet) clean up old runs and user/agent snapshot refs.
+     * - Concurrent GC invocations are not supported.
+     * - Unexpected Git metadata inconsistencies require manual repair.
+     */
+    async gc(): Promise<{ worktrees: WorktreeGcResult }> {
+        return { worktrees: await gcWorktrees(this.loopyDir, this.db) }
     }
 }
 

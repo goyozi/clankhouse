@@ -37,7 +37,7 @@ test("FakeCodingAgent applies changes and snapshots the worktree", async () => {
     expect(fs.readFileSync(path.join(worktree.path, "README.md"), "utf8")).toBe("# tested\n")
     // and the run records an agent step with a snapshot ref
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-    const step = run.steps[0]
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
     expect(step.kind).toBe("agent")
     if (step.kind !== "agent") throw new Error("unreachable")
     expect(step.snapshotRef).toBe(
@@ -75,7 +75,7 @@ test("FakeCodingAgent records a void output as JSON", async () => {
     expect(result).toBeUndefined()
     // and the final assistant message is parseable JSON rather than an empty string
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-    const step = run.steps[0]
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
     const content = (await loopy.sessions.get(step.sessionId!)).messages.at(-1)!.content
     expect(JSON.parse(content)).toBeNull()
@@ -161,7 +161,7 @@ test("agent replay transforms the persisted raw reply once per execution", async
     expect(invocations).toBe(1)
     expect(transforms).toBe(2)
     const run = await loopy.runs.get(secondId)
-    expect(run.steps[0].outputJson).toBe(JSON.stringify({ done: true }))
+    expect(run.steps.find((step) => step.kind === "agent")!.outputJson).toBe(JSON.stringify({ done: true }))
 })
 
 test("agent step replay fails loudly when its worktree snapshot is missing", async () => {
@@ -188,7 +188,8 @@ test("agent step replay fails loudly when its worktree snapshot is missing", asy
     await expect(runOutput(loopy, firstId)).rejects.toThrow("boom")
     // and the agent step's snapshot ref is lost before replay (e.g. the ref was pruned)
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-    loopy.db.prepare("UPDATE steps SET snapshot_ref = NULL WHERE id = ?").run(run.steps[0].id)
+    const agentStep = run.steps.find((step) => step.kind === "agent")!
+    loopy.db.prepare("UPDATE steps SET snapshot_ref = NULL WHERE id = ?").run(agentStep.id)
 
     // and when the workflow reruns from the publish step
     publishImpl = () => "published"
@@ -215,7 +216,7 @@ test("snapshot refs stay distinct for step keys that sanitize to the same string
 
     // then both agent steps are recorded on the run
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-    const refs = run.steps.map((s) => (s.kind === "agent" ? s.snapshotRef : undefined))
+    const refs = run.steps.flatMap((step) => (step.kind === "agent" ? [step.snapshotRef] : []))
     expect(refs).toHaveLength(2)
     // and their snapshot refs are distinct
     expect(new Set(refs).size).toBe(2)
@@ -264,7 +265,7 @@ test("edit with missing oldText fails the step and the session", async () => {
 
     // then the agent step is marked failed
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-    const step = run.steps[0]
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
     expect(step.status).toBe("failed")
     expect(step.errorCode).toBe("fake_agent_edit_text_not_found")
     if (step.kind !== "agent") throw new Error("unreachable")

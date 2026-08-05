@@ -1,3 +1,5 @@
 node_modules/
 scratchpad/
 .env
+.idea/
+*.tsbuildinfo

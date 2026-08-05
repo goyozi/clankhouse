@@ -76,6 +76,8 @@ export function toStep(step: CoreStep): MessageInitShape<typeof StepSchema> {
             }
         case "event":
             return { ...base, ...(step.eventKey !== undefined ? { eventKey: step.eventKey } : {}) }
+        case "worktree":
+            return base
     }
 }
 
@@ -138,6 +140,8 @@ function toStepKind(kind: CoreStep["kind"]): StepKind {
             return StepKind.AGENT
         case "event":
             return StepKind.EVENT
+        case "worktree":
+            return StepKind.WORKTREE
     }
 }
 

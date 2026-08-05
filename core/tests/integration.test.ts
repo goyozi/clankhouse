@@ -6,12 +6,11 @@ import { FakeCodingAgent } from "@loopy/core/ai/fake-agent"
 import { FakeLLM } from "@loopy/core/ai/fake-llm"
 import { GitRepository } from "@loopy/core/git"
 import { Loopy } from "@loopy/core/loopy"
-import { uniqueName } from "@loopy/core/util"
-import { gate, runOutput, tempGitRepo, tempLoopy } from "@loopy/test-utils"
+import { gate, runOutput, tempGitRepo, tempLoopy, testRun } from "@loopy/test-utils"
 
 test("end-to-end: durable workflow with llm, agent, artifact and approval survives crashes and reruns", async () => {
     // given a durable loopy instance and a git repository
-    const { loopy, dir, reopen } = tempLoopy()
+    const { loopy, reopen } = tempLoopy()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
 
@@ -125,12 +124,6 @@ test("end-to-end: durable workflow with llm, agent, artifact and approval surviv
     // and exactly one event was recorded across the whole run
     expect(third.db.prepare("SELECT COUNT(*) AS n FROM events").get()).toEqual({ n: 1 })
 
-    // then the agent-implemented files are written to the worktree
-    const worktreePath = path.join(dir, "worktrees", uniqueName(repo.path), uniqueName("feature/feat-x"))
-    expect(fs.readFileSync(path.join(worktreePath, "alpha.txt"), "utf8")).toBe("content of alpha")
-    // and the second drafted file is also present
-    expect(fs.readFileSync(path.join(worktreePath, "beta.txt"), "utf8")).toBe("content of beta")
-
     // then the run record reflects a single succeeded attempt with the published output
     const runs = await third.runs.list({ key: "feat-x" })
     expect(runs).toHaveLength(1)
@@ -138,11 +131,18 @@ test("end-to-end: durable workflow with llm, agent, artifact and approval surviv
     expect(run.status).toBe("succeeded")
     expect(run.attempt).toBe(1)
     expect(run.output).toBe("published by greg")
+    // and the agent-implemented files are written to the durable worktree
+    const worktreeId = run.steps.find((step) => step.kind === "worktree")!.output!.id
+    const worktreePath = path.join(third.loopyDir, "worktrees", worktreeId, "checkout")
+    expect(fs.readFileSync(path.join(worktreePath, "alpha.txt"), "utf8")).toBe("content of alpha")
+    // and the second drafted file is also present
+    expect(fs.readFileSync(path.join(worktreePath, "beta.txt"), "utf8")).toBe("content of beta")
     // and the steps are recorded in the expected order, kind and status
     expect(run.steps.map((s) => [s.key, s.kind, s.status])).toEqual([
         ["plan", "custom", "succeeded"],
         ["draft-alpha/draft", "llm", "succeeded"],
         ["draft-beta/draft", "llm", "succeeded"],
+        ["worktree", "worktree", "succeeded"],
         ["implement", "agent", "succeeded"],
         ["artifact:summary", "artifact", "succeeded"],
         ["wait:approval", "event", "succeeded"],
@@ -157,8 +157,8 @@ test("end-to-end: durable workflow with llm, agent, artifact and approval surviv
     // and three ai sessions were recorded, one per llm draft plus one for the agent
     expect(third.db.prepare("SELECT COUNT(*) AS n FROM sessions").get()).toEqual({ n: 3 })
 
-    // given the alpha.txt file is deleted from the worktree
-    fs.rmSync(path.join(worktreePath, "alpha.txt"))
+    // given the managed checkout disappears while its Git registration remains
+    fs.rmSync(worktreePath, { recursive: true })
     // when the workflow is rerun from the publish step
     const rerunId = third.rerun(runId, { from: "publish" })
     const rerunResult = await runOutput(third, rerunId)
@@ -166,16 +166,49 @@ test("end-to-end: durable workflow with llm, agent, artifact and approval surviv
     expect(rerunResult).toBe("published by greg")
     // and only the publish step runs again, all earlier steps are not re-executed
     expect(calls).toEqual({ plan: 1, llm: 2, agent: 1, publish: 2 })
-    // and the deleted file reappears, restored from the implement step's snapshot
+    // and the checkout is reconstructed before the implement step restores both agent-authored files
     expect(fs.readFileSync(path.join(worktreePath, "alpha.txt"), "utf8")).toBe("content of alpha")
+    expect(fs.readFileSync(path.join(worktreePath, "beta.txt"), "utf8")).toBe("content of beta")
     // and two attempts are now recorded for the same run key, both succeeded
     const attempts = await third.runs.list({ key: "feat-x" })
     expect(attempts.map((a) => [a.attempt, a.status]).sort()).toEqual([
         [1, "succeeded"],
         [2, "succeeded"]
     ])
-    // and the second attempt has all 7 steps recorded as succeeded
+    // and the second attempt has all 8 steps recorded as succeeded
     const attempt2 = await third.runs.get(attempts.find((a) => a.attempt === 2)!.id)
-    expect(attempt2.steps).toHaveLength(7)
+    expect(attempt2.steps).toHaveLength(8)
     expect(attempt2.steps.every((s) => s.status === "succeeded")).toBe(true)
+})
+
+test("replay preserves ignored install output when the install step is cached", async () => {
+    // given a durable worktree whose cached install step creates ignored dependencies
+    const { loopy } = tempLoopy()
+    const repo = await tempGitRepo()
+    repo.write(".gitignore", "node_modules/\n")
+    await repo.commitAll("ignore dependencies")
+    const repository = new GitRepository(repo.path)
+    let worktreePath = ""
+    let installs = 0
+    const workflow = async () => {
+        const worktree = await repository.worktree({ base: "main" })
+        worktreePath = worktree.path
+        await loopy.step("install", z.null(), async () => {
+            installs++
+            fs.mkdirSync(path.join(worktree.path, "node_modules"), { recursive: true })
+            fs.writeFileSync(path.join(worktree.path, "node_modules", "installed.txt"), "installed")
+            return null
+        })
+        return null
+    }
+    await testRun(loopy, workflow)
+    const runId = (await loopy.runs.list())[0].id
+    loopy.db.prepare("UPDATE runs SET status = 'interrupted', output = NULL, ended_at = NULL WHERE id = ?").run(runId)
+
+    // when the workflow replays both durable steps
+    await testRun(loopy, workflow)
+
+    // then install remains cached and its ignored output survives worktree cleanup
+    expect(installs).toBe(1)
+    expect(fs.readFileSync(path.join(worktreePath, "node_modules", "installed.txt"), "utf8")).toBe("installed")
 })

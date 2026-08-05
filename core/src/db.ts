@@ -188,7 +188,7 @@ CREATE TABLE IF NOT EXISTS steps (
     key          TEXT NOT NULL,
     name         TEXT NOT NULL,
     seq          INTEGER NOT NULL,
-    kind         TEXT NOT NULL CHECK (kind IN ('custom','artifact','llm','agent','event')),
+    kind         TEXT NOT NULL CHECK (kind IN ('custom','artifact','llm','agent','event','worktree')),
     status       TEXT NOT NULL CHECK (status IN ('interrupted','succeeded','failed')),
     output       TEXT,
     error        TEXT,
@@ -204,7 +204,7 @@ CREATE TABLE IF NOT EXISTS steps (
 CREATE INDEX IF NOT EXISTS idx_steps_run_id_seq ON steps(run_id, seq);
 `
 
-export type StepKind = "custom" | "artifact" | "llm" | "agent" | "event"
+export type StepKind = "custom" | "artifact" | "llm" | "agent" | "event" | "worktree"
 
 export type StepColumn = "session_id" | "snapshot_ref" | "artifact_id" | "event_key"
 
@@ -290,6 +290,12 @@ export function findStepsByRun(db: Db, runId: string): StepRow[] {
 
 export function findStepsBefore(db: Db, runId: string, seq: number): StepRow[] {
     return statements(db).steps.findBefore.all(runId, seq) as unknown as StepRow[]
+}
+
+export function findSucceededWorktreeSteps(db: Db): StepRow[] {
+    return db
+        .prepare("SELECT * FROM steps WHERE kind = 'worktree' AND status = 'succeeded' ORDER BY id")
+        .all() as unknown as StepRow[]
 }
 
 export function findMaxStepSeq(db: Db, runId: string): number {

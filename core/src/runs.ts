@@ -4,6 +4,7 @@ import { LoopyError } from "./errors"
 import type { LoopyErrorCode } from "./errors"
 import { observableStatus, type ActiveSets } from "./runtime"
 import type { Db, ListRunsFilter, RunRow, StepRow } from "./db"
+import type { WorktreeReference } from "./git"
 import { watch, type Notifier } from "./watch"
 
 export class WorkflowRuns {
@@ -195,6 +196,8 @@ export class WorkflowRuns {
                     ...(outputJson !== undefined ? { outputJson } : {}),
                     ...(row.event_key !== null ? { eventKey: row.event_key } : {})
                 }
+            case "worktree":
+                return { ...base, kind: "worktree", output, ...(outputJson !== undefined ? { outputJson } : {}) }
         }
     }
 }
@@ -244,8 +247,9 @@ export type AgentStep = StepBase & {
     outputJson?: string
 }
 export type EventStep = StepBase & { kind: "event"; eventKey?: string; output?: unknown }
+export type WorktreeStep = StepBase & { kind: "worktree"; output?: WorktreeReference }
 
-export type Step = CustomStep | ArtifactStep | LlmStep | AgentStep | EventStep
+export type Step = CustomStep | ArtifactStep | LlmStep | AgentStep | EventStep | WorktreeStep
 
 // persisted state is never "running" -> "running" stuff is in-memory only and "overlayed" on top of "interrupted"
 export type PersistedRunStatus = "interrupted" | "succeeded" | "failed"

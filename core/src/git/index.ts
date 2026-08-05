@@ -1,0 +1,6 @@
+export { gcWorktrees } from "./gc"
+export type { WorktreeGcResult } from "./gc"
+export { GitRepository } from "./repository"
+export type { WorktreeOptions, WorktreeReference } from "./repository"
+export { Worktree } from "./worktree"
+export type { ProcessOutput } from "./exec"

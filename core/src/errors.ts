@@ -28,6 +28,10 @@ export type LoopyErrorCode =
     | "llm_response_invalid"
     | "fake_agent_edit_text_not_found"
     | "git_snapshot_name_invalid"
+    | "git_snapshot_format_unsupported"
+    | "git_snapshot_restore_failed"
+    | "git_worktree_unavailable"
+    | "git_worktree_gc_failed"
 
 export class LoopyError extends Error {
     readonly code: LoopyErrorCode

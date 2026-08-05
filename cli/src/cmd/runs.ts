@@ -463,6 +463,8 @@ function stepKind(value: StepKind): string {
             return "agent"
         case StepKind.EVENT:
             return "event"
+        case StepKind.WORKTREE:
+            return "worktree"
         default:
             return "unspecified"
     }

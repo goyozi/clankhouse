@@ -64,7 +64,7 @@ test("ClaudeAgent maps the SDK conversation to the session and snapshots the wor
     expect(fs.readFileSync(path.join(worktree.path, "src/hello.ts"), "utf8")).toBe("export const hi = 1\n")
     // and the run records an agent step with a snapshot ref
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-    const step = run.steps[0]
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
     expect(step.kind).toBe("agent")
     if (step.kind !== "agent") throw new Error("unreachable")
     expect(step.snapshotRef).toBe(
@@ -136,7 +136,7 @@ test("ClaudeAgent runs a void-output step without instructed output framing", as
     // and the coding work is applied and the step and session still succeed with a snapshot
     expect(fs.readFileSync(path.join(worktree.path, "src/hello.ts"), "utf8")).toBe("export const hi = 1\n")
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-    const step = run.steps[0]
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
     expect((await worktree.git(["rev-parse", step.snapshotRef!])).exitCode).toBe(0)
     expect((await loopy.sessions.get(step.sessionId!)).status).toBe("succeeded")
@@ -173,7 +173,7 @@ test("ClaudeAgent records every supported SDK message and block type", async () 
 
     // then the prompt, init, thinking, text, every tool call, every result and the output are all recorded
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-    const step = run.steps[0]
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
     const session = await loopy.sessions.get(step.sessionId!)
     expect(session.messages.map((m) => m.role)).toEqual([
@@ -292,7 +292,7 @@ test("ClaudeAgent passes configured options to the SDK", async () => {
     expect(options.systemPrompt).toBe("custom prompt")
     // and the session records the configured model
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-    const step = run.steps[0]
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
     expect((await loopy.sessions.get(step.sessionId!)).model).toBe("claude-opus-4-8")
 })
@@ -321,7 +321,7 @@ test("a non-JSON-representable output schema fails the step without invoking the
     expect(calls).toHaveLength(0)
     // and no agent step or session was created
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-    expect(run.steps).toHaveLength(0)
+    expect(run.steps.filter((step) => step.kind === "agent")).toHaveLength(0)
     expect(loopy.db.prepare("SELECT COUNT(*) AS n FROM sessions").get()).toEqual({ n: 0 })
 })
 
@@ -347,7 +347,7 @@ test("an error result fails the step and the session", async () => {
 
     // then the agent step is marked failed
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-    const step = run.steps[0]
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
     expect(step.status).toBe("failed")
     if (step.kind !== "agent") throw new Error("unreachable")
     // and the session is marked failed with the messages recorded so far preserved
@@ -374,7 +374,7 @@ test("an untagged final response fails the step", async () => {
 
     // then the agent step and the session are marked failed
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-    const step = run.steps[0]
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
     expect(step.status).toBe("failed")
     if (step.kind !== "agent") throw new Error("unreachable")
     expect((await loopy.sessions.get(step.sessionId!)).status).toBe("failed")
@@ -419,7 +419,7 @@ test("structured output violating the schema fails the step", async () => {
 
     // then the agent step and the session are marked failed
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-    const step = run.steps[0]
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
     expect(step.status).toBe("failed")
     if (step.kind !== "agent") throw new Error("unreachable")
     expect((await loopy.sessions.get(step.sessionId!)).status).toBe("failed")
@@ -443,7 +443,7 @@ test("a mid-stream SDK failure fails the step and preserves recorded messages", 
 
     // then the agent step and the session are marked failed
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-    const step = run.steps[0]
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
     expect(step.status).toBe("failed")
     if (step.kind !== "agent") throw new Error("unreachable")
     const session = await loopy.sessions.get(step.sessionId!)
@@ -470,7 +470,7 @@ test("a stream that ends without a result fails the step", async () => {
 
     // then the agent step is marked failed
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-    expect(run.steps[0].status).toBe("failed")
+    expect(run.steps.find((step) => step.kind === "agent")!.status).toBe("failed")
 })
 
 test("claude agent step replay restores the worktree without re-invoking the SDK", async () => {
@@ -550,7 +550,7 @@ Report exactly two array entries in order: a file entry for hello.txt with lineC
         expect(fs.readFileSync(path.join(worktree.path, "hello.txt"), "utf8")).toBe("hello\nloopy\n")
         // and the session succeeds with a valid worktree snapshot
         const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-        const step = run.steps[0]
+        const step = run.steps.find((candidate) => candidate.kind === "agent")!
         if (step.kind !== "agent") throw new Error("unreachable")
         const session = await loopy.sessions.get(step.sessionId!)
         expect(session.status).toBe("succeeded")

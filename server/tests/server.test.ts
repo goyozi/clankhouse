@@ -191,6 +191,7 @@ test("serves a FakeLLM and FakeCodingAgent workflow through the complete RPC sur
     expect(fetched.metadata).toMatchObject({ workflowName: "build", key: "feature-1", attempt: 1 })
     expect(fetched.steps.map((step) => step.kind)).toEqual([
         StepKind.LLM,
+        StepKind.WORKTREE,
         StepKind.AGENT,
         StepKind.ARTIFACT,
         StepKind.EVENT,

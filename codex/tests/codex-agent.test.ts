@@ -67,7 +67,7 @@ test("CodexAgent maps the SDK conversation to the session and snapshots the work
     expect(fs.readFileSync(path.join(worktree.path, "src/hello.ts"), "utf8")).toBe("export const hi = 1\n")
     // and the durable step stores a valid worktree snapshot
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-    const step = run.steps[0]
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
     expect(step.kind).toBe("agent")
     if (step.kind !== "agent") throw new Error("unreachable")
     expect(step.snapshotRef).toBe(
@@ -141,7 +141,7 @@ test("CodexAgent runs a void-output step without instructed output framing", asy
     // and the coding work is applied and the step and session still succeed with a snapshot
     expect(fs.readFileSync(path.join(worktree.path, "src/hello.ts"), "utf8")).toBe("export const hi = 1\n")
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-    const step = run.steps[0]
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
     expect((await worktree.git(["rev-parse", step.snapshotRef!])).exitCode).toBe(0)
     expect((await loopy.sessions.get(step.sessionId!)).status).toBe("succeeded")
@@ -238,7 +238,7 @@ test("CodexAgent records every supported SDK item type", async () => {
 
     // then every completed item is recorded once and the update adds no duplicate
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-    const step = run.steps[0]
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
     const session = await loopy.sessions.get(step.sessionId!)
     expect(session.messages.map((message) => message.role)).toEqual([
@@ -498,9 +498,9 @@ test("a non-JSON-representable output schema fails before starting a Codex threa
     // then the SDK thread and turn are never started
     expect(threadOptions).toHaveLength(0)
     expect(runCalls).toHaveLength(0)
-    // and no durable step or session was created
+    // and no agent step or session was created
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-    expect(run.steps).toHaveLength(0)
+    expect(run.steps.filter((step) => step.kind === "agent")).toHaveLength(0)
     expect(loopy.db.prepare("SELECT COUNT(*) AS n FROM sessions").get()).toEqual({ n: 0 })
 })
 
@@ -525,7 +525,7 @@ test("a failed Codex turn fails the durable step and preserves recorded messages
 
     // then the step and session fail with earlier messages preserved
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-    const step = run.steps[0]
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
     expect(step.status).toBe("failed")
     if (step.kind !== "agent") throw new Error("unreachable")
     const session = await loopy.sessions.get(step.sessionId!)
@@ -569,7 +569,7 @@ test("a thrown SDK stream error fails the step and preserves initialization", as
 
     // then the failed session preserves the prompt and thread metadata
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-    const step = run.steps[0]
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
     const session = await loopy.sessions.get(step.sessionId!)
     expect(session.status).toBe("failed")
@@ -650,7 +650,7 @@ test("Codex output fails when the turn has no final agent message", async () => 
     // then the missing tagged report fails the durable step and session
     await expect(result).rejects.toThrow("did not return the instructed output tags")
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-    const step = run.steps[0]
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
     expect((await loopy.sessions.get(step.sessionId!)).status).toBe("failed")
 })
@@ -673,7 +673,7 @@ test("structured output violating the Zod schema fails the step", async () => {
 
     // then the engine marks the step and session failed after final validation
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-    const step = run.steps[0]
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
     expect(step.status).toBe("failed")
     if (step.kind !== "agent") throw new Error("unreachable")
     expect((await loopy.sessions.get(step.sessionId!)).status).toBe("failed")
@@ -758,7 +758,7 @@ Report exactly two array entries in order: a file entry for hello.txt with lineC
         expect(fs.readFileSync(path.join(worktree.path, "hello.txt"), "utf8")).toBe("hello\nloopy\n")
         // and the session succeeds with a valid worktree snapshot
         const run = await loopy.runs.get((await loopy.runs.list())[0].id)
-        const step = run.steps[0]
+        const step = run.steps.find((candidate) => candidate.kind === "agent")!
         if (step.kind !== "agent") throw new Error("unreachable")
         const session = await loopy.sessions.get(step.sessionId!)
         expect(session.status).toBe("succeeded")
