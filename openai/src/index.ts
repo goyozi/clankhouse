@@ -53,6 +53,7 @@ export class OpenAIModel extends BaseLanguageModel {
 
 function recordOutput(session: SessionRecorder, response: Response): { text: string | undefined; refusals: string[] } {
     const refusals: string[] = []
+    let hasText = false
     for (const output of response.output) {
         if (output.type === "reasoning") {
             const reasoning = reasoningText(output)
@@ -60,6 +61,7 @@ function recordOutput(session: SessionRecorder, response: Response): { text: str
         } else if (output.type === "message") {
             for (const content of output.content) {
                 if (content.type === "output_text") {
+                    hasText = true
                     session.addMessage("assistant", content.text)
                 } else {
                     refusals.push(content.refusal)
@@ -73,7 +75,7 @@ function recordOutput(session: SessionRecorder, response: Response): { text: str
             )
         }
     }
-    return { text: response.output_text === "" ? undefined : response.output_text, refusals }
+    return { text: hasText ? response.output_text : undefined, refusals }
 }
 
 function reasoningText(output: Extract<ResponseOutputItem, { type: "reasoning" }>): string {

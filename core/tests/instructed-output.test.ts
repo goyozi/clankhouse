@@ -47,6 +47,40 @@ test("LLM instructed output requests only a nonce-tagged JSON answer", () => {
     })
 })
 
+test.each(["coding-agent", "llm"] as const)(
+    "z.string output in %s mode leaves the prompt untouched and collects the final message verbatim",
+    (mode) => {
+        // given a checked and branded root string schema in the selected AI mode
+        const output = z.string().min(1).brand<"Answer">()
+        const finalMessage = '  {"answer":"raw"}\n```text\nunchanged\n```  '
+
+        // when instructed output is prepared and the final message is collected
+        const prepared = prepareInstructedOutput("answer naturally", output, mode)
+        const collected = prepared.collect(finalMessage)
+
+        // then no output instruction is appended and the exact final message is returned
+        expect(prepared.prompt).toBe("answer naturally")
+        expect(collected).toBe(finalMessage)
+        // and an absent final message is passed through for the durable step to validate
+        expect(prepared.collect()).toBeUndefined()
+    }
+)
+
+test.each([
+    ["readonly", z.string().readonly()],
+    ["pipe", z.string().pipe(z.string().min(1))],
+    ["transform", z.string().transform((value) => value.length)]
+] as const)("wrapped string output using %s retains instructed JSON framing", (_name, output) => {
+    // given a string-input schema wrapped in another Zod type
+    const prepared = prepareInstructedOutput("answer", output, "llm")
+    const { opening, closing } = instructedTags(prepared.prompt)
+
+    // when its prompt and collected output are inspected
+    // then the wrapper prevents the root-string fast path
+    expect(prepared.prompt).toMatch(/^answer\n\nIMPORTANT — requested final answer:/)
+    expect(prepared.collect(`${opening}\n"value"\n${closing}`)).toBe("value")
+})
+
 test("instructed output for z.void leaves the prompt untouched and collects nothing", () => {
     // given prepared instructions for a void output in both modes
     const codingAgent = prepareInstructedOutput("report", z.void(), "coding-agent")

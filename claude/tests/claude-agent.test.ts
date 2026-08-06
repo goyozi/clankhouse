@@ -142,6 +142,31 @@ test("ClaudeAgent runs a void-output step without instructed output framing", as
     expect((await loopy.sessions.get(step.sessionId!)).status).toBe("succeeded")
 })
 
+test("ClaudeAgent returns its result message verbatim for a root string output", async () => {
+    // given a fake SDK returning a final result with significant whitespace and JSON-looking text
+    const { loopy } = tempLoopy()
+    const repo = await tempGitRepo()
+    const worktree = new Worktree(repo.path)
+    const finalMessage = '  {"done":"naturally"}\nNo framing.  '
+    const { query, calls } = fakeClaudeQuery(() => ({ finalResponse: finalMessage }))
+    const agent = new ClaudeAgent({ model: "claude-test", query })
+
+    // when the agent runs with a root string schema
+    const result = await testRun(loopy, () =>
+        agent.run("report", { prompt: "report naturally", output: z.string(), worktree })
+    )
+
+    // then the SDK receives the bare prompt and the exact result message is returned
+    expect(calls[0].prompt).toBe("report naturally")
+    expect(result).toBe(finalMessage)
+    // and the raw message is recorded and durably persisted as a string
+    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
+    if (step.kind !== "agent") throw new Error("unreachable")
+    expect(step.outputJson).toBe(JSON.stringify(finalMessage))
+    expect((await loopy.sessions.get(step.sessionId!)).messages.at(-1)!.content).toBe(finalMessage)
+})
+
 test("ClaudeAgent records every supported SDK message and block type", async () => {
     // given a fake SDK scripted with one of each block type the recorder supports
     const { loopy } = tempLoopy()

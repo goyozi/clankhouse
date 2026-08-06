@@ -75,6 +75,33 @@ test("AnthropicModel uses the official streaming client and records thinking sep
     ])
 })
 
+test("AnthropicModel returns its combined final text verbatim for a root string output", async () => {
+    // given an official response whose final text is split around a thinking block
+    const { loopy } = tempLoopy()
+    const first = '  {"answer":"natural"}\n'
+    const second = "No framing.  "
+    const fake = fakeAnthropic(() => [textBlock(first), thinkingBlock("Checked the answer."), textBlock(second)])
+    const model = new AnthropicModel({ model: "claude-test", maxTokens: 256, clientOptions: fake.clientOptions })
+
+    // when the model is called with a root string schema
+    const result = await testRun(loopy, () => model.call("answer", { prompt: "Answer naturally.", output: z.string() }))
+
+    // then the official client receives the bare prompt and all final text is returned exactly
+    expect(fake.requests[0].messages[0].content).toBe("Answer naturally.")
+    expect(result).toBe(first + second)
+    // and the durable output stores the combined string while the session retains provider blocks
+    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const step = run.steps[0]
+    if (step.kind !== "llm") throw new Error("unreachable")
+    expect(step.outputJson).toBe(JSON.stringify(first + second))
+    expect((await loopy.sessions.get(step.sessionId!)).messages.map((message) => message.content)).toEqual([
+        "Answer naturally.",
+        first,
+        "Checked the answer.",
+        second
+    ])
+})
+
 test("AnthropicModel records readable thinking but drops redacted thinking", async () => {
     // given an official response mixing readable thinking with an encrypted redacted block
     const { loopy } = tempLoopy()

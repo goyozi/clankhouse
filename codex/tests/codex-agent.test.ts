@@ -147,6 +147,35 @@ test("CodexAgent runs a void-output step without instructed output framing", asy
     expect((await loopy.sessions.get(step.sessionId!)).status).toBe("succeeded")
 })
 
+test("CodexAgent returns its final message verbatim for a root string output", async () => {
+    // given a fake SDK returning a final message with significant whitespace and JSON-looking text
+    const { loopy } = tempLoopy()
+    const repo = await tempGitRepo()
+    const worktree = new Worktree(repo.path)
+    const finalMessage = '  {"done":"naturally"}\nNo framing.  '
+    const { codexFactory, runCalls } = fakeCodex(() => ({ finalResponse: finalMessage }))
+    const agent = new CodexAgent({ model: "gpt-5.4", codexFactory })
+
+    // when the agent runs with a checked and branded root string schema
+    const result = await testRun(loopy, () =>
+        agent.run("report", {
+            prompt: "report naturally",
+            output: z.string().min(1).brand<"AgentReport">(),
+            worktree
+        })
+    )
+
+    // then the SDK receives the bare prompt and the exact final message is returned
+    expect(runCalls[0].input).toBe("report naturally")
+    expect(result).toBe(finalMessage)
+    // and the raw message is recorded and durably persisted as a string
+    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
+    if (step.kind !== "agent") throw new Error("unreachable")
+    expect(step.outputJson).toBe(JSON.stringify(finalMessage))
+    expect((await loopy.sessions.get(step.sessionId!)).messages.at(-1)!.content).toBe(finalMessage)
+})
+
 test("CodexAgent records every supported SDK item type", async () => {
     // given a fake SDK stream containing each supported item and an ignored update
     const { loopy } = tempLoopy()

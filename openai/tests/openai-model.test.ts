@@ -59,6 +59,69 @@ test("OpenAIModel uses the official client response and records reasoning separa
     ])
 })
 
+test("OpenAIModel returns its final text verbatim for a root string output", async () => {
+    // given an official response containing significant whitespace and JSON-looking text
+    const { loopy } = tempLoopy()
+    const finalMessage = '  {"answer":"natural"}\nNo framing.  '
+    const fake = fakeOpenAI(() => finalMessage)
+    const model = new OpenAIModel({ model: "gpt-test", clientOptions: fake.clientOptions })
+
+    // when the model is called with a root string schema
+    const result = await testRun(loopy, () => model.call("answer", { prompt: "Answer naturally.", output: z.string() }))
+
+    // then the official client receives the bare prompt and the exact final text is returned
+    expect(fake.requests[0].input).toBe("Answer naturally.")
+    expect(result).toBe(finalMessage)
+    // and the raw text is recorded and durably persisted as a string
+    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const step = run.steps[0]
+    if (step.kind !== "llm") throw new Error("unreachable")
+    expect(step.outputJson).toBe(JSON.stringify(finalMessage))
+    expect((await loopy.sessions.get(step.sessionId!)).messages.at(-1)!.content).toBe(finalMessage)
+})
+
+test("OpenAIModel preserves an empty final text for a root string output", async () => {
+    // given an official response containing a present but empty text block
+    const { loopy } = tempLoopy()
+    const fake = fakeOpenAI(() => "")
+    const model = new OpenAIModel({ model: "gpt-test", clientOptions: fake.clientOptions })
+
+    // when the model is called with an unconstrained root string schema
+    const result = await testRun(loopy, () => model.call("answer", { prompt: "Answer naturally.", output: z.string() }))
+
+    // then the empty text is returned instead of being treated as missing
+    expect(result).toBe("")
+    expect(fake.requests[0].input).toBe("Answer naturally.")
+    // and the empty string is recorded and durably persisted
+    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const step = run.steps[0]
+    if (step.kind !== "llm") throw new Error("unreachable")
+    expect(step.outputJson).toBe(JSON.stringify(""))
+    expect((await loopy.sessions.get(step.sessionId!)).messages.at(-1)!.content).toBe("")
+})
+
+test("OpenAIModel validates a raw final message against string checks", async () => {
+    // given an official response shorter than the requested root string schema permits
+    const { loopy } = tempLoopy()
+    const fake = fakeOpenAI(() => "short")
+    const model = new OpenAIModel({ model: "gpt-test", clientOptions: fake.clientOptions })
+
+    // when the model is called with a constrained root string schema
+    const result = testRun(loopy, () =>
+        model.call("answer", { prompt: "Answer naturally.", output: z.string().min(10) })
+    )
+
+    // then durable output validation rejects the raw final message
+    await expect(result).rejects.toThrow()
+    // and both the step and session are marked as failed after receiving the bare prompt
+    expect(fake.requests[0].input).toBe("Answer naturally.")
+    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const step = run.steps[0]
+    expect(step.status).toBe("failed")
+    if (step.kind !== "llm") throw new Error("unreachable")
+    expect((await loopy.sessions.get(step.sessionId!)).status).toBe("failed")
+})
+
 test("OpenAIModel drops reasoning items that carry no summary", async () => {
     // given a completed response whose reasoning item has an empty summary, as when none was requested
     const { loopy } = tempLoopy()

@@ -15,6 +15,7 @@ export function prepareInstructedOutput(
     output: z.ZodTypeAny,
     mode: InstructedOutputMode
 ): PreparedInstructedOutput {
+    if (output instanceof z.ZodString) return { prompt, collect: (finalMessage) => finalMessage }
     const instructedSchema = jsonSchema({
         schema: output,
         io: "input",
