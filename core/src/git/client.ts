@@ -63,6 +63,16 @@ export async function clean(cwd: string): Promise<void> {
     await mustGit(cwd, ["clean", "-fd"])
 }
 
+export async function isClean(cwd: string): Promise<boolean> {
+    const output = await mustGit(cwd, ["status", "--porcelain=v1", "-z", "--untracked-files=all"])
+    return output.stdout.length === 0
+}
+
+export async function hasUnmergedEntries(cwd: string): Promise<boolean> {
+    const output = await mustGit(cwd, ["ls-files", "--unmerged", "-z"])
+    return output.stdout.length > 0
+}
+
 export async function checkoutDetached(cwd: string, revision: string): Promise<void> {
     await mustGit(cwd, ["checkout", "--detach", "--force", revision])
 }
@@ -87,6 +97,11 @@ export async function tryShowTopLevel(cwd: string): Promise<string | undefined> 
     const output = await execGit(cwd, ["rev-parse", "--show-toplevel"])
     if (output.exitCode !== 0) return undefined
     return parseRequiredText("rev-parse --show-toplevel", output.stdout)
+}
+
+export async function commonDirectory(cwd: string): Promise<string> {
+    const output = await mustGit(cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"])
+    return parseRequiredText("rev-parse --git-common-dir", output.stdout)
 }
 
 export async function resolveGitPath(cwd: string, name: string): Promise<string> {
@@ -262,6 +277,37 @@ export async function commitTree(
 ): Promise<GitObjectId> {
     const output = await mustGit(cwd, ["commit-tree", tree, "-p", parent, "-m", message])
     return parseObjectIdLines("commit-tree", output.stdout, 1)[0]
+}
+
+export async function mergeTree(cwd: string, left: string, right: string): Promise<GitObjectId> {
+    const output = await mustGit(cwd, ["merge-tree", "--write-tree", left, right])
+    return parseObjectId("merge-tree", output.stdout.split("\n", 1)[0])
+}
+
+export async function diffBinary(cwd: string, from: string, to: string): Promise<Buffer> {
+    const args = [
+        "diff",
+        "--binary",
+        "--full-index",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--no-color",
+        "-U3",
+        "--src-prefix=a/",
+        "--dst-prefix=b/",
+        from,
+        to,
+        "--"
+    ]
+    return (await mustGitRaw(cwd, args)).stdout
+}
+
+export async function checkPatch(cwd: string, patch: Buffer): Promise<void> {
+    await mustGitRaw(cwd, ["apply", "--check", "--binary", "--whitespace=nowarn"], undefined, patch)
+}
+
+export async function applyPatch(cwd: string, patch: Buffer): Promise<void> {
+    await mustGitRaw(cwd, ["apply", "--binary", "--whitespace=nowarn"], undefined, patch)
 }
 
 export async function listTree(cwd: string, treeish: string): Promise<TreeEntry[]> {

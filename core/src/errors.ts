@@ -31,6 +31,7 @@ export type LoopyErrorCode =
     | "git_snapshot_name_invalid"
     | "git_snapshot_format_unsupported"
     | "git_snapshot_restore_failed"
+    | "git_apply_changes_failed"
     | "git_worktree_unavailable"
     | "git_worktree_gc_failed"
 

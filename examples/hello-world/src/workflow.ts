@@ -5,7 +5,7 @@ import * as path from "node:path"
 import { promisify } from "node:util"
 import { loopy as defaultLoopy } from "@loopy/core"
 import type { CodingAgent } from "@loopy/core/ai/coding-agent"
-import { Worktree } from "@loopy/core/git"
+import { GitRepository } from "@loopy/core/git"
 import type { Loopy } from "@loopy/core/loopy"
 import * as z from "zod"
 
@@ -15,11 +15,14 @@ const prompt = 'Create a Python program in hello.py that prints exactly "Hello, 
 export function createHelloWorldWorkflow(agent: CodingAgent, instance: Loopy = defaultLoopy()): () => Promise<string> {
     return async () => {
         const directory = await instance.step("create-repository", z.string(), createRepository)
+        const repository = new GitRepository(directory)
+        const worktree = await repository.worktree({ base: "HEAD" })
         await agent.run("implement", {
             prompt,
             output: z.void(),
-            worktree: new Worktree(directory)
+            worktree
         })
+        await repository.applyChanges(worktree)
         return directory
     }
 }

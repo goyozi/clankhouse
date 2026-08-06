@@ -71,6 +71,24 @@ export class GitRepository {
             }
         })
     }
+
+    /**
+     * Apply changes made in the worktree to the repository.
+     *
+     * All changes to non-ignored files (committed or not) are applied as unstaged changes.
+     * The repository must no staged, unstaged, or non-ignored untracked changes.
+     *
+     * This operation is not durable and not idempotent.
+     * The repository must not be concurrently modified while this operation is in progress.
+     */
+    async applyChanges(worktree: Worktree): Promise<void> {
+        try {
+            await applyChanges(this.path, worktree.path)
+        } catch (error) {
+            if (error instanceof LoopyError && error.code === "git_apply_changes_failed") throw error
+            throw applyFailure("Could not apply source changes", error)
+        }
+    }
 }
 
 async function createWorktree(
@@ -223,3 +241,152 @@ function unavailable(message: string, cause?: unknown): LoopyError {
 export type WorktreeOptions = { key?: string } & (
     { base: string; includeUncommitted?: false } | { base?: never; includeUncommitted: true }
 )
+
+async function applyChanges(targetPath: string, sourcePath: string): Promise<void> {
+    const context = await validateApplyChanges(targetPath, sourcePath)
+    const mergedTree = await mergeSourceChanges(context)
+    const patch = await prepareChangesPatch(context.target, context.targetHead, mergedTree)
+    if (patch.length === 0) return
+    await applyPreparedChanges(context.target, context.targetHead, patch)
+}
+
+type ApplyChangesContext = {
+    target: string
+    source: string
+    targetHead: string
+}
+
+async function validateApplyChanges(targetPath: string, sourcePath: string): Promise<ApplyChangesContext> {
+    const target = await checkoutRoot(targetPath, "Target")
+    const source = await checkoutRoot(sourcePath, "Source")
+    if (target === source) throw applyFailure("Source and target must be different Git worktrees")
+
+    const [targetCommonDirectory, sourceCommonDirectory] = await Promise.all([
+        canonicalPath(await git.commonDirectory(target)),
+        canonicalPath(await git.commonDirectory(source))
+    ])
+    if (targetCommonDirectory !== sourceCommonDirectory) {
+        throw applyFailure("Source and target must belong to the same Git repository")
+    }
+
+    const [targetHead, sourceHead] = await Promise.all([
+        git.tryRevParse(target, "HEAD^{commit}"),
+        git.tryRevParse(source, "HEAD^{commit}")
+    ])
+    if (targetHead === undefined) throw applyFailure("Target must have a committed HEAD")
+    if (sourceHead === undefined) throw applyFailure("Source must have a committed HEAD")
+    if (await operationInProgress(target)) throw applyFailure("Target has a Git operation in progress")
+    if (await operationInProgress(source)) throw applyFailure("Source has a Git operation in progress")
+    if (await git.hasUnmergedEntries(source)) throw applyFailure("Source has unresolved conflicts")
+    await requireCleanTarget(target)
+    return { target, source, targetHead }
+}
+
+async function mergeSourceChanges({ target, source, targetHead }: ApplyChangesContext): Promise<string> {
+    let sourceState: Awaited<ReturnType<typeof captureState>>
+    try {
+        sourceState = await captureState(source, "loopy apply changes")
+    } catch (error) {
+        throw applyFailure("Could not capture source changes", error)
+    }
+
+    let mergedTree: string
+    try {
+        mergedTree = await git.mergeTree(target, targetHead, sourceState.workingCommit)
+    } catch (error) {
+        throw applyFailure("Source changes do not apply cleanly to the target", error)
+    }
+
+    if (await changesGitLinks(target, targetHead, mergedTree)) {
+        throw applyFailure("Source changes include submodule pointer updates, which cannot be applied to the target")
+    }
+    return mergedTree
+}
+
+async function prepareChangesPatch(target: string, targetHead: string, mergedTree: string): Promise<Buffer> {
+    try {
+        const patch = await git.diffBinary(target, targetHead, mergedTree)
+        if (patch.length > 0) await git.checkPatch(target, patch)
+        return patch
+    } catch (error) {
+        throw applyFailure("Source changes cannot be applied to the target checkout", error)
+    }
+}
+
+async function applyPreparedChanges(target: string, targetHead: string, patch: Buffer): Promise<void> {
+    await requireUnchangedTarget(target, targetHead)
+    try {
+        await git.applyPatch(target, patch)
+    } catch (applyError) {
+        try {
+            await git.resetHard(target)
+            await git.clean(target)
+        } catch (rollbackError) {
+            throw applyFailure(
+                "Applying source changes and restoring the target both failed",
+                new AggregateError([applyError, rollbackError])
+            )
+        }
+        throw applyFailure("Applying source changes failed; the target was restored", applyError)
+    }
+}
+
+async function checkoutRoot(cwd: string, role: "Source" | "Target"): Promise<string> {
+    try {
+        const root = await git.tryShowTopLevel(cwd)
+        if (root === undefined) throw new Error(`${cwd} is not a Git worktree`)
+        return await canonicalPath(root)
+    } catch (error) {
+        throw applyFailure(`${role} is not an available Git worktree: ${cwd}`, error)
+    }
+}
+
+async function operationInProgress(cwd: string): Promise<boolean> {
+    for (const marker of [
+        "MERGE_HEAD",
+        "CHERRY_PICK_HEAD",
+        "REVERT_HEAD",
+        "BISECT_LOG",
+        "rebase-apply",
+        "rebase-merge",
+        "sequencer"
+    ]) {
+        if (await exists(await git.resolveGitPath(cwd, marker))) return true
+    }
+    return false
+}
+
+async function changesGitLinks(cwd: string, from: string, to: string): Promise<boolean> {
+    const before = await listGitLinks(cwd, from)
+    const after = await listGitLinks(cwd, to)
+    if (before.size !== after.size) return true
+    for (const [linkPath, oid] of after) {
+        if (before.get(linkPath) !== oid) return true
+    }
+    return false
+}
+
+async function listGitLinks(cwd: string, treeish: string): Promise<Map<string, string>> {
+    const links = new Map<string, string>()
+    for (const entry of await git.listTree(cwd, treeish)) {
+        if (entry.type === "commit") links.set(entry.path, entry.oid)
+    }
+    return links
+}
+
+async function requireCleanTarget(cwd: string): Promise<void> {
+    if (!(await git.isClean(cwd))) {
+        throw applyFailure("Target must have no staged, unstaged, or non-ignored untracked changes")
+    }
+}
+
+async function requireUnchangedTarget(cwd: string, expectedHead: string): Promise<void> {
+    await requireCleanTarget(cwd)
+    if ((await git.tryRevParse(cwd, "HEAD^{commit}")) !== expectedHead) {
+        throw applyFailure("Target HEAD changed while the source changes were being prepared")
+    }
+}
+
+function applyFailure(message: string, cause?: unknown): LoopyError {
+    return new LoopyError("git_apply_changes_failed", message, cause === undefined ? undefined : { cause })
+}
