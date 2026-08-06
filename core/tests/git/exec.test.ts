@@ -1,5 +1,5 @@
 import { expect, test } from "vitest"
-import { execGitRaw } from "../src/git/exec"
+import { execGitRaw } from "../../src/git/exec"
 
 test("execGitRaw reports stdin EPIPE instead of crashing the process", async () => {
     // given more stdin than a Git command that exits immediately can consume

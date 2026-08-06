@@ -2,7 +2,7 @@ import * as path from "node:path"
 import { realpath } from "node:fs/promises"
 import { expect, test } from "vitest"
 import { runGit, tempDir, tempGitRepo } from "@loopy/test-utils"
-import * as git from "../src/git/client"
+import * as git from "../../src/git/client"
 
 test("typed revision, configuration, ref and worktree operations", async () => {
     // given a repository, a ref target and an available checkout path
