@@ -16,6 +16,7 @@ import {
     type ListRunsResponse,
     type RunMetadata,
     type Session,
+    type StartRunResponse,
     type Step,
     type WatchRunResponse,
     type WatchSessionResponse,
@@ -23,6 +24,7 @@ import {
 } from "@loopy/server/proto"
 import { InvalidArgumentError, type Command } from "commander"
 import type { LoopyClient } from "../client"
+import { CliError } from "../errors"
 import { readJsonInput } from "../io"
 import { executionStatus, indent, type Output, prettyJson, table, timestamp } from "../output"
 import type { Runtime } from "../runtime"
@@ -49,24 +51,22 @@ type RunWatchOptions = {
 }
 
 export function registerRuns(program: Command, runtime: Runtime): void {
+    program
+        .command("run")
+        .description("Run a workflow and print its output")
+        .argument("<workflow-name>")
+        .option("--input <file|->", "JSON input file, or - for stdin")
+        .action(async (workflowName: string, options: { input?: string }, command: Command) => {
+            await runWorkflow(runtime, command, workflowName, options.input)
+        })
+
     const runs = program.command("runs").description("Start and inspect workflow runs")
     runs.command("start")
         .description("Start a workflow run")
         .argument("<workflow-name>")
         .option("--input <file|->", "JSON input file, or - for stdin")
         .action(async (workflowName: string, options: { input?: string }, command: Command) => {
-            const inputJson =
-                options.input === undefined
-                    ? undefined
-                    : await readJsonInput(options.input, runtime.cwd, runtime.stdin, runtime.signal)
-            const client = await runtime.client(command)
-            const response = await client.startRun(
-                {
-                    workflowName,
-                    ...(inputJson !== undefined ? { inputJson } : {})
-                },
-                { signal: runtime.signal }
-            )
+            const { response } = await startWorkflowRun(runtime, command, workflowName, options.input)
             await runtime.emit(command, StartRunResponseSchema, response, () => `${response.runId}\n`)
         })
     runs.command("list")
@@ -140,6 +140,58 @@ export function registerRuns(program: Command, runtime: Runtime): void {
             const response = await client.rerunRun({ runId, fromStepKey: options.from }, { signal: runtime.signal })
             await runtime.emit(command, RerunRunResponseSchema, response, () => `${response.runId}\n`)
         })
+}
+
+async function runWorkflow(
+    runtime: Runtime,
+    command: Command,
+    workflowName: string,
+    inputFile: string | undefined
+): Promise<void> {
+    const { client, response } = await startWorkflowRun(runtime, command, workflowName, inputFile)
+    await waitForRunCompletion(client, response.runId, runtime.signal)
+    const completed = await client.getRun({ runId: response.runId }, { signal: runtime.signal })
+    const outputJson = completedRunOutput(response.runId, completed.run)
+    if (outputJson !== undefined) await runtime.output(command).write(`${outputJson}\n`)
+}
+
+async function startWorkflowRun(
+    runtime: Runtime,
+    command: Command,
+    workflowName: string,
+    inputFile: string | undefined
+): Promise<{ client: LoopyClient; response: StartRunResponse }> {
+    const inputJson =
+        inputFile === undefined ? undefined : await readJsonInput(inputFile, runtime.cwd, runtime.stdin, runtime.signal)
+    const client = await runtime.client(command)
+    const response = await client.startRun(
+        {
+            workflowName,
+            ...(inputJson !== undefined ? { inputJson } : {})
+        },
+        { signal: runtime.signal }
+    )
+    return { client, response }
+}
+
+async function waitForRunCompletion(client: LoopyClient, runId: string, signal: AbortSignal): Promise<void> {
+    for await (const response of client.watchRun({ runId }, { signal })) {
+        if (response.item.case === "run" && terminalStatus(response.item.value.status)) return
+    }
+}
+
+function completedRunOutput(runId: string, run: WorkflowRun | undefined): string | undefined {
+    if (run?.metadata === undefined) throw new CliError("internal", "Run response is empty")
+    if (run.metadata.status === ExecutionStatus.FAILED) {
+        throw new CliError(run.errorCode ?? "workflow_run_failed", run.error ?? `Workflow run failed: ${runId}`)
+    }
+    if (run.metadata.status === ExecutionStatus.INTERRUPTED) {
+        throw new CliError("workflow_run_interrupted", `Workflow run interrupted: ${runId}`)
+    }
+    if (run.metadata.status !== ExecutionStatus.SUCCEEDED) {
+        throw new CliError("internal", `Workflow run did not finish: ${runId}`)
+    }
+    return run.outputJson
 }
 
 async function getRun(runtime: Runtime, command: Command, runId: string, options: RunGetOptions): Promise<void> {

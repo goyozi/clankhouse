@@ -8,6 +8,7 @@ import { fromJsonString } from "@bufbuild/protobuf"
 import { FakeCodingAgent } from "@loopy/core/ai/fake-agent"
 import { FakeLLM } from "@loopy/core/ai/fake-llm"
 import { openDatabase } from "@loopy/core/db"
+import { LoopyError } from "@loopy/core/errors"
 import { GitRepository } from "@loopy/core/git"
 import type { Loopy } from "@loopy/core/loopy"
 import {
@@ -374,6 +375,199 @@ test("starts void-input workflows without an input file", async () => {
         code: "invalid_argument",
         message: "Workflow input is invalid: Invalid input: expected string, received undefined"
     })
+})
+
+test("runs workflows with pipeline-safe output and reconnects to keyed runs", async () => {
+    // given a workflow with separate running and immediately available inputs
+    const { loopy } = tempLoopy()
+    const pipeBlocker = gate()
+    const fileBlocker = gate()
+    onTestFinished(() => {
+        pipeBlocker.release()
+        fileBlocker.release()
+    })
+    const blockers = new Map([
+        ["pipe", pipeBlocker],
+        ["file", fileBlocker]
+    ])
+    let invocations = 0
+    loopy.registerWorkflow(
+        "pipeline-run",
+        {
+            input: z.object({ id: z.string(), value: z.number() }),
+            output: z.object({ id: z.string(), doubled: z.number() }),
+            key: (input) => input.id
+        },
+        async (input) => {
+            invocations++
+            const blocker = blockers.get(input.id)
+            if (blocker === undefined) throw new Error(`Missing blocker: ${input.id}`)
+            await loopy.step("wait", z.void(), async () => blocker.released)
+            return { id: input.id, doubled: input.value * 2 }
+        }
+    )
+    const server = await testServer(loopy)
+    const env = serverEnv(server)
+    const cwd = tempDir("loopy-cli-run-")
+    const pipeInput = { id: "pipe", value: 4 }
+    const runningId = loopy.start("pipeline-run", pipeInput)
+    await waitForStep(loopy, runningId, "wait")
+
+    // when the command receives piped input for an existing run and that run completes
+    const running = startCli(["run", "pipeline-run", "--input", "-"], {
+        env,
+        input: JSON.stringify(pipeInput)
+    })
+    expect(running.stdout().toString()).toBe("")
+    pipeBlocker.release()
+    const runningCode = await running.done
+    const succeeded = await runCliCommand(["run", "pipeline-run", "--input", "-"], {
+        env,
+        input: JSON.stringify(pipeInput)
+    })
+
+    // then both invocations emit only the stored output and execute the keyed run once
+    const pipeOutput = `${JSON.stringify({ id: "pipe", doubled: 8 })}\n`
+    expect({ code: runningCode, stdout: running.stdout().toString(), stderr: running.stderr() }).toEqual({
+        code: 0,
+        stdout: pipeOutput,
+        stderr: ""
+    })
+    expect({ code: succeeded.code, stdout: succeeded.stdout.toString(), stderr: succeeded.stderr }).toEqual({
+        code: 0,
+        stdout: pipeOutput,
+        stderr: ""
+    })
+    expect(invocations).toBe(1)
+
+    // and when a new input is supplied from a file
+    const fileInput = { id: "file", value: 5 }
+    fs.writeFileSync(path.join(cwd, "input.json"), JSON.stringify(fileInput))
+    fileBlocker.release()
+    const fromFile = await runCliCommand(["run", "pipeline-run", "--input", "input.json"], { env, cwd })
+
+    // then the command starts it and emits its final JSON output without an envelope
+    expect({ code: fromFile.code, stdout: fromFile.stdout.toString(), stderr: fromFile.stderr }).toEqual({
+        code: 0,
+        stdout: `${JSON.stringify({ id: "file", doubled: 10 })}\n`,
+        stderr: ""
+    })
+    expect(invocations).toBe(2)
+})
+
+test("runs void workflows without input or output", async () => {
+    // given a workflow with void input and output
+    const { loopy } = tempLoopy()
+    loopy.registerWorkflow("void-run", { input: z.void(), output: z.void(), key: () => "void-run" }, async () => {})
+    const server = await testServer(loopy)
+
+    // when it is run without an input option
+    const result = await runCliCommand(["run", "void-run"], { env: serverEnv(server) })
+
+    // then it succeeds without writing a JSON placeholder
+    expect({ code: result.code, stdout: result.stdout.toString(), stderr: result.stderr }).toEqual({
+        code: 0,
+        stdout: "",
+        stderr: ""
+    })
+})
+
+test("reports workflow failures without contaminating pipeline output", async () => {
+    // given workflows that fail with coded and ordinary errors
+    const { loopy } = tempLoopy()
+    loopy.registerWorkflow(
+        "coded-run-error",
+        { input: z.void(), output: z.void(), key: () => "coded-run-error" },
+        async () =>
+            loopy.step("fail", z.void(), async () => {
+                throw new LoopyError("event_definitions_empty", "coded failure")
+            })
+    )
+    loopy.registerWorkflow(
+        "ordinary-run-error",
+        { input: z.string(), output: z.void(), key: (input) => input },
+        async () =>
+            loopy.step("fail", z.void(), async () => {
+                throw new Error("ordinary failure")
+            })
+    )
+    const server = await testServer(loopy)
+    const env = serverEnv(server)
+
+    // when coded and ordinary failures are requested in JSON and human-readable modes
+    const coded = await runCliCommand(["run", "coded-run-error", "--json"], { env })
+    const ordinaryHuman = await runCliCommand(["run", "ordinary-run-error", "--input", "-"], {
+        env,
+        input: JSON.stringify("human")
+    })
+    const ordinaryJson = await runCliCommand(["run", "ordinary-run-error", "--input", "-", "--json"], {
+        env,
+        input: JSON.stringify("json")
+    })
+
+    // then stdout stays empty and persisted or fallback codes are reported on stderr
+    expect({ code: coded.code, stdout: coded.stdout.toString(), error: JSON.parse(coded.stderr) }).toEqual({
+        code: 1,
+        stdout: "",
+        error: { type: "error", code: "event_definitions_empty", message: "coded failure" }
+    })
+    expect({ code: ordinaryHuman.code, stdout: ordinaryHuman.stdout.toString(), stderr: ordinaryHuman.stderr }).toEqual(
+        {
+            code: 1,
+            stdout: "",
+            stderr: "loopy: ordinary failure\n"
+        }
+    )
+    expect({
+        code: ordinaryJson.code,
+        stdout: ordinaryJson.stdout.toString(),
+        error: JSON.parse(ordinaryJson.stderr)
+    }).toEqual({
+        code: 1,
+        stdout: "",
+        error: { type: "error", code: "workflow_run_failed", message: "ordinary failure" }
+    })
+})
+
+test("cancels a running workflow command without reporting an error", async () => {
+    // given a workflow command waiting for its run to finish
+    const { loopy } = tempLoopy()
+    const entered = gate()
+    const parked = gate()
+    onTestFinished(() => {
+        entered.release()
+        parked.release()
+    })
+    loopy.registerWorkflow("cancel-run", { input: z.void(), output: z.string(), key: () => "cancel-run" }, async () => {
+        await loopy.step("park", z.void(), async () => {
+            entered.release()
+            await parked.released
+        })
+        return "finished"
+    })
+    const server = await testServer(loopy)
+    const controller = new AbortController()
+    const command = startCli(["run", "cancel-run"], {
+        env: serverEnv(server),
+        signal: controller.signal
+    })
+    await entered.released
+
+    // when the command is canceled while its workflow remains active
+    controller.abort(new DOMException("Interrupted", "AbortError"))
+    const code = await command.done
+
+    // then it returns the shell cancellation status with clean output streams
+    expect({ code, stdout: command.stdout().toString(), stderr: command.stderr() }).toEqual({
+        code: 130,
+        stdout: "",
+        stderr: ""
+    })
+
+    // and the observer cancellation does not cancel the underlying workflow
+    parked.release()
+    const [run] = await loopy.runs.list({ key: "cancel-run" })
+    expect(await waitForRun(loopy, run!.id)).toMatchObject({ status: "succeeded", output: "finished" })
 })
 
 test("get --watch prints snapshots around live updates without duplicating included session history", async () => {
