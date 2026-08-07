@@ -17,6 +17,7 @@ export type QueryFunction = (input: {
 
 export type ClaudeAgentOptions = {
     model: string
+    effort?: Options["effort"]
     maxTurns?: number
     env?: Record<string, string | undefined>
     allowedTools?: string[]
@@ -73,6 +74,7 @@ export class ClaudeAgent extends BaseCodingAgent {
             settingSources: this.options.settingSources ?? ["project"],
             disallowedTools: [...new Set([...(this.options.disallowedTools ?? []), "AskUserQuestion"])]
         }
+        if (this.options.effort !== undefined) options.effort = this.options.effort
         if (this.options.maxTurns !== undefined) options.maxTurns = this.options.maxTurns
         if (this.options.env !== undefined) options.env = { ...process.env, ...this.options.env }
         if (this.options.allowedTools !== undefined) options.allowedTools = this.options.allowedTools

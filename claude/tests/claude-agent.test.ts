@@ -275,6 +275,7 @@ test("ClaudeAgent passes default options to the SDK", async () => {
     // and the configured model
     expect(options.model).toBe("claude-sonnet-5")
     // and no options that were not configured
+    expect(options.effort).toBeUndefined()
     expect(options.maxTurns).toBeUndefined()
     expect(options.env).toBeUndefined()
     expect(options.allowedTools).toBeUndefined()
@@ -288,6 +289,7 @@ test("ClaudeAgent passes configured options to the SDK", async () => {
     const { query, calls } = fakeClaudeQuery(() => ({ output: { done: true } }))
     const agent = new ClaudeAgent({
         model: "claude-opus-4-8",
+        effort: "medium",
         maxTurns: 5,
         env: { CLAUDE_TEST: "1" },
         allowedTools: ["Read", "Write"],
@@ -306,6 +308,7 @@ test("ClaudeAgent passes configured options to the SDK", async () => {
     // then the SDK receives the configured options
     const options = calls[0].options!
     expect(options.model).toBe("claude-opus-4-8")
+    expect(options.effort).toBe("medium")
     expect(options.maxTurns).toBe(5)
     // and the configured env is merged onto the process environment rather than replacing it
     expect(options.env!.CLAUDE_TEST).toBe("1")

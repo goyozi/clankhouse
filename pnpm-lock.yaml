@@ -146,6 +146,28 @@ importers:
         specifier: ^4.9.0
         version: 4.9.0
 
+  examples/dual-review:
+    dependencies:
+      '@loopy/claude':
+        specifier: workspace:*
+        version: link:../../claude
+      '@loopy/codex':
+        specifier: workspace:*
+        version: link:../../codex
+      '@loopy/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@loopy/server':
+        specifier: workspace:*
+        version: link:../../server
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
+    devDependencies:
+      '@loopy/test-utils':
+        specifier: workspace:*
+        version: link:../../test-utils
+
   examples/hello-world:
     dependencies:
       '@loopy/codex':
