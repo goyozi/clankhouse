@@ -215,7 +215,10 @@ test("drives FakeLLM and FakeCodingAgent workflows through the complete CLI surf
                 worktree
             })
             const artifact = await loopy.artifacts.writeText("summary", plan.summary, "text/plain")
-            const approval = await loopy.waitFor(`approval:${input.id}`, z.object({ ok: z.boolean() }))
+            const approval = await loopy.waitFor({
+                key: `approval:${input.id}`,
+                schema: z.object({ ok: z.boolean() })
+            })
             const result = await loopy.step("publish", z.string(), async () => published)
             return {
                 summary: plan.summary,
@@ -480,7 +483,7 @@ test("reports workflow failures without contaminating pipeline output", async ()
         { input: z.void(), output: z.void(), key: () => "coded-run-error" },
         async () =>
             loopy.step("fail", z.void(), async () => {
-                throw new LoopyError("event_definitions_empty", "coded failure")
+                throw new LoopyError("event_sources_empty", "coded failure")
             })
     )
     loopy.registerWorkflow(
@@ -509,7 +512,7 @@ test("reports workflow failures without contaminating pipeline output", async ()
     expect({ code: coded.code, stdout: coded.stdout.toString(), error: JSON.parse(coded.stderr) }).toEqual({
         code: 1,
         stdout: "",
-        error: { type: "error", code: "event_definitions_empty", message: "coded failure" }
+        error: { type: "error", code: "event_sources_empty", message: "coded failure" }
     })
     expect({ code: ordinaryHuman.code, stdout: ordinaryHuman.stdout.toString(), stderr: ordinaryHuman.stderr }).toEqual(
         {
@@ -579,7 +582,10 @@ test("get --watch prints snapshots around live updates without duplicating inclu
         { input: z.object({ id: z.string() }), output: z.string(), key: (input) => input.id },
         async (input) => {
             await llm.call("prepare", { prompt: input.id, output: z.object({ reply: z.string() }) })
-            const event = await loopy.waitFor(`get-watch:${input.id}`, z.object({ value: z.string() }))
+            const event = await loopy.waitFor({
+                key: `get-watch:${input.id}`,
+                schema: z.object({ value: z.string() })
+            })
             return event.value
         }
     )
@@ -697,7 +703,7 @@ test("included session failures do not stop the primary run watch", async () => 
         { input: z.null(), output: z.string(), key: () => "session-watch-error" },
         async () => {
             await llm.call("prepare", { prompt: "watch", output: z.object({ reply: z.string() }) })
-            return (await loopy.waitFor("session-watch-done", z.object({ value: z.string() }))).value
+            return (await loopy.waitFor({ key: "session-watch-done", schema: z.object({ value: z.string() }) })).value
         }
     )
     const server = await testServer(loopy)
@@ -768,7 +774,7 @@ test("resume reconnects to an interrupted run and prints only its run ID", async
         instance.registerWorkflow(
             "resume",
             { input: z.null(), output: z.number(), key: () => "resume" },
-            async () => (await instance.waitFor("resume-event", z.object({ value: z.number() }))).value
+            async () => (await instance.waitFor({ key: "resume-event", schema: z.object({ value: z.number() }) })).value
         )
     register(loopy)
     const firstServer = await listen(loopy, { port: 0 })
@@ -870,7 +876,7 @@ test("reports server shutdown without publishing an incomplete artifact copy", a
     loopy.registerWorkflow(
         "shutdown",
         { input: z.null(), output: z.number(), key: () => "shutdown" },
-        async () => (await loopy.waitFor("shutdown-event", z.object({ value: z.number() }))).value
+        async () => (await loopy.waitFor({ key: "shutdown-event", schema: z.object({ value: z.number() }) })).value
     )
     const runId = loopy.start("shutdown", null)
     const waiting = await waitForStep(loopy, runId, "wait:shutdown-event")
@@ -1034,7 +1040,7 @@ test("cancels active watches with exit code 130 and no spurious error output", a
     loopy.registerWorkflow(
         "cancel",
         { input: z.null(), output: z.number(), key: () => "cancel" },
-        async () => (await loopy.waitFor("cancel-event", z.object({ value: z.number() }))).value
+        async () => (await loopy.waitFor({ key: "cancel-event", schema: z.object({ value: z.number() }) })).value
     )
     const server = await testServer(loopy)
     const env = serverEnv(server)

@@ -8,7 +8,7 @@ import { Artifacts } from "./artifacts"
 import { AISessions } from "./ai/sessions"
 import type { ActiveSets } from "./runtime"
 import { Engine } from "./engine"
-import { Events, type EventDefinition } from "./events"
+import { Events, type EventSource, type EventSourceResult } from "./events"
 import { Notifier } from "./watch"
 import { Workflows, type RerunOptions, type WorkflowOptions } from "./workflows"
 import { gcWorktrees, type WorktreeGcResult } from "./git"
@@ -51,6 +51,7 @@ export class Loopy {
     close(): void {
         if (this.isClosed) return
         this.isClosed = true
+        this.events.close()
         this.db.close()
     }
 
@@ -118,23 +119,23 @@ export class Loopy {
     }
 
     /**
-     * Waits for a single, specific event on a given key.
+     * Waits for a single event from the provided source.
      * Arriving events are validated against expected schema.
      * In case of schema validation errors, the promise is rejected.
      */
-    async waitFor<T extends z.ZodTypeAny>(key: string, schema: T): Promise<z.infer<T>> {
-        return this.events.waitFor(key, schema)
+    async waitFor<T extends z.ZodTypeAny>(source: EventSource<T>): Promise<z.output<T>> {
+        return this.events.waitFor(source)
     }
 
     /**
-     * Waits for first event matching provided definitions (key + schema).
-     * Provided definitions list must not be empty.
+     * Waits for the first event from the provided sources.
+     * Provided source list must not be empty.
      * Arriving events are validated against expected schema.
      * In case of schema validation errors, the promise is rejected.
-     * Resolves to { key, event } so callers know which definition matched.
+     * Resolves to { key, event } so callers know which source matched.
      */
-    async waitForAny(defs: EventDefinition<any>[]): Promise<any> {
-        return this.events.waitForAny(defs)
+    async waitForAny<const S extends readonly EventSource[]>(sources: S): Promise<EventSourceResult<S[number]>> {
+        return this.events.waitForAny(sources)
     }
 
     /**
@@ -149,4 +150,4 @@ export class Loopy {
     }
 }
 
-export type { EventDefinition } from "./events"
+export type { EventSource, EventSourceHandle, EventSourceListener, EventSourceResult } from "./events"

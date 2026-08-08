@@ -1,6 +1,6 @@
 import * as z from "zod"
 import { Loopy } from "./loopy"
-import type { EventDefinition } from "./events"
+import type { EventSource, EventSourceResult } from "./events"
 import type { RerunOptions, WorkflowOptions, Workflows } from "./workflows"
 import type { WorkflowRuns } from "./runs"
 import type { Artifacts } from "./artifacts"
@@ -74,14 +74,16 @@ export function emit(key: string, event: any): Promise<void> {
     return loopy().emit(key, event)
 }
 
-export function waitFor<T extends z.ZodTypeAny>(key: string, schema: T): Promise<z.infer<T>> {
-    return loopy().waitFor(key, schema)
+export function waitFor<T extends z.ZodTypeAny>(source: EventSource<T>): Promise<z.output<T>> {
+    return loopy().waitFor(source)
 }
 
-export function waitForAny(defs: EventDefinition<any>[]): Promise<any> {
-    return loopy().waitForAny(defs)
+export function waitForAny<const S extends readonly EventSource[]>(sources: S): Promise<EventSourceResult<S[number]>> {
+    return loopy().waitForAny(sources)
 }
 
 export type { RerunOptions, WorkflowOptions } from "./workflows"
+export type { EventSource, EventSourceHandle, EventSourceListener, EventSourceResult } from "./events"
+export { fileCreated, fileCreatedIn } from "./files"
 export { LoopyError } from "./errors"
 export type { LoopyErrorCode } from "./errors"

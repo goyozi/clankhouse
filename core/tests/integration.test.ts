@@ -54,7 +54,7 @@ test("end-to-end: durable workflow with llm, agent, artifact and approval surviv
             worktree
         })
         await l.artifacts.writeText("summary", `implemented ${files.join(", ")}`, "text/plain")
-        const approval = await l.waitFor("approval", z.object({ approvedBy: z.string() }))
+        const approval = await l.waitFor({ key: "approval", schema: z.object({ approvedBy: z.string() }) })
         if (hooks.afterApproval) await hooks.afterApproval()
         return l.step("publish", z.string(), async () => {
             calls.publish++

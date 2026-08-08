@@ -6,7 +6,7 @@ const instance = defaultLoopy()
 instance.registerWorkflow(
     "waiting",
     { input: z.null(), output: z.number(), key: () => "waiting" },
-    async () => (await instance.waitFor("never", z.object({ value: z.number() }))).value
+    async () => (await instance.waitFor({ key: "never", schema: z.object({ value: z.number() }) })).value
 )
 const runId = instance.start("waiting", null)
 const server = await serve(undefined, { port: 0 })

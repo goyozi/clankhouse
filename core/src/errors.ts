@@ -13,7 +13,7 @@ export type LoopyErrorCode =
     | "workflow_step_not_found"
     | "workflow_step_duplicate"
     | "workflow_context_required"
-    | "event_definitions_empty"
+    | "event_sources_empty"
     | "event_schema_validation_failed"
     | "event_wait_already_registered"
     | "event_payload_required"

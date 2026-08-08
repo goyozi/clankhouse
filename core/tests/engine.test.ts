@@ -234,7 +234,7 @@ test("persists LoopyError codes on failed runs and steps but leaves ordinary err
         loopy,
         async () =>
             loopy.step("coded", z.never(), async () => {
-                throw new LoopyError("event_definitions_empty", "coded failure")
+                throw new LoopyError("event_sources_empty", "coded failure")
             }),
         { key: "coded" }
     )
@@ -256,16 +256,16 @@ test("persists LoopyError codes on failed runs and steps but leaves ordinary err
     const ordinaryRun = await loopy.runs.get(ordinaryId)
 
     // then only the LoopyError code is exposed and stored at both failure levels
-    expect(codedRun).toMatchObject({ error: "coded failure", errorCode: "event_definitions_empty" })
+    expect(codedRun).toMatchObject({ error: "coded failure", errorCode: "event_sources_empty" })
     expect(codedRun.steps[0]).toMatchObject({
         error: "coded failure",
-        errorCode: "event_definitions_empty"
+        errorCode: "event_sources_empty"
     })
     expect(ordinaryRun).toMatchObject({ error: "ordinary failure" })
     expect(ordinaryRun.errorCode).toBeUndefined()
     expect(ordinaryRun.steps[0]!.errorCode).toBeUndefined()
     expect(loopy.db.prepare("SELECT error_code FROM runs WHERE id = ?").get(codedId)).toEqual({
-        error_code: "event_definitions_empty"
+        error_code: "event_sources_empty"
     })
     expect(loopy.db.prepare("SELECT error_code FROM runs WHERE id = ?").get(ordinaryId)).toEqual({ error_code: null })
 })

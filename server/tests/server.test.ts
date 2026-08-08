@@ -68,7 +68,8 @@ function registerApproval(instance: Loopy, value: z.ZodTypeAny): void {
         { input: z.object({ id: z.string(), value }), output: z.number(), key: (input) => input.id },
         async (input) => {
             await instance.step("record", z.number(), async () => 1)
-            return (await instance.waitFor(`approve:${input.id}`, z.object({ value: z.number() }))).value
+            return (await instance.waitFor({ key: `approve:${input.id}`, schema: z.object({ value: z.number() }) }))
+                .value
         }
     )
 }
@@ -153,7 +154,10 @@ test("serves a FakeLLM and FakeCodingAgent workflow through the complete RPC sur
                 worktree
             })
             const artifact = await loopy.artifacts.writeText("summary", plan.summary, "text/plain")
-            const approval = await loopy.waitFor(`approval:${input.id}`, z.object({ ok: z.boolean() }))
+            const approval = await loopy.waitFor({
+                key: `approval:${input.id}`,
+                schema: z.object({ ok: z.boolean() })
+            })
             const result = await loopy.step("publish", z.string(), async () => published)
             return { summary: plan.summary, approved: approval.ok, artifactId: artifact.id, published: result }
         }
@@ -433,7 +437,8 @@ test("resumes an interrupted run through a restarted server", async () => {
         instance.registerWorkflow(
             "approval",
             { input: z.null(), output: z.number(), key: () => "approval-key" },
-            async () => (await instance.waitFor("resume-approval", z.object({ value: z.number() }))).value
+            async () =>
+                (await instance.waitFor({ key: "resume-approval", schema: z.object({ value: z.number() }) })).value
         )
     register(loopy)
     const firstServer = await testServer(loopy)
@@ -600,7 +605,7 @@ test("maps workflow lifecycle LoopyError codes to stable Connect errors", async 
     loopy.registerWorkflow(
         "waiting",
         { input: z.null(), output: z.number(), key: () => "waiting" },
-        async () => (await loopy.waitFor("lifecycle-go", z.object({ value: z.number() }))).value
+        async () => (await loopy.waitFor({ key: "lifecycle-go", schema: z.object({ value: z.number() }) })).value
     )
     const server = await testServer(loopy)
     const client = rpcClient(server)
@@ -760,17 +765,17 @@ test("exposes persisted LoopyError codes on runs and steps", async () => {
 
     // when the failed run is fetched through protobuf
     const runId = (await client.startRun({ workflowName: "coded", inputJson: "null" })).runId
-    await expect(runOutput(loopy, runId)).rejects.toThrow("at least one event definition")
+    await expect(runOutput(loopy, runId)).rejects.toThrow("at least one event source")
     const run = (await client.getRun({ runId })).run!
 
     // then the string code is exposed beside both persisted error messages
     expect(run).toMatchObject({
-        error: "waitForAny requires at least one event definition",
-        errorCode: "event_definitions_empty"
+        error: "waitForAny requires at least one event source",
+        errorCode: "event_sources_empty"
     })
     expect(run.steps[0]).toMatchObject({
-        error: "waitForAny requires at least one event definition",
-        errorCode: "event_definitions_empty"
+        error: "waitForAny requires at least one event source",
+        errorCode: "event_sources_empty"
     })
 })
 
@@ -804,7 +809,7 @@ test("closing a server rejects active streams without closing Loopy", async () =
     loopy.registerWorkflow(
         "waiting",
         { input: z.null(), output: z.number(), key: () => "waiting" },
-        async () => (await loopy.waitFor("never", z.object({ value: z.number() }))).value
+        async () => (await loopy.waitFor({ key: "never", schema: z.object({ value: z.number() }) })).value
     )
     const recorder = loopy.sessions.create({ kind: "llm", provider: "fake", model: "fake" })
     recorder.addMessage("assistant", "working")

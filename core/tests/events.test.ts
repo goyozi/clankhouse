@@ -1,6 +1,7 @@
 import * as z from "zod"
-import { expect, test } from "vitest"
+import { expect, expectTypeOf, test } from "vitest"
 import { Loopy } from "@loopy/core/loopy"
+import type { EventSourceListener } from "@loopy/core/events"
 import { gate, runOutput, tempLoopy, testRun } from "@loopy/test-utils"
 
 const approval = z.object({ ok: z.boolean() })
@@ -13,7 +14,7 @@ test("waitFor receives an emitted event and records an event step", async () => 
     // when a workflow waits for an "approval" event
     const promise = testRun(loopy, async () => {
         waiting.release()
-        const event = await loopy.waitFor("approval", approval)
+        const event = await loopy.waitFor({ key: "approval", schema: approval })
         return event.ok
     })
     await waiting.released
@@ -45,9 +46,14 @@ test("schema violation rejects the wait and fails the run", async () => {
     // given a workflow waiting for an "approval" event matching a schema
     const { loopy } = tempLoopy()
     const waiting = gate()
+    let stops = 0
     const promise = testRun(loopy, async () => {
         waiting.release()
-        return loopy.waitFor("approval", approval)
+        return loopy.waitFor({
+            key: "approval",
+            schema: approval,
+            start: () => ({ stop: () => stops++ })
+        })
     })
     await waiting.released
     // when an event is emitted with a payload that violates the schema
@@ -57,6 +63,8 @@ test("schema violation rejects the wait and fails the run", async () => {
         message: expect.stringMatching(/schema validation/),
         code: "event_schema_validation_failed"
     })
+    // and the active source is stopped
+    expect(stops).toBe(1)
     // and the run is marked as failed
     expect((await loopy.runs.list())[0].status).toBe("failed")
 })
@@ -73,7 +81,7 @@ test("emitting an undefined payload rejects with a coded error and persists noth
 })
 
 test("waitForAny resolves with the first matching event", async () => {
-    // given a workflow waiting for either of two events
+    // given a workflow waiting for either of two event sources
     const { loopy } = tempLoopy()
     const waiting = gate()
     const promise = testRun(loopy, async () => {
@@ -93,14 +101,35 @@ test("waitForAny resolves with the first matching event", async () => {
     expect(run.steps[0].key).toBe("wait:a+b")
 })
 
-test("waitForAny requires at least one definition", async () => {
+test("waitForAny infers a keyed union of source outputs", async () => {
+    // given a stored event matching one of two differently typed sources
+    const { loopy } = tempLoopy()
+    await loopy.emit("typed-text", "ready")
+
+    // when a workflow waits for either source
+    const promise = testRun(loopy, async () =>
+        loopy.waitForAny([
+            { key: "typed-number", schema: z.number() },
+            { key: "typed-text", schema: z.string() }
+        ])
+    )
+
+    // then its promise retains the key-discriminated output union
+    expectTypeOf(promise).toEqualTypeOf<
+        Promise<{ key: "typed-number"; event: number } | { key: "typed-text"; event: string }>
+    >()
+    // and the runtime result preserves the winning envelope
+    expect(await promise).toEqual({ key: "typed-text", event: "ready" })
+})
+
+test("waitForAny requires at least one source", async () => {
     // given a fresh loopy instance
     const { loopy } = tempLoopy()
-    // when a workflow calls waitForAny with no event definitions
-    // then it rejects requiring at least one definition
+    // when a workflow calls waitForAny with no event sources
+    // then it rejects requiring at least one source
     await expect(testRun(loopy, async () => loopy.waitForAny([]))).rejects.toMatchObject({
         message: expect.stringMatching(/at least one/),
-        code: "event_definitions_empty"
+        code: "event_sources_empty"
     })
 })
 
@@ -109,13 +138,13 @@ test("an invalid event schema fails before a step or waiter is registered", asyn
     const { loopy } = tempLoopy()
 
     // when the invalid wait is set up
-    const invalid = testRun(loopy, async () => loopy.waitFor("go", z.date()), { key: "invalid" })
+    const invalid = testRun(loopy, async () => loopy.waitFor({ key: "go", schema: z.date() }), { key: "invalid" })
 
     // then it fails before creating the durable step
     await expect(invalid).rejects.toThrow(/Event "go" payload schema.*z\.date/)
     expect(loopy.db.prepare("SELECT COUNT(*) AS n FROM steps").get()).toEqual({ n: 0 })
     // and the key remains available for a valid waiter
-    const valid = testRun(loopy, async () => loopy.waitFor("go", z.string()), { key: "valid" })
+    const valid = testRun(loopy, async () => loopy.waitFor({ key: "go", schema: z.string() }), { key: "valid" })
     await loopy.emit("go", "ready")
     expect(await valid).toBe("ready")
 })
@@ -128,15 +157,19 @@ test("a second wait on an already-waited key is rejected", async () => {
         loopy,
         async () => {
             waiting.release()
-            return (await loopy.waitFor("go", z.object({ n: z.number() }))).n
+            return (await loopy.waitFor({ key: "go", schema: z.object({ n: z.number() }) })).n
         },
         { key: "key-1" }
     )
     await waiting.released
     // when a second workflow waits on the same key
-    const second = testRun(loopy, async () => (await loopy.waitFor("go", z.object({ n: z.number() }))).n, {
-        key: "key-2"
-    })
+    const second = testRun(
+        loopy,
+        async () => (await loopy.waitFor({ key: "go", schema: z.object({ n: z.number() }) })).n,
+        {
+            key: "key-2"
+        }
+    )
     // then the second wait rejects
     await expect(second).rejects.toMatchObject({
         message: expect.stringMatching(/already registered/),
@@ -166,13 +199,22 @@ test("a received event is replayed deterministically on resume", async () => {
     const waiting = gate()
     const received = gate()
     let transforms = 0
+    let starts = 0
+    let stops = 0
     const transformedApproval = approval.transform((event) => {
         transforms++
         return { ok: !event.ok }
     })
     const body = (l: Loopy, block: boolean) => async () => {
         waiting.release()
-        const event = await l.waitFor("approval", transformedApproval)
+        const event = await l.waitFor({
+            key: "approval",
+            schema: transformedApproval,
+            start: () => {
+                starts++
+                return { stop: () => stops++ }
+            }
+        })
         received.release()
         if (block) await parked.released
         return event.ok
@@ -187,6 +229,8 @@ test("a received event is replayed deterministically on resume", async () => {
     // then the resumed run transforms the persisted raw envelope once without compounding
     expect(await testRun(second, body(second, false))).toBe(false)
     expect(transforms).toBe(2)
+    expect(starts).toBe(1)
+    expect(stops).toBe(1)
     const run = await second.runs.get((await second.runs.list())[0].id)
     expect(run.steps[0].outputJson).toBe(JSON.stringify({ key: "approval", event: { ok: true } }))
     // and the event was not duplicated in the store
@@ -198,7 +242,10 @@ test("an event emitted before the wait is delivered from the store", async () =>
     const { loopy } = tempLoopy()
     await loopy.emit("go", { n: 4 })
     // when a workflow waits for that event
-    const result = await testRun(loopy, async () => (await loopy.waitFor("go", z.object({ n: z.number() }))).n)
+    const result = await testRun(
+        loopy,
+        async () => (await loopy.waitFor({ key: "go", schema: z.object({ n: z.number() }) })).n
+    )
     // then it is delivered immediately from the stored events
     expect(result).toBe(4)
 })
@@ -209,14 +256,17 @@ test("an event emitted while the process is down is delivered on resume", async 
     const waiting = gate()
     testRun(loopy, async () => {
         waiting.release()
-        return (await loopy.waitFor("go", z.object({ n: z.number() }))).n
+        return (await loopy.waitFor({ key: "go", schema: z.object({ n: z.number() }) })).n
     }).catch(() => {})
     await waiting.released
     // when the process is reopened and the event is emitted while nothing is running
     const second = reopen()
     await second.emit("go", { n: 9 })
     // and a new run waits for the same event
-    const result = await testRun(second, async () => (await second.waitFor("go", z.object({ n: z.number() }))).n)
+    const result = await testRun(
+        second,
+        async () => (await second.waitFor({ key: "go", schema: z.object({ n: z.number() }) })).n
+    )
     // then it is delivered from the store
     expect(result).toBe(9)
 })
@@ -228,12 +278,18 @@ test("a consumed event is not delivered to later waits", async () => {
     // when the first run waits for the event
     // then it consumes the previously emitted event
     expect(
-        await testRun(loopy, async () => (await loopy.waitFor("go", z.object({ n: z.number() }))).n, { key: "key-1" })
+        await testRun(loopy, async () => (await loopy.waitFor({ key: "go", schema: z.object({ n: z.number() }) })).n, {
+            key: "key-1"
+        })
     ).toBe(1)
     // and when a second run waits on the same key
-    const promise = testRun(loopy, async () => (await loopy.waitFor("go", z.object({ n: z.number() }))).n, {
-        key: "key-2"
-    })
+    const promise = testRun(
+        loopy,
+        async () => (await loopy.waitFor({ key: "go", schema: z.object({ n: z.number() }) })).n,
+        {
+            key: "key-2"
+        }
+    )
     // and a new event is emitted
     await loopy.emit("go", { n: 2 })
     // then the second run receives only the new event
@@ -272,7 +328,7 @@ test("an event consumed before the wait step persisted is redelivered on resume"
     const received = gate()
     testRun(loopy, async () => {
         waiting.release()
-        const event = await loopy.waitFor("go", z.object({ n: z.number() }))
+        const event = await loopy.waitFor({ key: "go", schema: z.object({ n: z.number() }) })
         received.release()
         await parked.released
         return event.n
@@ -288,7 +344,10 @@ test("an event consumed before the wait step persisted is redelivered on resume"
     // and the process is reopened
     const second = reopen()
     // then the wait is redelivered the same event on resume
-    const result = await testRun(second, async () => (await second.waitFor("go", z.object({ n: z.number() }))).n)
+    const result = await testRun(
+        second,
+        async () => (await second.waitFor({ key: "go", schema: z.object({ n: z.number() }) })).n
+    )
     expect(result).toBe(7)
     // and the event was not duplicated in the store
     expect(second.db.prepare("SELECT COUNT(*) AS n FROM events").get()).toEqual({ n: 1 })
@@ -301,7 +360,7 @@ test("an event payload preserves an ISO datetime string for the waiter", async (
     const at = "2026-07-07T12:00:00.000Z"
     const promise = testRun(loopy, async () => {
         waiting.release()
-        const event = await loopy.waitFor("scheduled", z.object({ at: z.iso.datetime() }))
+        const event = await loopy.waitFor({ key: "scheduled", schema: z.object({ at: z.iso.datetime() }) })
         return event.at
     })
     await waiting.released
@@ -336,9 +395,13 @@ test("re-emitting on rerun supersedes the previous unconsumed event", async () =
     // then the stale event was superseded, leaving a single "result" event in the store
     expect(loopy.db.prepare("SELECT COUNT(*) AS n FROM events WHERE key = 'result'").get()).toEqual({ n: 1 })
     // and a later consumer receives the corrected payload rather than the stale one
-    const received = await testRun(loopy, async () => (await loopy.waitFor("result", z.object({ v: z.number() }))).v, {
-        key: "consumer"
-    })
+    const received = await testRun(
+        loopy,
+        async () => (await loopy.waitFor({ key: "result", schema: z.object({ v: z.number() }) })).v,
+        {
+            key: "consumer"
+        }
+    )
     expect(received).toBe(2)
 })
 
@@ -347,7 +410,7 @@ test("a crash while waiting re-registers the wait on resume", async () => {
     const { loopy, reopen } = tempLoopy()
     const body = (l: Loopy, waiting: { release: () => void }) => async () => {
         waiting.release()
-        return (await l.waitFor("go", z.object({ n: z.number() }))).n
+        return (await l.waitFor({ key: "go", schema: z.object({ n: z.number() }) })).n
     }
     // when the first run starts waiting and then the process crashes
     const firstWaiting = gate()
@@ -362,4 +425,189 @@ test("a crash while waiting re-registers the wait on resume", async () => {
     await second.emit("go", { n: 9 })
     // then the resumed wait receives the event
     expect(await promise).toBe(9)
+})
+
+test("a source can synchronously emit while starting", async () => {
+    // given an active source that emits synchronously during startup
+    const { loopy } = tempLoopy()
+    let stops = 0
+    const source = {
+        key: "sync",
+        schema: z.object({ n: z.number() }),
+        start(listener: EventSourceListener<{ n: number }>) {
+            listener.emit({ n: 3 })
+            return { stop: () => stops++ }
+        }
+    }
+
+    // when a workflow waits for the source
+    const result = await testRun(loopy, async () => (await loopy.waitFor(source)).n)
+
+    // then the emitted event resolves durably
+    expect(result).toBe(3)
+    expect(loopy.db.prepare("SELECT COUNT(*) AS n FROM events WHERE key = 'sync'").get()).toEqual({ n: 1 })
+    // and the handle returned after settlement is still stopped
+    expect(stops).toBe(1)
+})
+
+test("waitForAny stops every source when one emits", async () => {
+    // given two active event sources
+    const { loopy } = tempLoopy()
+    const started = gate()
+    const listeners: EventSourceListener<string>[] = []
+    const stops = [0, 0]
+    const source = (key: string, index: number) => ({
+        key,
+        schema: z.string(),
+        start(listener: EventSourceListener<string>) {
+            listeners.push(listener)
+            if (listeners.length === 2) started.release()
+            return { stop: () => stops[index]++ }
+        }
+    })
+    const promise = testRun(loopy, async () => loopy.waitForAny([source("first", 0), source("second", 1)]))
+    await started.released
+
+    // when the second source emits
+    listeners[1].emit("ready")
+
+    // then its envelope is returned
+    expect(await promise).toEqual({ key: "second", event: "ready" })
+    // and both source handles are stopped
+    expect(stops).toEqual([1, 1])
+})
+
+test("manual emit stops an active source", async () => {
+    // given a workflow waiting on an active source
+    const { loopy } = tempLoopy()
+    const started = gate()
+    let stops = 0
+    const source = {
+        key: "manual",
+        schema: z.number(),
+        start() {
+            started.release()
+            return { stop: () => stops++ }
+        }
+    }
+    const promise = testRun(loopy, async () => loopy.waitFor(source))
+    await started.released
+
+    // when the same key is satisfied through emit
+    await loopy.emit(source.key, 8)
+
+    // then the wait resolves and its source is stopped
+    expect(await promise).toBe(8)
+    expect(stops).toBe(1)
+})
+
+test("a source failure rejects the wait and stops its handle", async () => {
+    // given a source that fails synchronously while starting
+    const { loopy } = tempLoopy()
+    let stops = 0
+    const source = {
+        key: "failed-source",
+        schema: z.string(),
+        start(listener: EventSourceListener<string>) {
+            listener.fail(new Error("source failed"))
+            return { stop: () => stops++ }
+        }
+    }
+
+    // when a workflow waits for the source
+    const promise = testRun(loopy, async () => loopy.waitFor(source))
+
+    // then the source error fails the wait
+    await expect(promise).rejects.toThrow("source failed")
+    // and its synchronously returned handle is stopped
+    expect(stops).toBe(1)
+})
+
+test("a later source startup failure stops earlier sources", async () => {
+    // given one started source followed by a source that throws during startup
+    const { loopy } = tempLoopy()
+    let stops = 0
+    const sources = [
+        {
+            key: "started",
+            schema: z.string(),
+            start: () => ({ stop: () => stops++ })
+        },
+        {
+            key: "throws",
+            schema: z.string(),
+            start: () => {
+                throw new Error("startup failed")
+            }
+        }
+    ]
+
+    // when a workflow waits for either source
+    const promise = testRun(loopy, async () => loopy.waitForAny(sources))
+
+    // then the startup error rejects the wait
+    await expect(promise).rejects.toThrow("startup failed")
+    // and the earlier handle is stopped
+    expect(stops).toBe(1)
+})
+
+test("a stored event is delivered without starting its source", async () => {
+    // given an event stored before an active source is awaited
+    const { loopy } = tempLoopy()
+    await loopy.emit("stored", "ready")
+    let starts = 0
+    const source = {
+        key: "stored",
+        schema: z.string(),
+        start: () => {
+            starts++
+            return { stop() {} }
+        }
+    }
+
+    // when a workflow waits for the source
+    const result = await testRun(loopy, async () => loopy.waitFor(source))
+
+    // then the persisted event is returned without starting the listener
+    expect(result).toBe("ready")
+    expect(starts).toBe(0)
+})
+
+test("closing Loopy stops active sources without settling their waits", async () => {
+    // given a pending wait with an active source
+    const { loopy } = tempLoopy()
+    const started = gate()
+    let listener: EventSourceListener<string> | undefined
+    let stops = 0
+    let settled = false
+    const promise = testRun(loopy, async () =>
+        loopy.waitFor({
+            key: "shutdown",
+            schema: z.string(),
+            start(value) {
+                listener = value
+                started.release()
+                return { stop: () => stops++ }
+            }
+        })
+    )
+    void promise.then(
+        () => {
+            settled = true
+        },
+        () => {
+            settled = true
+        }
+    )
+    await started.released
+
+    // when the instance is closed twice and the source emits afterward
+    loopy.close()
+    loopy.close()
+    listener?.emit("late")
+    await Promise.resolve()
+
+    // then the source is stopped once and the durable wait remains interrupted
+    expect(stops).toBe(1)
+    expect(settled).toBe(false)
 })
