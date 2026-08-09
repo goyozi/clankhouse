@@ -2,6 +2,7 @@ packages:
     - core
     - claude
     - codex
+    - pi
     - openai
     - anthropic
     - test-utils
@@ -14,5 +15,7 @@ catalog:
 
 allowBuilds:
     "@bufbuild/buf": true
+    "@google/genai": true
     better-sqlite3: true
     esbuild: true
+    protobufjs: true

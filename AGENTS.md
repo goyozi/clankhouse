@@ -4,8 +4,9 @@ Note: since we're pre-0.1 without any real world users, there's no need to maint
 
 ## Modules
 
-core:
+Modules are located in the repo root (no `packages/` directory).
 
+core:
 - durable workflows, backed by sqlite (in-memory context via `AsyncLocalStorage`)
 - prompt templating via Handlebars
 - typed outputs based on zod schemas
@@ -14,17 +15,28 @@ core:
 - AI interfaces and session store
 - event system
 
-claude:
+server:
+- serving workflows via Connect RPC
 
+cli:
+- CLI for communicating with the server
+
+claude / codex / pi:
 - `ClaudeAgent` - coding agent using `claude-agent-sdk`
-
-codex:
-
 - `CodexAgent` - coding agent using `@openai/codex-sdk`
+- `PiAgent` - coding agent using `@earendil-works/pi-coding-agent`
+
+anthropic / openai
+- `AnthropicModel` using `@anthropic-ai/sdk`
+- `OpenAIModel` using `openai`
+
 
 test-utils:
-
 - shared utils for testing Loopy workflows
+
+examples:
+- hello-world - basic Loopy workflow example
+- dual-review - code review by Claude & Codex
 
 ## Testing
 

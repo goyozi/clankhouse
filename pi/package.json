@@ -1,0 +1,21 @@
+{
+    "name": "@loopy/pi",
+    "version": "1.0.0",
+    "type": "module",
+    "main": "./src/index.ts",
+    "exports": {
+        ".": "./src/index.ts"
+    },
+    "scripts": {
+        "test": "vitest run --config vitest.config.ts",
+        "typecheck": "tsc -p tsconfig.json --noEmit"
+    },
+    "dependencies": {
+        "@earendil-works/pi-coding-agent": "^0.84.1",
+        "@loopy/core": "workspace:*",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@loopy/test-utils": "workspace:*"
+    }
+}
