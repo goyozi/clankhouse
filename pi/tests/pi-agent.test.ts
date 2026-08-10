@@ -8,6 +8,8 @@ import {
     instructedTags,
     runGit,
     runOutput,
+    sessionTextMessages,
+    sessionToolCallMessages,
     taggedOutput,
     tempDir,
     tempGitRepo,
@@ -83,42 +85,86 @@ test("PiAgent maps the SDK conversation to the session and snapshots the worktre
     expect(session.provider).toBe("pi")
     expect(session.model).toBe("openai/gpt-5.4")
     expect(session.status).toBe("succeeded")
-    expect(session.messages.map((message) => message.role)).toEqual([
+    expect(session.messages.map((item) => (item.type === "message" ? item.role : item.type))).toEqual([
         "user",
         "system",
         "reasoning",
         "assistant",
-        "tool",
+        "tool_call",
         "tool_result",
         "assistant"
     ])
-    expect(JSON.parse(session.messages[1].content)).toEqual({
+    const messages = sessionTextMessages(session.messages)
+    expect(JSON.parse(messages[1].content)).toEqual({
         sessionId: expect.stringMatching(/^[0-9a-f-]{36}$/),
         provider: "openai",
         model: "gpt-5.4"
     })
-    expect(session.messages[2].content).toBe("I should add the requested file.")
-    expect(session.messages[3].content).toBe("Writing the file now.")
-    expect(JSON.parse(session.messages[4].content)).toEqual({
-        id: "tool_write_1",
-        tool: "write",
-        input: { path: "src/hello.ts" }
-    })
-    expect(JSON.parse(session.messages[5].content)).toMatchObject({
-        toolUseId: "tool_write_1",
-        content: {
-            role: "toolResult",
-            toolCallId: "tool_write_1",
-            toolName: "write",
-            content: [{ type: "text", text: "File created" }],
-            isError: false
+    expect(messages[2].content).toBe("I should add the requested file.")
+    expect(messages[3].content).toBe("Writing the file now.")
+    expect(session.messages[4]).toMatchObject({
+        toolCall: {
+            id: "tool_write_1",
+            name: "write",
+            source: { kind: "native" },
+            commonName: "file.change",
+            input: { path: "src/hello.ts" },
+            files: ["src/hello.ts"]
         }
     })
-    expect(session.messages.at(-1)!.content).toBe(
-        taggedOutput(session.messages[0].content, JSON.stringify({ done: true }))
-    )
+    expect(session.messages[5]).toMatchObject({
+        toolResult: {
+            toolCallId: "tool_write_1",
+            status: "succeeded",
+            output: {
+                role: "toolResult",
+                toolCallId: "tool_write_1",
+                toolName: "write",
+                content: [{ type: "text", text: "File created" }],
+                isError: false
+            }
+        }
+    })
+    expect(messages.at(-1)!.content).toBe(taggedOutput(messages[0].content, JSON.stringify({ done: true })))
     // and the Pi subscription and in-memory session are cleaned up
     expect(sessions).toEqual([{ disposed: true, unsubscribed: true }])
+})
+
+test("PiAgent normalizes the built-in ls tool as file search", async () => {
+    // given a Pi session with the optional built-in ls tool enabled
+    const { loopy, dir } = tempLoopy()
+    const repo = await tempGitRepo()
+    const worktree = new Worktree(repo.path)
+    const modelRuntime = await isolatedModelRuntime(dir)
+    const { createAgentSession } = fakePi(() => ({
+        toolCalls: [{ id: "tool_ls_1", name: "ls", arguments: { path: "src" }, result: "hello.ts" }],
+        output: { done: true }
+    }))
+    const agent = new PiAgent({
+        modelProvider: "openai",
+        model: "gpt-5.4",
+        sessionOptions: { modelRuntime, tools: ["ls"] },
+        createAgentSession
+    })
+
+    // when the agent lists a directory
+    await testRun(loopy, () => agent.run("inspect", { prompt: "list files", output: outputSchema, worktree }))
+
+    // then the call uses the shared file-search classification
+    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
+    if (step.kind !== "agent") throw new Error("unreachable")
+    const calls = sessionToolCallMessages((await loopy.sessions.get(step.sessionId!)).messages)
+    expect(calls).toHaveLength(1)
+    expect(calls[0]).toMatchObject({
+        toolCall: {
+            id: "tool_ls_1",
+            name: "ls",
+            source: { kind: "native" },
+            commonName: "file.search",
+            input: { path: "src" }
+        }
+    })
 })
 
 test("PiAgent records extension custom messages as user messages", async () => {
@@ -155,8 +201,9 @@ test("PiAgent records extension custom messages as user messages", async () => {
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
     const session = await loopy.sessions.get(step.sessionId!)
-    expect(session.messages.map((message) => message.role)).toEqual(["user", "system", "user", "assistant"])
-    expect(JSON.parse(session.messages[2].content)).toEqual({
+    const messages = sessionTextMessages(session.messages)
+    expect(messages.map((item) => item.role)).toEqual(["user", "system", "user", "assistant"])
+    expect(JSON.parse(messages[2].content)).toEqual({
         customType: "review-status",
         content: [{ type: "text", text: "Review completed." }],
         display: true,
@@ -207,6 +254,56 @@ test("PiAgent runs a void-output step without instructed output framing", async 
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
     expect((await worktree.git(["rev-parse", step.snapshotRef!])).exitCode).toBe(0)
+})
+
+test("PiAgent preserves an unknown tool and normalizes its failed result", async () => {
+    // given an unknown Pi extension tool that returns an error
+    const { loopy, dir } = tempLoopy()
+    const repo = await tempGitRepo()
+    const worktree = new Worktree(repo.path)
+    const modelRuntime = await isolatedModelRuntime(dir)
+    const { createAgentSession } = fakePi(() => ({
+        toolCalls: [
+            {
+                id: "tool_custom_1",
+                name: "deploy_preview",
+                arguments: { environment: "test" },
+                result: "deployment unavailable",
+                isError: true
+            }
+        ],
+        output: { done: true }
+    }))
+    const agent = new PiAgent({
+        modelProvider: "openai",
+        model: "gpt-5.4",
+        sessionOptions: { modelRuntime },
+        createAgentSession
+    })
+
+    // when the agent runs successfully after handling the tool failure
+    await testRun(loopy, () => agent.run("implement", { prompt: "do it", output: outputSchema, worktree }))
+
+    // then the raw tool remains available without a guessed common classification
+    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
+    if (step.kind !== "agent") throw new Error("unreachable")
+    const session = await loopy.sessions.get(step.sessionId!)
+    expect(session.messages.find((item) => item.type === "tool_call")).toMatchObject({
+        toolCall: {
+            id: "tool_custom_1",
+            name: "deploy_preview",
+            source: { kind: "native" },
+            input: { environment: "test" }
+        }
+    })
+    expect(session.messages.find((item) => item.type === "tool_result")).toMatchObject({
+        toolResult: {
+            toolCallId: "tool_custom_1",
+            status: "failed",
+            error: "deployment unavailable"
+        }
+    })
 })
 
 test("PiAgent joins final text blocks with Pi's standard newline behavior", async () => {
@@ -442,7 +539,7 @@ test("a prompt failure is preserved when Pi cleanup also fails", async () => {
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
     const session = await loopy.sessions.get(step.sessionId!)
-    expect(session.messages.map((message) => message.role)).toEqual(["user", "system", "reasoning"])
+    expect(sessionTextMessages(session.messages).map((item) => item.role)).toEqual(["user", "system", "reasoning"])
 })
 
 test("a Pi cleanup failure fails an otherwise successful step", async () => {

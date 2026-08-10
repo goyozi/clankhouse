@@ -13,6 +13,8 @@ import { applyChange, type FakeChange } from "@loopy/core/ai/fake-agent"
 import { taggedOutput } from "@loopy/test-utils"
 
 type AssistantBlock = SDKAssistantMessage["message"]["content"][number]
+type UserContentBlock = Exclude<SDKUserMessage["message"]["content"], string>[number]
+type ToolResultContent = Extract<UserContentBlock, { type: "tool_result" }>["content"]
 
 export type FakeToolCall = {
     name: string
@@ -20,7 +22,8 @@ export type FakeToolCall = {
     kind?: "tool_use" | "server_tool_use" | "mcp_tool_use"
     id?: string
     change?: FakeChange
-    result?: string
+    result?: ToolResultContent
+    isError?: boolean
 }
 
 export type FakeQueryScript = {
@@ -71,7 +74,7 @@ async function* run(
         const toolUseId = call.id ?? `toolu_${randomUUID()}`
         yield assistantMessage(sessionId, options, [toolUseBlock(call, toolUseId)])
         if (call.change) await applyChange(call.change, options?.cwd ?? process.cwd())
-        yield toolResultMessage(sessionId, toolUseId, call.result ?? "ok")
+        yield toolResultMessage(sessionId, toolUseId, call.result ?? "ok", call.isError ?? false)
     }
     let finalResponse = script.finalResponse
     if (script.output !== undefined) finalResponse ??= taggedOutput(prompt, JSON.stringify(script.output))
@@ -140,12 +143,24 @@ function assistantMessage(
     }
 }
 
-function toolResultMessage(sessionId: string, toolUseId: string, result: string): SDKUserMessage {
+function toolResultMessage(
+    sessionId: string,
+    toolUseId: string,
+    result: ToolResultContent,
+    isError: boolean
+): SDKUserMessage {
     return {
         type: "user",
         message: {
             role: "user",
-            content: [{ type: "tool_result", tool_use_id: toolUseId, content: result }]
+            content: [
+                {
+                    type: "tool_result",
+                    tool_use_id: toolUseId,
+                    content: result,
+                    ...(isError ? { is_error: true } : {})
+                }
+            ]
         },
         parent_tool_use_id: null,
         uuid: randomUUID(),

@@ -10,7 +10,15 @@ import { FakeCodingAgent } from "@loopy/core/ai/fake-agent"
 import { FakeLLM } from "@loopy/core/ai/fake-llm"
 import { GitRepository } from "@loopy/core/git"
 import type { Loopy } from "@loopy/core/loopy"
-import { ExecutionStatus, LoopyService, ReadArtifactRequestSchema, StepKind } from "@loopy/server/proto"
+import {
+    CommonToolName,
+    ExecutionStatus,
+    LoopyService,
+    ReadArtifactRequestSchema,
+    StepKind,
+    ToolResultStatus,
+    ToolSourceKind
+} from "@loopy/server/proto"
 import { runOutput, tempDir, tempGitRepo, tempLoopy, testRun } from "@loopy/test-utils"
 import { expect, onTestFinished, test } from "vitest"
 import * as z from "zod"
@@ -229,9 +237,9 @@ test("serves a FakeLLM and FakeCodingAgent workflow through the complete RPC sur
     const sessionId = fetched.steps.find((step) => step.kind === StepKind.LLM)!.sessionId!
     const session = (await client.getSession({ sessionId })).session!
     expect(session).toMatchObject({ provider: "fake-llm", status: ExecutionStatus.SUCCEEDED })
-    expect(
-        (await Array.fromAsync(client.watchSession({ sessionId }))).map((response) => response.message!.content)
-    ).toEqual(session.messages.map((message) => message.content))
+    expect((await Array.fromAsync(client.watchSession({ sessionId }))).map((response) => response.message!.id)).toEqual(
+        session.messages.map((message) => message.id)
+    )
 
     // when rerunning only the publish step
     published = "v2"
@@ -243,6 +251,74 @@ test("serves a FakeLLM and FakeCodingAgent workflow through the complete RPC sur
     expect(rerunResult.metadata?.attempt).toBe(2)
     expect(native(rerunResult.outputJson)).toMatchObject({ published: "v2" })
     expect({ llmCalls, agentCalls }).toEqual({ llmCalls: 1, agentCalls: 1 })
+})
+
+test("serves structured session messages, tool calls and tool results", async () => {
+    // given a completed session containing every session message variant
+    const { loopy } = tempLoopy()
+    const recorder = loopy.sessions.create({ kind: "coding-agent", provider: "fake", model: "fake" })
+    recorder.addMessage("assistant", "checking")
+    recorder.addToolCall({
+        id: "read-1",
+        name: "Read",
+        source: { kind: "native" },
+        commonName: "file.read",
+        input: { file_path: "src/a.ts" },
+        files: ["src/a.ts"]
+    })
+    recorder.addToolResult({ toolCallId: "read-1", status: "succeeded", output: "contents" })
+    recorder.addToolCall({
+        id: "mcp-1",
+        name: "lookup",
+        source: { kind: "mcp", server: "docs" },
+        input: { query: "sessions" }
+    })
+    recorder.addToolResult({ toolCallId: "mcp-1", status: "failed", error: "unavailable" })
+    recorder.succeed()
+    const server = await testServer(loopy)
+    const client = rpcClient(server)
+
+    // when the session is fetched and watched through Connect
+    const session = (await client.getSession({ sessionId: recorder.id })).session!
+    const watched = await Array.fromAsync(client.watchSession({ sessionId: recorder.id }))
+
+    // then the ordered oneof payloads retain normalized and provider-specific data
+    expect(session.messages.map((message) => message.payload.case)).toEqual([
+        "message",
+        "toolCall",
+        "toolResult",
+        "toolCall",
+        "toolResult"
+    ])
+    expect(session.messages[1]?.payload).toMatchObject({
+        case: "toolCall",
+        value: {
+            id: "read-1",
+            name: "Read",
+            source: { kind: ToolSourceKind.NATIVE },
+            commonName: CommonToolName.FILE_READ,
+            inputJson: JSON.stringify({ file_path: "src/a.ts" }),
+            files: ["src/a.ts"]
+        }
+    })
+    expect(session.messages[2]?.payload).toMatchObject({
+        case: "toolResult",
+        value: {
+            toolCallId: "read-1",
+            status: ToolResultStatus.SUCCEEDED,
+            outputJson: JSON.stringify("contents")
+        }
+    })
+    expect(session.messages[3]?.payload).toMatchObject({
+        case: "toolCall",
+        value: { source: { kind: ToolSourceKind.MCP, server: "docs" }, commonName: CommonToolName.UNSPECIFIED }
+    })
+    expect(session.messages[4]?.payload).toMatchObject({
+        case: "toolResult",
+        value: { status: ToolResultStatus.FAILED, error: "unavailable" }
+    })
+    // and watching yields the identical durable message sequence
+    expect(watched.map((response) => response.message?.id)).toEqual(session.messages.map((message) => message.id))
 })
 
 test("distinguishes absent void schemas and values from present JSON null across protobuf", async () => {

@@ -48,9 +48,27 @@ test("FakeCodingAgent applies changes and snapshots the worktree", async () => {
     const session = await loopy.sessions.get(step.sessionId!)
     expect(session.kind).toBe("coding-agent")
     expect(session.status).toBe("succeeded")
-    expect(session.messages.map((m) => m.role)).toEqual(["user", "tool", "tool", "assistant"])
+    expect(session.messages.map((item) => item.type)).toEqual([
+        "message",
+        "tool_call",
+        "tool_result",
+        "tool_call",
+        "tool_result",
+        "message"
+    ])
+    expect(session.messages[1]).toMatchObject({
+        toolCall: {
+            name: "write",
+            source: { kind: "native" },
+            commonName: "file.change",
+            files: ["src/hello.ts"]
+        }
+    })
+    expect(session.messages[3]).toMatchObject({
+        toolCall: { name: "edit", commonName: "file.change", files: ["README.md"] }
+    })
     // and the final assistant message carries the agent's output
-    expect(session.messages.at(-1)!.content).toBe(JSON.stringify({ done: true }))
+    expect(session.messages.at(-1)).toMatchObject({ type: "message", content: JSON.stringify({ done: true }) })
 })
 
 test("FakeCodingAgent skips the worktree snapshot when snapshots are disabled", async () => {
@@ -101,7 +119,9 @@ test("FakeCodingAgent records a void output as JSON", async () => {
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
-    const content = (await loopy.sessions.get(step.sessionId!)).messages.at(-1)!.content
+    const finalItem = (await loopy.sessions.get(step.sessionId!)).messages.at(-1)!
+    if (finalItem.type !== "message") throw new Error("Expected final message")
+    const content = finalItem.content
     expect(JSON.parse(content)).toBeNull()
 })
 
@@ -381,5 +401,13 @@ test("edit with missing oldText fails the step and the session", async () => {
     expect(step.errorCode).toBe("fake_agent_edit_text_not_found")
     if (step.kind !== "agent") throw new Error("unreachable")
     // and the session is marked failed
-    expect((await loopy.sessions.get(step.sessionId!)).status).toBe("failed")
+    const session = await loopy.sessions.get(step.sessionId!)
+    expect(session.status).toBe("failed")
+    expect(session.messages.at(-1)).toMatchObject({
+        type: "tool_result",
+        toolResult: {
+            status: "failed",
+            error: expect.stringMatching(/oldText not found/)
+        }
+    })
 })

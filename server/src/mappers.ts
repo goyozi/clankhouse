@@ -1,7 +1,13 @@
 import type { MessageInitShape } from "@bufbuild/protobuf"
 import { timestampFromDate } from "@bufbuild/protobuf/wkt"
 import type { Artifact as CoreArtifact } from "@loopy/core/artifacts"
-import type { AISession, AISessionMessage } from "@loopy/core/ai/sessions"
+import type {
+    AISession,
+    AISessionMessage,
+    CommonToolName as CoreCommonToolName,
+    SessionMessageRole,
+    ToolSource
+} from "@loopy/core/ai/sessions"
 import type {
     ObservableRunStatus,
     ObservableStepStatus,
@@ -12,14 +18,17 @@ import type {
 import {
     ArtifactKind,
     ArtifactSchema,
+    CommonToolName,
     ExecutionStatus,
     RunMetadataSchema,
-    SessionKind,
     SessionMessageSchema,
+    SessionKind,
     SessionRole,
     SessionSchema,
     StepKind,
     StepSchema,
+    ToolResultStatus,
+    ToolSourceKind,
     WorkflowRunSchema
 } from "./gen/loopy/server/v1/server_pb"
 
@@ -81,6 +90,23 @@ export function toStep(step: CoreStep): MessageInitShape<typeof StepSchema> {
     }
 }
 
+function toStepKind(kind: CoreStep["kind"]): StepKind {
+    switch (kind) {
+        case "custom":
+            return StepKind.CUSTOM
+        case "artifact":
+            return StepKind.ARTIFACT
+        case "llm":
+            return StepKind.LLM
+        case "agent":
+            return StepKind.AGENT
+        case "event":
+            return StepKind.EVENT
+        case "worktree":
+            return StepKind.WORKTREE
+    }
+}
+
 export function toArtifact(artifact: CoreArtifact): MessageInitShape<typeof ArtifactSchema> {
     return {
         id: artifact.id,
@@ -105,16 +131,6 @@ export function toSession(session: AISession): MessageInitShape<typeof SessionSc
     }
 }
 
-export function toSessionMessage(message: AISessionMessage): MessageInitShape<typeof SessionMessageSchema> {
-    return {
-        id: message.id,
-        sessionId: message.sessionId,
-        role: toSessionRole(message.role),
-        content: message.content,
-        createdAt: timestampFromDate(message.createdAt)
-    }
-}
-
 function toExecutionStatus(status: ObservableRunStatus | ObservableStepStatus): ExecutionStatus {
     switch (status) {
         case "interrupted":
@@ -128,24 +144,55 @@ function toExecutionStatus(status: ObservableRunStatus | ObservableStepStatus): 
     }
 }
 
-function toStepKind(kind: CoreStep["kind"]): StepKind {
-    switch (kind) {
-        case "custom":
-            return StepKind.CUSTOM
-        case "artifact":
-            return StepKind.ARTIFACT
-        case "llm":
-            return StepKind.LLM
-        case "agent":
-            return StepKind.AGENT
-        case "event":
-            return StepKind.EVENT
-        case "worktree":
-            return StepKind.WORKTREE
+export function toSessionMessage(message: AISessionMessage): MessageInitShape<typeof SessionMessageSchema> {
+    const base = {
+        id: message.id,
+        sessionId: message.sessionId,
+        createdAt: timestampFromDate(message.createdAt)
+    }
+    switch (message.type) {
+        case "message":
+            return {
+                ...base,
+                payload: { case: "message", value: { role: toSessionRole(message.role), content: message.content } }
+            }
+        case "tool_call":
+            return {
+                ...base,
+                payload: {
+                    case: "toolCall",
+                    value: {
+                        id: message.toolCall.id,
+                        name: message.toolCall.name,
+                        source: toToolSource(message.toolCall.source),
+                        commonName: toCommonToolName(message.toolCall.commonName),
+                        inputJson: JSON.stringify(message.toolCall.input),
+                        files: message.toolCall.files ?? []
+                    }
+                }
+            }
+        case "tool_result":
+            return {
+                ...base,
+                payload: {
+                    case: "toolResult",
+                    value: {
+                        toolCallId: message.toolResult.toolCallId,
+                        status:
+                            message.toolResult.status === "succeeded"
+                                ? ToolResultStatus.SUCCEEDED
+                                : ToolResultStatus.FAILED,
+                        ...(message.toolResult.output !== undefined
+                            ? { outputJson: JSON.stringify(message.toolResult.output) }
+                            : {}),
+                        ...(message.toolResult.error !== undefined ? { error: message.toolResult.error } : {})
+                    }
+                }
+            }
     }
 }
 
-function toSessionRole(role: AISessionMessage["role"]): SessionRole {
+function toSessionRole(role: SessionMessageRole): SessionRole {
     switch (role) {
         case "system":
             return SessionRole.SYSTEM
@@ -155,9 +202,33 @@ function toSessionRole(role: AISessionMessage["role"]): SessionRole {
             return SessionRole.ASSISTANT
         case "reasoning":
             return SessionRole.REASONING
-        case "tool":
-            return SessionRole.TOOL
-        case "tool_result":
-            return SessionRole.TOOL_RESULT
+    }
+}
+
+function toToolSource(source: ToolSource): { kind: ToolSourceKind; server?: string } {
+    switch (source.kind) {
+        case "native":
+            return { kind: ToolSourceKind.NATIVE }
+        case "provider":
+            return { kind: ToolSourceKind.PROVIDER }
+        case "mcp":
+            return { kind: ToolSourceKind.MCP, server: source.server }
+    }
+}
+
+function toCommonToolName(commonName: CoreCommonToolName | undefined): CommonToolName {
+    switch (commonName) {
+        case "file.read":
+            return CommonToolName.FILE_READ
+        case "file.change":
+            return CommonToolName.FILE_CHANGE
+        case "shell.execute":
+            return CommonToolName.SHELL_EXECUTE
+        case "file.search":
+            return CommonToolName.FILE_SEARCH
+        case "web.search":
+            return CommonToolName.WEB_SEARCH
+        case undefined:
+            return CommonToolName.UNSPECIFIED
     }
 }

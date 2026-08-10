@@ -55,9 +55,29 @@ enum SessionRole {
   SESSION_ROLE_SYSTEM = 1;
   SESSION_ROLE_USER = 2;
   SESSION_ROLE_ASSISTANT = 3;
-  SESSION_ROLE_TOOL = 4;
-  SESSION_ROLE_TOOL_RESULT = 5;
-  SESSION_ROLE_REASONING = 6;
+  SESSION_ROLE_REASONING = 4;
+}
+
+enum CommonToolName {
+  COMMON_TOOL_NAME_UNSPECIFIED = 0;
+  COMMON_TOOL_NAME_FILE_READ = 1;
+  COMMON_TOOL_NAME_FILE_CHANGE = 2;
+  COMMON_TOOL_NAME_SHELL_EXECUTE = 3;
+  COMMON_TOOL_NAME_FILE_SEARCH = 4;
+  COMMON_TOOL_NAME_WEB_SEARCH = 5;
+}
+
+enum ToolSourceKind {
+  TOOL_SOURCE_KIND_UNSPECIFIED = 0;
+  TOOL_SOURCE_KIND_NATIVE = 1;
+  TOOL_SOURCE_KIND_PROVIDER = 2;
+  TOOL_SOURCE_KIND_MCP = 3;
+}
+
+enum ToolResultStatus {
+  TOOL_RESULT_STATUS_UNSPECIFIED = 0;
+  TOOL_RESULT_STATUS_SUCCEEDED = 1;
+  TOOL_RESULT_STATUS_FAILED = 2;
 }
 
 message WorkflowSummary {
@@ -117,12 +137,41 @@ message WorkflowRun {
   optional string error_code = 6;
 }
 
+message SessionText {
+  SessionRole role = 1;
+  string content = 2;
+}
+
+message SessionToolSource {
+  ToolSourceKind kind = 1;
+  optional string server = 2;
+}
+
+message SessionToolCall {
+  string id = 1;
+  string name = 2;
+  SessionToolSource source = 3;
+  CommonToolName common_name = 4;
+  string input_json = 5;
+  repeated string files = 6;
+}
+
+message SessionToolResult {
+  string tool_call_id = 1;
+  ToolResultStatus status = 2;
+  optional string output_json = 3;
+  optional string error = 4;
+}
+
 message SessionMessage {
   string id = 1;
   string session_id = 2;
-  SessionRole role = 3;
-  string content = 4;
-  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp created_at = 3;
+  oneof payload {
+    SessionText message = 4;
+    SessionToolCall tool_call = 5;
+    SessionToolResult tool_result = 6;
+  }
 }
 
 message Session {

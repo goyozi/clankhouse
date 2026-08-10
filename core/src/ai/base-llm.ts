@@ -16,8 +16,8 @@ export type LanguageModelInvocation = {
  * Owns all durability concerns of an LLM call: the durable step, the persisted
  * session and its messages, prompt rendering and output validation.
  * Implementations only provide `invoke`, producing the structured output per
- * the provided output schema and recording all session messages they can
- * (system/user/assistant/reasoning/tool), including the user's prompt.
+ * the provided output schema and recording all session messages and tool
+ * activity they can, including the user's prompt.
  */
 export abstract class BaseLanguageModel implements LanguageModel {
     abstract readonly provider: string

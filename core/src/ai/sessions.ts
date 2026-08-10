@@ -1,7 +1,9 @@
+import { realpathSync } from "node:fs"
+import * as path from "node:path"
 import * as sql from "../db"
 import type { Db, SessionMessageRow } from "../db"
-import { observableStatus, type ActiveSets } from "../runtime"
 import { LoopyError } from "../errors"
+import { observableStatus, type ActiveSets } from "../runtime"
 import { newId, nowIso } from "../util"
 import { Notifier, watch } from "../watch"
 
@@ -55,11 +57,17 @@ export class AISessions {
         yield* watch(this.notifier, id, drain, () => this.active.sessions.has(id), options?.signal)
     }
 
-    create(options: { kind: "llm" | "coding-agent"; provider: string; model: string }): SessionRecorder {
+    create(options: {
+        kind: "llm" | "coding-agent"
+        provider: string
+        model: string
+        filesRoot?: string
+    }): SessionRecorder {
         const id = newId()
         const db = this.db
         const active = this.active.sessions
         const notify = () => this.notifier.notify(id)
+        const filesRoot = options.filesRoot === undefined ? undefined : canonicalPath(options.filesRoot)
         sql.insertSession(db, {
             id,
             kind: options.kind,
@@ -69,18 +77,40 @@ export class AISessions {
         })
         active.add(id)
         let seq = 0
+        const appendMessage = (kind: SessionMessageRow["kind"], payload: unknown) => {
+            sql.insertSessionMessage(db, {
+                id: newId(),
+                session_id: id,
+                seq: seq++,
+                kind,
+                payload: JSON.stringify(payload),
+                created_at: nowIso()
+            })
+            notify()
+        }
         return {
             id,
             addMessage(role, content) {
-                sql.insertSessionMessage(db, {
-                    id: newId(),
-                    session_id: id,
-                    seq: seq++,
-                    role,
-                    content,
-                    created_at: nowIso()
+                appendMessage("message", { role, content })
+            },
+            addToolCall(call) {
+                const files =
+                    call.files === undefined || filesRoot === undefined
+                        ? call.files
+                        : normalizeFileTargets(filesRoot, call.files)
+                appendMessage("tool_call", {
+                    ...call,
+                    input: jsonValue(call.input),
+                    ...(files !== undefined ? { files } : {})
                 })
-                notify()
+            },
+            addToolResult(result) {
+                appendMessage("tool_result", {
+                    toolCallId: result.toolCallId,
+                    status: result.status,
+                    ...(result.output !== undefined ? { output: jsonValue(result.output) } : {}),
+                    ...(result.error !== undefined ? { error: result.error } : {})
+                })
             },
             succeed() {
                 sql.succeedSession(db, id, nowIso())
@@ -97,18 +127,94 @@ export class AISessions {
 }
 
 function toMessage(row: SessionMessageRow): AISessionMessage {
-    return {
+    const base = {
         id: row.id,
         sessionId: row.session_id,
-        role: row.role,
-        content: row.content,
         createdAt: new Date(row.created_at)
+    }
+    const payload = JSON.parse(row.payload) as JsonObject
+    switch (row.kind) {
+        case "message":
+            return {
+                ...base,
+                type: "message",
+                role: payload.role as SessionMessageRole,
+                content: payload.content as string
+            }
+        case "tool_call":
+            return { ...base, type: "tool_call", toolCall: payload as SessionToolCall }
+        case "tool_result":
+            return { ...base, type: "tool_result", toolResult: payload as SessionToolResult }
     }
 }
 
+function jsonValue(value: unknown): JsonValue {
+    if (value === undefined) return null
+    const encoded = JSON.stringify(value)
+    if (encoded === undefined) throw new TypeError("Tool payload is not JSON-serializable")
+    return JSON.parse(encoded) as JsonValue
+}
+
+function normalizeFileTargets(filesRoot: string, targets: readonly string[]): string[] {
+    const files = new Set<string>()
+    for (const target of targets) {
+        if (target.length === 0) continue
+        const absolute = canonicalPath(path.resolve(filesRoot, target))
+        const relative = path.relative(filesRoot, absolute)
+        const inside = relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
+        files.add((inside ? relative || "." : absolute).split(path.sep).join("/"))
+    }
+    return [...files]
+}
+
+function canonicalPath(target: string): string {
+    let current = path.resolve(target)
+    const suffix: string[] = []
+    while (true) {
+        try {
+            return path.join(realpathSync.native(current), ...suffix.reverse())
+        } catch {
+            const parent = path.dirname(current)
+            if (parent === current) return path.resolve(target)
+            suffix.push(path.basename(current))
+            current = parent
+        }
+    }
+}
+
+export type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject
+
+export type JsonObject = { [key: string]: JsonValue }
+
+export type CommonToolName = "file.read" | "file.change" | "shell.execute" | "file.search" | "web.search"
+
+export type ToolSource = { kind: "native" } | { kind: "provider" } | { kind: "mcp"; server: string }
+
+export type SessionToolCall = {
+    id: string
+    name: string
+    source: ToolSource
+    commonName?: CommonToolName
+    input: JsonValue
+    files?: string[]
+}
+
+export type SessionToolResult = {
+    toolCallId: string
+    status: "succeeded" | "failed"
+    output?: JsonValue
+    error?: string
+}
+
+type NewSessionToolCall = Omit<SessionToolCall, "input"> & { input: unknown }
+
+type NewSessionToolResult = Omit<SessionToolResult, "output"> & { output?: unknown }
+
 export type SessionRecorder = {
     id: string
-    addMessage(role: AISessionMessage["role"], content: string): void
+    addMessage(role: SessionMessageRole, content: string): void
+    addToolCall(call: NewSessionToolCall): void
+    addToolResult(result: NewSessionToolResult): void
     succeed(): void
     fail(): void
 }
@@ -129,10 +235,15 @@ export type PersistedSessionStatus = "interrupted" | "succeeded" | "failed"
 
 export type ObservableSessionStatus = PersistedSessionStatus | "running"
 
-export type AISessionMessage = {
+type SessionMessageBase = {
     id: string
     sessionId: string
-    role: "system" | "user" | "assistant" | "reasoning" | "tool" | "tool_result"
-    content: string
     createdAt: Date
 }
+
+export type SessionMessageRole = "system" | "user" | "assistant" | "reasoning"
+
+export type AISessionMessage =
+    | (SessionMessageBase & { type: "message"; role: SessionMessageRole; content: string })
+    | (SessionMessageBase & { type: "tool_call"; toolCall: SessionToolCall })
+    | (SessionMessageBase & { type: "tool_result"; toolResult: SessionToolResult })

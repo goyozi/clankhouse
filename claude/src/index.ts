@@ -7,7 +7,7 @@ import type {
     SDKUserMessage
 } from "@anthropic-ai/claude-agent-sdk"
 import { BaseCodingAgent, type CodingAgentInvocation } from "@loopy/core/ai/base-agent"
-import type { SessionRecorder } from "@loopy/core/ai/sessions"
+import { type CommonToolName, type SessionRecorder, type ToolSource } from "@loopy/core/ai/sessions"
 import type { Worktree } from "@loopy/core/git"
 
 export type QueryFunction = (input: {
@@ -90,10 +90,14 @@ function record(session: SessionRecorder, message: SDKMessage): void {
     } else if (message.type === "user" && typeof message.message.content !== "string") {
         for (const block of message.message.content) {
             if (block.type === "tool_result") {
-                session.addMessage(
-                    "tool_result",
-                    JSON.stringify({ toolUseId: block.tool_use_id, content: block.content ?? null })
-                )
+                const failed = block.is_error === true
+                const error = failed ? toolResultError(block) : undefined
+                session.addToolResult({
+                    toolCallId: block.tool_use_id,
+                    status: failed ? "failed" : "succeeded",
+                    output: block,
+                    ...(error !== undefined ? { error } : {})
+                })
             }
         }
     }
@@ -107,6 +111,112 @@ function recordAssistantBlock(session: SessionRecorder, block: AssistantBlock): 
     } else if (block.type === "thinking") {
         session.addMessage("reasoning", block.thinking)
     } else if (block.type === "tool_use" || block.type === "server_tool_use" || block.type === "mcp_tool_use") {
-        session.addMessage("tool", JSON.stringify({ id: block.id, tool: block.name, input: block.input }))
+        const identity = claudeToolIdentity(block)
+        const commonName = claudeCommonTool(block.type, block.name)
+        const files = claudeFiles(commonName, block.input)
+        session.addToolCall({
+            id: block.id,
+            name: identity.name,
+            source: identity.source,
+            ...(commonName !== undefined ? { commonName } : {}),
+            input: block.input,
+            ...(files.length > 0 ? { files } : {})
+        })
+    } else if (isToolResultBlock(block)) {
+        const failed = toolResultFailed(block)
+        const error = failed ? toolResultError(block) : undefined
+        session.addToolResult({
+            toolCallId: block.tool_use_id,
+            status: failed ? "failed" : "succeeded",
+            output: block,
+            ...(error !== undefined ? { error } : {})
+        })
     }
+}
+
+type ClaudeToolBlock = Extract<AssistantBlock, { type: "tool_use" | "server_tool_use" | "mcp_tool_use" }>
+
+function claudeToolIdentity(block: ClaudeToolBlock): { name: string; source: ToolSource } {
+    if (block.type === "mcp_tool_use") {
+        return { name: block.name, source: { kind: "mcp", server: block.server_name } }
+    }
+    if (block.type === "server_tool_use") return { name: block.name, source: { kind: "provider" } }
+    return claudeMcpTool(block.name) ?? { name: block.name, source: { kind: "native" } }
+}
+
+function claudeMcpTool(name: string): { name: string; source: ToolSource } | undefined {
+    const prefix = "mcp__"
+    if (!name.startsWith(prefix)) return undefined
+    const separator = name.indexOf("__", prefix.length)
+    if (separator === prefix.length || separator === -1 || separator + 2 === name.length) return undefined
+    return {
+        name: name.slice(separator + 2),
+        source: { kind: "mcp", server: name.slice(prefix.length, separator) }
+    }
+}
+
+function claudeCommonTool(type: AssistantBlock["type"], name: string): CommonToolName | undefined {
+    if (type === "server_tool_use") return name === "web_search" ? "web.search" : undefined
+    if (type !== "tool_use") return undefined
+    switch (name) {
+        case "Read":
+            return "file.read"
+        case "Write":
+        case "Edit":
+            return "file.change"
+        case "Bash":
+            return "shell.execute"
+        case "Glob":
+        case "Grep":
+            return "file.search"
+        case "WebSearch":
+            return "web.search"
+        default:
+            return undefined
+    }
+}
+
+function claudeFiles(commonName: CommonToolName | undefined, input: unknown): string[] {
+    if (commonName !== "file.read" && commonName !== "file.change") return []
+    if (typeof input !== "object" || input === null || !("file_path" in input)) return []
+    const file = (input as { file_path?: unknown }).file_path
+    return typeof file === "string" && file.length > 0 ? [file] : []
+}
+
+function isToolResultBlock(block: AssistantBlock): block is AssistantBlock & { tool_use_id: string; content: unknown } {
+    return "tool_use_id" in block && typeof block.tool_use_id === "string" && block.type.endsWith("_tool_result")
+}
+
+function toolResultFailed(block: { content: unknown }): boolean {
+    if ("is_error" in block && block.is_error === true) return true
+    const content = block.content
+    return (
+        typeof content === "object" &&
+        content !== null &&
+        "type" in content &&
+        typeof content.type === "string" &&
+        content.type.includes("error")
+    )
+}
+
+function toolResultError(block: { content?: unknown }): string | undefined {
+    if (typeof block.content === "string") return block.content
+    if (Array.isArray(block.content)) {
+        const text = block.content
+            .filter(
+                (content): content is { type: "text"; text: string } =>
+                    typeof content === "object" &&
+                    content !== null &&
+                    "type" in content &&
+                    content.type === "text" &&
+                    "text" in content &&
+                    typeof content.text === "string"
+            )
+            .map((content) => content.text)
+            .join("\n")
+        return text.length > 0 ? text : undefined
+    }
+    if (typeof block.content !== "object" || block.content === null) return undefined
+    if ("error_code" in block.content && typeof block.content.error_code === "string") return block.content.error_code
+    return undefined
 }

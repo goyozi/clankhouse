@@ -10,6 +10,7 @@ import {
     instructedTags,
     runGit,
     runOutput,
+    sessionTextMessages,
     taggedOutput,
     tempGitRepo,
     tempLoopy,
@@ -79,29 +80,33 @@ test("CodexAgent maps the SDK conversation to the session and snapshots the work
     expect(session.provider).toBe("codex")
     expect(session.model).toBe("gpt-5.4")
     expect(session.status).toBe("succeeded")
-    expect(session.messages.map((message) => message.role)).toEqual([
+    expect(session.messages.map((item) => (item.type === "message" ? item.role : item.type))).toEqual([
         "user",
         "system",
         "reasoning",
-        "tool",
+        "tool_call",
         "tool_result",
         "assistant"
     ])
-    expect(session.messages[0].content).toMatch(/^do it\n\nIMPORTANT — requested final report:/)
-    expect(JSON.parse(session.messages[1].content)).toEqual({
+    const messages = sessionTextMessages(session.messages)
+    expect(messages[0].content).toMatch(/^do it\n\nIMPORTANT — requested final report:/)
+    expect(JSON.parse(messages[1].content)).toEqual({
         threadId: expect.stringMatching(/^[0-9a-f-]{36}$/),
         model: "gpt-5.4"
     })
-    expect(session.messages[2].content).toBe("I should add the requested file.")
-    expect(JSON.parse(session.messages[3].content)).toEqual({
-        id: "change_1",
-        tool: "file_change",
-        input: { changes: [{ path: "src/hello.ts", kind: "add" }] }
+    expect(messages[2].content).toBe("I should add the requested file.")
+    expect(session.messages[3]).toMatchObject({
+        toolCall: {
+            id: "change_1",
+            name: "file_change",
+            source: { kind: "native" },
+            commonName: "file.change",
+            input: { changes: [{ path: "src/hello.ts", kind: "add" }] },
+            files: ["src/hello.ts"]
+        }
     })
     // and the final agent message is recorded once, verbatim, with no re-stringified duplicate
-    expect(session.messages.at(-1)!.content).toBe(
-        taggedOutput(session.messages[0].content, JSON.stringify({ done: true }))
-    )
+    expect(messages.at(-1)!.content).toBe(taggedOutput(messages[0].content, JSON.stringify({ done: true })))
 })
 
 test("CodexAgent runs a void-output step without instructed output framing", async () => {
@@ -173,7 +178,7 @@ test("CodexAgent returns its final message verbatim for a root string output", a
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
     expect(step.outputJson).toBe(JSON.stringify(finalMessage))
-    expect((await loopy.sessions.get(step.sessionId!)).messages.at(-1)!.content).toBe(finalMessage)
+    expect(sessionTextMessages((await loopy.sessions.get(step.sessionId!)).messages).at(-1)!.content).toBe(finalMessage)
 })
 
 test("CodexAgent records every supported SDK item type", async () => {
@@ -233,11 +238,8 @@ test("CodexAgent records every supported SDK item type", async () => {
                     server: "docs",
                     tool: "lookup",
                     arguments: { key: "value" },
-                    result: {
-                        content: [{ type: "text", text: "found" }],
-                        structured_content: { found: true }
-                    },
-                    status: "completed"
+                    error: { message: "docs unavailable" },
+                    status: "failed"
                 }
             },
             { started: { id: "search_1", type: "web_search", query: "loopy" } },
@@ -270,56 +272,126 @@ test("CodexAgent records every supported SDK item type", async () => {
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
     const session = await loopy.sessions.get(step.sessionId!)
-    expect(session.messages.map((message) => message.role)).toEqual([
+    expect(session.messages.map((item) => (item.type === "message" ? item.role : item.type))).toEqual([
         "user",
         "system",
         "reasoning",
-        "tool",
+        "tool_call",
         "tool_result",
-        "tool",
+        "tool_call",
         "tool_result",
-        "tool",
+        "tool_call",
         "tool_result",
-        "tool",
+        "tool_call",
         "tool_result",
         "assistant",
-        "tool_result",
+        "system",
         "assistant"
     ])
-    // and tool starts carry stable ids, names and inputs
-    expect(JSON.parse(session.messages[3].content)).toEqual({
-        id: "command_1",
-        tool: "command_execution",
-        input: { command: "pnpm test" }
-    })
-    expect(JSON.parse(session.messages[7].content)).toEqual({
-        id: "mcp_1",
-        tool: "docs.lookup",
-        input: { key: "value" }
-    })
-    expect(JSON.parse(session.messages[9].content)).toEqual({
-        id: "search_1",
-        tool: "web_search",
-        input: { query: "loopy" }
-    })
-    // and tool completions preserve the authoritative completed item
-    expect(JSON.parse(session.messages[4].content)).toEqual({
-        toolUseId: "command_1",
-        content: {
+    // and tool starts carry stable ids, normalized names, sources and inputs
+    expect(session.messages[3]).toMatchObject({
+        toolCall: {
             id: "command_1",
-            type: "command_execution",
-            command: "pnpm test",
-            aggregated_output: "passed",
-            exit_code: 0,
-            status: "completed"
+            name: "command_execution",
+            source: { kind: "native" },
+            commonName: "shell.execute",
+            input: { command: "pnpm test" }
         }
     })
-    expect(JSON.parse(session.messages[11].content)).toEqual({
-        todoList: [{ text: "Inspect", completed: true }]
+    expect(session.messages[5]).toMatchObject({
+        toolCall: {
+            id: "change_1",
+            commonName: "file.change",
+            files: ["a.ts"]
+        }
     })
-    expect(JSON.parse(session.messages[12].content)).toEqual({
-        toolUseId: "error_1",
-        content: { id: "error_1", type: "error", message: "optional tool unavailable" }
+    expect(session.messages[7]).toMatchObject({
+        toolCall: {
+            id: "mcp_1",
+            name: "lookup",
+            source: { kind: "mcp", server: "docs" },
+            input: { key: "value" }
+        }
+    })
+    expect(session.messages[9]).toMatchObject({
+        toolCall: {
+            id: "search_1",
+            name: "web_search",
+            source: { kind: "provider" },
+            commonName: "web.search",
+            input: { query: "loopy" }
+        }
+    })
+    // and tool completions preserve the authoritative completed item
+    expect(session.messages[4]).toMatchObject({
+        toolResult: {
+            toolCallId: "command_1",
+            status: "succeeded",
+            output: {
+                id: "command_1",
+                type: "command_execution",
+                command: "pnpm test",
+                aggregated_output: "passed",
+                exit_code: 0,
+                status: "completed"
+            }
+        }
+    })
+    expect(session.messages[8]).toMatchObject({
+        toolResult: {
+            toolCallId: "mcp_1",
+            status: "failed",
+            error: "docs unavailable"
+        }
+    })
+    expect(session.messages[11]).toMatchObject({
+        content: JSON.stringify({ todoList: [{ text: "Inspect", completed: true }] })
+    })
+    expect(session.messages[12]).toMatchObject({ content: JSON.stringify({ error: "optional tool unavailable" }) })
+})
+
+test("CodexAgent records a no-argument MCP call without failing the run", async () => {
+    // given a Codex MCP item whose no-argument payload is absent
+    const { loopy } = tempLoopy()
+    const repo = await tempGitRepo()
+    const worktree = new Worktree(repo.path)
+    const { codexFactory } = fakeCodex(() => ({
+        items: [
+            {
+                started: {
+                    id: "mcp_noop_1",
+                    type: "mcp_tool_call",
+                    server: "tools",
+                    tool: "noop",
+                    arguments: undefined,
+                    status: "in_progress"
+                },
+                completed: {
+                    id: "mcp_noop_1",
+                    type: "mcp_tool_call",
+                    server: "tools",
+                    tool: "noop",
+                    arguments: undefined,
+                    result: { content: [], structured_content: null },
+                    status: "completed"
+                }
+            }
+        ],
+        output: { done: true }
+    }))
+    const agent = new CodexAgent({ model: "gpt-5.4", codexFactory })
+
+    // when the agent runs the tool and completes the turn
+    await testRun(loopy, () => agent.run("implement", { prompt: "do it", output: outputSchema, worktree }))
+
+    // then the call is durable with a JSON null input and the session succeeds
+    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
+    if (step.kind !== "agent") throw new Error("unreachable")
+    const session = await loopy.sessions.get(step.sessionId!)
+    expect(session.status).toBe("succeeded")
+    expect(session.messages.find((item) => item.type === "tool_call")).toMatchObject({
+        toolCall: { id: "mcp_noop_1", input: null }
     })
 })
 
@@ -559,7 +631,7 @@ test("a failed Codex turn fails the durable step and preserves recorded messages
     if (step.kind !== "agent") throw new Error("unreachable")
     const session = await loopy.sessions.get(step.sessionId!)
     expect(session.status).toBe("failed")
-    expect(session.messages.map((message) => message.role)).toEqual(["user", "system", "reasoning"])
+    expect(sessionTextMessages(session.messages).map((item) => item.role)).toEqual(["user", "system", "reasoning"])
 })
 
 test("a fatal Codex stream event fails the durable step", async () => {
@@ -567,7 +639,21 @@ test("a fatal Codex stream event fails the durable step", async () => {
     const { loopy } = tempLoopy()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
-    const { codexFactory } = fakeCodex(() => ({ streamError: "connection lost" }))
+    const { codexFactory } = fakeCodex(() => ({
+        items: [
+            {
+                started: {
+                    id: "command_interrupted",
+                    type: "command_execution",
+                    command: "pnpm test",
+                    aggregated_output: "",
+                    status: "in_progress"
+                },
+                complete: false
+            }
+        ],
+        streamError: "connection lost"
+    }))
     const agent = new CodexAgent({ model: "gpt-5.4", codexFactory })
 
     // when the agent runs
@@ -578,6 +664,13 @@ test("a fatal Codex stream event fails the durable step", async () => {
 
     // then the fatal event is surfaced as a provider error
     await expect(result).rejects.toThrow("Codex agent stream error: connection lost")
+    // and the started tool remains durable without a synthetic completion
+    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
+    if (step.kind !== "agent") throw new Error("unreachable")
+    const session = await loopy.sessions.get(step.sessionId!)
+    expect(session.messages.filter((item) => item.type === "tool_call")).toHaveLength(1)
+    expect(session.messages.filter((item) => item.type === "tool_result")).toHaveLength(0)
 })
 
 test("a thrown SDK stream error fails the step and preserves initialization", async () => {
@@ -602,7 +695,7 @@ test("a thrown SDK stream error fails the step and preserves initialization", as
     if (step.kind !== "agent") throw new Error("unreachable")
     const session = await loopy.sessions.get(step.sessionId!)
     expect(session.status).toBe("failed")
-    expect(session.messages.map((message) => message.role)).toEqual(["user", "system"])
+    expect(sessionTextMessages(session.messages).map((item) => item.role)).toEqual(["user", "system"])
 })
 
 test("a stream ending without turn completion fails the step", async () => {

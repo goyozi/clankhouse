@@ -274,8 +274,8 @@ test("drives FakeLLM and FakeCodingAgent workflows through the complete CLI surf
         { env }
     )
     expect(
-        lines(sessionTail.stdout).map((line) => fromJsonString(WatchSessionResponseSchema, line).message?.content)
-    ).toEqual(session.messages.slice(1).map((message) => message.content))
+        lines(sessionTail.stdout).map((line) => fromJsonString(WatchSessionResponseSchema, line).message?.id)
+    ).toEqual(session.messages.slice(1).map((message) => message.id))
     const artifactId = snapshot.run!.artifacts[0]!.id
     const artifact = await runCliCommand(["artifacts", "get", artifactId, "--json"], { env })
     expect({ code: artifact.code, stderr: artifact.stderr }).toEqual({ code: 0, stderr: "" })
@@ -339,6 +339,30 @@ test("drives FakeLLM and FakeCodingAgent workflows through the complete CLI surf
     expect(rerunWatch.code).toBe(0)
     expect(await loopy.runs.get(rerun.runId)).toMatchObject({ attempt: 2, output: { published: "v2" } })
     expect({ llmCalls, agentCalls }).toEqual({ llmCalls: 1, agentCalls: 1 })
+})
+
+test("renders failed session tool results with their status and error", async () => {
+    // given a completed session with a failed tool result that has no output
+    const { loopy } = tempLoopy()
+    const recorder = loopy.sessions.create({ kind: "coding-agent", provider: "fake", model: "fake" })
+    recorder.addToolCall({
+        id: "call-1",
+        name: "lookup",
+        source: { kind: "mcp", server: "docs" },
+        input: { query: "sessions" }
+    })
+    recorder.addToolResult({ toolCallId: "call-1", status: "failed", error: "unavailable" })
+    recorder.succeed()
+    const server = await testServer(loopy)
+
+    // when the session is printed in human-readable form
+    const result = await runCliCommand(["sessions", "get", recorder.id], { env: serverEnv(server) })
+
+    // then the failed status and diagnostic are visible
+    expect(result.code).toBe(0)
+    expect(result.stdout.toString()).toContain(
+        'tool_result: {"toolUseId":"call-1","status":"failed","content":null,"error":"unavailable"}'
+    )
 })
 
 test("starts void-input workflows without an input file", async () => {

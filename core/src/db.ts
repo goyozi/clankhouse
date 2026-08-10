@@ -432,8 +432,8 @@ CREATE TABLE IF NOT EXISTS session_messages (
     id         TEXT PRIMARY KEY,
     session_id TEXT NOT NULL REFERENCES sessions(id),
     seq        INTEGER NOT NULL,
-    role       TEXT NOT NULL CHECK (role IN ('system','user','assistant','reasoning','tool','tool_result')),
-    content    TEXT NOT NULL,
+    kind       TEXT NOT NULL CHECK (kind IN ('message','tool_call','tool_result')),
+    payload    TEXT NOT NULL,
     created_at TEXT NOT NULL,
     UNIQUE (session_id, seq)
 );
@@ -453,8 +453,8 @@ export type SessionMessageRow = {
     id: string
     session_id: string
     seq: number
-    role: "system" | "user" | "assistant" | "reasoning" | "tool" | "tool_result"
-    content: string
+    kind: "message" | "tool_call" | "tool_result"
+    payload: string
     created_at: string
 }
 
@@ -479,7 +479,7 @@ function prepareSessionStatements(db: Db): SessionStatements {
         succeed: db.prepare("UPDATE sessions SET status = 'succeeded', ended_at = ? WHERE id = ?"),
         fail: db.prepare("UPDATE sessions SET status = 'failed', ended_at = ? WHERE id = ?"),
         insertMessage: db.prepare(
-            "INSERT INTO session_messages (id, session_id, seq, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+            "INSERT INTO session_messages (id, session_id, seq, kind, payload, created_at) VALUES (?, ?, ?, ?, ?, ?)"
         ),
         findMessages: db.prepare("SELECT * FROM session_messages WHERE session_id = ? AND seq > ? ORDER BY seq"),
         findMessageById: db.prepare("SELECT * FROM session_messages WHERE id = ?")
@@ -503,7 +503,7 @@ export function failSession(db: Db, id: string, endedAt: string): void {
 }
 
 export function insertSessionMessage(db: Db, row: SessionMessageRow): void {
-    statements(db).sessions.insertMessage.run(row.id, row.session_id, row.seq, row.role, row.content, row.created_at)
+    statements(db).sessions.insertMessage.run(row.id, row.session_id, row.seq, row.kind, row.payload, row.created_at)
 }
 
 export function findSessionMessages(db: Db, sessionId: string, afterSeq = -1): SessionMessageRow[] {

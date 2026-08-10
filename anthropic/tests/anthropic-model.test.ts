@@ -1,7 +1,7 @@
 import * as z from "zod"
 import { expect, test } from "vitest"
 import { AnthropicModel } from "@loopy/anthropic"
-import { taggedOutput, tempLoopy, testRun } from "@loopy/test-utils"
+import { sessionTextMessages, taggedOutput, tempLoopy, testRun } from "@loopy/test-utils"
 import { fakeAnthropic, redactedThinkingBlock, textBlock, thinkingBlock } from "./fake-anthropic"
 
 const outputSchema = z.object({ done: z.boolean() })
@@ -67,7 +67,7 @@ test("AnthropicModel uses the official streaming client and records thinking sep
         model: "claude-test",
         status: "succeeded"
     })
-    expect(session.messages.map((message) => [message.role, message.content])).toEqual([
+    expect(sessionTextMessages(session.messages).map((message) => [message.role, message.content])).toEqual([
         ["user", prompt],
         ["assistant", reply.slice(0, splitAt)],
         ["reasoning", "Checked the calculation."],
@@ -94,12 +94,9 @@ test("AnthropicModel returns its combined final text verbatim for a root string 
     const step = run.steps[0]
     if (step.kind !== "llm") throw new Error("unreachable")
     expect(step.outputJson).toBe(JSON.stringify(first + second))
-    expect((await loopy.sessions.get(step.sessionId!)).messages.map((message) => message.content)).toEqual([
-        "Answer naturally.",
-        first,
-        "Checked the answer.",
-        second
-    ])
+    expect(
+        sessionTextMessages((await loopy.sessions.get(step.sessionId!)).messages).map((message) => message.content)
+    ).toEqual(["Answer naturally.", first, "Checked the answer.", second])
 })
 
 test("AnthropicModel records readable thinking but drops redacted thinking", async () => {
@@ -122,12 +119,13 @@ test("AnthropicModel records readable thinking but drops redacted thinking", asy
     const step = run.steps[0]
     if (step.kind !== "llm") throw new Error("unreachable")
     const session = await loopy.sessions.get(step.sessionId!)
-    expect(session.messages.map((message) => [message.role, message.content])).toEqual([
+    const messages = sessionTextMessages(session.messages)
+    expect(messages.map((message) => [message.role, message.content])).toEqual([
         ["user", expect.any(String)],
         ["reasoning", "Checked the calculation."],
         ["assistant", expect.stringContaining('{"done":true}')]
     ])
-    expect(session.messages.some((message) => message.content.includes(ciphertext))).toBe(false)
+    expect(messages.some((message) => message.content.includes(ciphertext))).toBe(false)
 })
 
 test("AnthropicModel rejects a void output before making an SDK request", async () => {
@@ -191,10 +189,9 @@ test("AnthropicModel reports truncation before parsing instructed output", async
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
     const step = run.steps[0]
     if (step.kind !== "llm") throw new Error("unreachable")
-    expect((await loopy.sessions.get(step.sessionId!)).messages.map((message) => message.role)).toEqual([
-        "user",
-        "assistant"
-    ])
+    expect(
+        sessionTextMessages((await loopy.sessions.get(step.sessionId!)).messages).map((message) => message.role)
+    ).toEqual(["user", "assistant"])
 })
 
 test("AnthropicModel rejects tool output from a request that supplied no tools", async () => {
@@ -225,7 +222,9 @@ test("AnthropicModel rejects tool output from a request that supplied no tools",
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
     const step = run.steps[0]
     if (step.kind !== "llm") throw new Error("unreachable")
-    expect((await loopy.sessions.get(step.sessionId!)).messages.map((message) => message.role)).toEqual(["user"])
+    expect(
+        sessionTextMessages((await loopy.sessions.get(step.sessionId!)).messages).map((message) => message.role)
+    ).toEqual(["user"])
 })
 
 test.each([
@@ -262,7 +261,7 @@ test("AnthropicModel preserves the prompt when the official client request fails
     if (step.kind !== "llm") throw new Error("unreachable")
     const session = await loopy.sessions.get(step.sessionId!)
     expect(session.status).toBe("failed")
-    expect(session.messages.map((message) => message.role)).toEqual(["user"])
+    expect(sessionTextMessages(session.messages).map((message) => message.role)).toEqual(["user"])
 })
 
 test("AnthropicModel replay skips a second official client request", async () => {
@@ -322,10 +321,9 @@ Answer with exactly two array entries in order: a calculation entry with express
         if (step.kind !== "llm") throw new Error("unreachable")
         const session = await loopy.sessions.get(step.sessionId!)
         expect(session.status).toBe("succeeded")
-        expect(session.messages[0].role).toBe("user")
-        expect(session.messages.slice(1).every((message) => ["assistant", "reasoning"].includes(message.role))).toBe(
-            true
-        )
-        expect(session.messages.some((message) => message.role === "assistant")).toBe(true)
+        const messages = sessionTextMessages(session.messages)
+        expect(messages[0].role).toBe("user")
+        expect(messages.slice(1).every((message) => ["assistant", "reasoning"].includes(message.role))).toBe(true)
+        expect(messages.some((message) => message.role === "assistant")).toBe(true)
     }
 )

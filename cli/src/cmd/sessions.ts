@@ -2,6 +2,8 @@ import {
     GetSessionResponseSchema,
     SessionKind,
     SessionRole,
+    ToolResultStatus,
+    ToolSourceKind,
     WatchSessionResponseSchema,
     type GetSessionResponse,
     type Session,
@@ -65,7 +67,41 @@ export function formatSessionValue(session: Session): string {
 }
 
 export function formatSessionMessage(message: SessionMessage): string {
-    return `${sessionRole(message.role)}: ${message.content}\n`
+    switch (message.payload.case) {
+        case "message":
+            return `${sessionRole(message.payload.value.role)}: ${message.payload.value.content}\n`
+        case "toolCall": {
+            const call = message.payload.value
+            const tool =
+                call.source?.kind === ToolSourceKind.MCP && call.source.server !== undefined
+                    ? `${call.source.server}.${call.name}`
+                    : call.name
+            return `tool: ${JSON.stringify({ id: call.id, tool, input: JSON.parse(call.inputJson) })}\n`
+        }
+        case "toolResult": {
+            const result = message.payload.value
+            const content = result.outputJson === undefined ? null : JSON.parse(result.outputJson)
+            return `tool_result: ${JSON.stringify({
+                toolUseId: result.toolCallId,
+                status: toolResultStatus(result.status),
+                content,
+                ...(result.error !== undefined ? { error: result.error } : {})
+            })}\n`
+        }
+        default:
+            return "unspecified:\n"
+    }
+}
+
+function toolResultStatus(value: ToolResultStatus): string {
+    switch (value) {
+        case ToolResultStatus.SUCCEEDED:
+            return "succeeded"
+        case ToolResultStatus.FAILED:
+            return "failed"
+        default:
+            return "unspecified"
+    }
 }
 
 function sessionKind(value: SessionKind): string {
@@ -89,10 +125,6 @@ function sessionRole(value: SessionRole): string {
             return "assistant"
         case SessionRole.REASONING:
             return "reasoning"
-        case SessionRole.TOOL:
-            return "tool"
-        case SessionRole.TOOL_RESULT:
-            return "tool_result"
         default:
             return "unspecified"
     }

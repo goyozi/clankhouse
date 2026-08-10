@@ -1,5 +1,5 @@
-import { Codex } from "@openai/codex-sdk"
 import type { CodexOptions, RunStreamedResult, Thread, ThreadItem, ThreadOptions } from "@openai/codex-sdk"
+import { Codex } from "@openai/codex-sdk"
 import { BaseCodingAgent, type CodingAgentInvocation } from "@loopy/core/ai/base-agent"
 import type { SessionRecorder } from "@loopy/core/ai/sessions"
 import type { Worktree } from "@loopy/core/git"
@@ -90,13 +90,14 @@ async function consumeEvents(
 ): Promise<string | undefined> {
     let completed = false
     let finalMessage: string | undefined
+    const recordedToolCalls = new Set<string>()
     for await (const event of events) {
         if (event.type === "thread.started") {
             session.addMessage("system", JSON.stringify({ threadId: event.thread_id, model }))
         } else if (event.type === "item.started") {
-            recordItemStarted(session, event.item)
+            if (isToolItem(event.item)) recordToolCall(session, event.item, recordedToolCalls)
         } else if (event.type === "item.completed") {
-            recordItemCompleted(session, event.item)
+            recordItemCompleted(session, event.item, recordedToolCalls)
             if (event.item.type === "agent_message") finalMessage = event.item.text
         } else if (event.type === "turn.completed") {
             completed = true
@@ -110,29 +111,84 @@ async function consumeEvents(
     return finalMessage
 }
 
-function recordItemStarted(session: SessionRecorder, item: ThreadItem): void {
-    if (item.type === "command_execution") {
-        recordTool(session, item.id, "command_execution", { command: item.command })
-    } else if (item.type === "mcp_tool_call") {
-        recordTool(session, item.id, `${item.server}.${item.tool}`, item.arguments)
-    } else if (item.type === "web_search") {
-        recordTool(session, item.id, "web_search", { query: item.query })
-    }
-}
-
-function recordItemCompleted(session: SessionRecorder, item: ThreadItem): void {
+function recordItemCompleted(session: SessionRecorder, item: ThreadItem, recordedToolCalls: Set<string>): void {
     if (item.type === "agent_message") {
         session.addMessage("assistant", item.text)
     } else if (item.type === "reasoning") {
         session.addMessage("reasoning", item.text)
     } else if (item.type === "todo_list") {
         session.addMessage("assistant", JSON.stringify({ todoList: item.items }))
-    } else {
-        if (item.type === "file_change") recordTool(session, item.id, "file_change", { changes: item.changes })
-        session.addMessage("tool_result", JSON.stringify({ toolUseId: item.id, content: item }))
+    } else if (item.type === "error") {
+        session.addMessage("system", JSON.stringify({ error: item.message }))
+    } else if (isToolItem(item)) {
+        recordToolCall(session, item, recordedToolCalls)
+        const error = item.type === "mcp_tool_call" ? item.error?.message : undefined
+        session.addToolResult({
+            toolCallId: item.id,
+            status: toolStatus(item),
+            output: item,
+            ...(error !== undefined ? { error } : {})
+        })
     }
 }
 
-function recordTool(session: SessionRecorder, id: string, tool: string, input: unknown): void {
-    session.addMessage("tool", JSON.stringify({ id, tool, input }))
+type CodexToolItem = Extract<ThreadItem, { type: "command_execution" | "file_change" | "mcp_tool_call" | "web_search" }>
+
+function isToolItem(item: ThreadItem): item is CodexToolItem {
+    return (
+        item.type === "command_execution" ||
+        item.type === "file_change" ||
+        item.type === "mcp_tool_call" ||
+        item.type === "web_search"
+    )
+}
+
+function recordToolCall(session: SessionRecorder, item: CodexToolItem, recordedToolCalls: Set<string>): void {
+    if (recordedToolCalls.has(item.id)) return
+    recordedToolCalls.add(item.id)
+    switch (item.type) {
+        case "command_execution":
+            session.addToolCall({
+                id: item.id,
+                name: item.type,
+                source: { kind: "native" },
+                commonName: "shell.execute",
+                input: { command: item.command }
+            })
+            break
+        case "file_change": {
+            const files = item.changes.map((change) => change.path)
+            session.addToolCall({
+                id: item.id,
+                name: item.type,
+                source: { kind: "native" },
+                commonName: "file.change",
+                input: { changes: item.changes },
+                ...(files.length > 0 ? { files } : {})
+            })
+            break
+        }
+        case "mcp_tool_call":
+            session.addToolCall({
+                id: item.id,
+                name: item.tool,
+                source: { kind: "mcp", server: item.server },
+                input: item.arguments
+            })
+            break
+        case "web_search":
+            session.addToolCall({
+                id: item.id,
+                name: item.type,
+                source: { kind: "provider" },
+                commonName: "web.search",
+                input: { query: item.query }
+            })
+            break
+    }
+}
+
+function toolStatus(item: CodexToolItem): "succeeded" | "failed" {
+    if (item.type === "web_search") return "succeeded"
+    return item.status === "failed" ? "failed" : "succeeded"
 }

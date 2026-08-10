@@ -38,7 +38,12 @@ test("FakeLLM performs a durable llm step with a persisted session", async () =>
     expect(session.model).toBe("fake")
     expect(session.status).toBe("succeeded")
     // and the session messages contain the prompt and the response
-    expect(session.messages.map((m) => [m.role, m.content])).toEqual([
+    expect(
+        session.messages.map((item) => [
+            item.type === "message" ? item.role : item.type,
+            item.type === "message" ? item.content : null
+        ])
+    ).toEqual([
         ["user", "hello world"],
         ["assistant", JSON.stringify({ summary: "summarize: hello world" })]
     ])

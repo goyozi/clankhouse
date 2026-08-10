@@ -8,6 +8,7 @@ export type FakeCodexItem = {
     started?: ThreadItem
     updates?: ThreadItem[]
     completed?: ThreadItem
+    complete?: boolean
     change?: FakeChange
 }
 
@@ -67,7 +68,7 @@ async function* run(
         if (scriptedItem.change) {
             await applyChange(scriptedItem.change, options?.workingDirectory ?? process.cwd())
         }
-        const completed = scriptedItem.completed ?? scriptedItem.started
+        const completed = scriptedItem.complete === false ? undefined : (scriptedItem.completed ?? scriptedItem.started)
         if (completed !== undefined) yield { type: "item.completed", item: completed }
     }
     if (script.streamError !== undefined) {

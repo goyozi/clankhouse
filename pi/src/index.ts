@@ -9,7 +9,7 @@ import {
     type CreateAgentSessionOptions
 } from "@earendil-works/pi-coding-agent"
 import { BaseCodingAgent, type CodingAgentInvocation } from "@loopy/core/ai/base-agent"
-import type { SessionRecorder } from "@loopy/core/ai/sessions"
+import type { CommonToolName, SessionRecorder } from "@loopy/core/ai/sessions"
 import type { Worktree } from "@loopy/core/git"
 
 export type PiAgentSessionOptions = Omit<CreateAgentSessionOptions, "cwd" | "model" | "sessionManager">
@@ -137,11 +137,31 @@ function recordMessage(session: SessionRecorder, message: PiMessage): void {
             } else if (block.type === "thinking") {
                 session.addMessage("reasoning", block.thinking)
             } else if (block.type === "toolCall") {
-                session.addMessage("tool", JSON.stringify({ id: block.id, tool: block.name, input: block.arguments }))
+                const commonName = piCommonTool(block.name)
+                const files = piFiles(commonName, block.arguments)
+                session.addToolCall({
+                    id: block.id,
+                    name: block.name,
+                    source: { kind: "native" },
+                    ...(commonName !== undefined ? { commonName } : {}),
+                    input: block.arguments,
+                    ...(files.length > 0 ? { files } : {})
+                })
             }
         }
     } else if (message.role === "toolResult") {
-        session.addMessage("tool_result", JSON.stringify({ toolUseId: message.toolCallId, content: message }))
+        const error = message.isError
+            ? message.content
+                  .filter((content) => content.type === "text")
+                  .map((content) => content.text)
+                  .join("\n") || undefined
+            : undefined
+        session.addToolResult({
+            toolCallId: message.toolCallId,
+            status: message.isError ? "failed" : "succeeded",
+            output: message,
+            ...(error !== undefined ? { error } : {})
+        })
     } else if (message.role === "custom") {
         session.addMessage(
             "user",
@@ -153,6 +173,31 @@ function recordMessage(session: SessionRecorder, message: PiMessage): void {
             })
         )
     }
+}
+
+function piCommonTool(name: string): CommonToolName | undefined {
+    switch (name) {
+        case "read":
+            return "file.read"
+        case "write":
+        case "edit":
+            return "file.change"
+        case "bash":
+            return "shell.execute"
+        case "grep":
+        case "find":
+        case "ls":
+            return "file.search"
+        default:
+            return undefined
+    }
+}
+
+function piFiles(commonName: CommonToolName | undefined, input: unknown): string[] {
+    if (commonName !== "file.read" && commonName !== "file.change") return []
+    if (typeof input !== "object" || input === null || !("path" in input)) return []
+    const file = (input as { path?: unknown }).path
+    return typeof file === "string" && file.length > 0 ? [file] : []
 }
 
 function collectFinalMessage(message: PiAssistantMessage | undefined): string | undefined {

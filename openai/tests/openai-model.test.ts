@@ -1,7 +1,7 @@
 import * as z from "zod"
 import { expect, test } from "vitest"
 import { OpenAIModel } from "@loopy/openai"
-import { taggedOutput, tempLoopy, testRun } from "@loopy/test-utils"
+import { sessionTextMessages, taggedOutput, tempLoopy, testRun } from "@loopy/test-utils"
 import { fakeOpenAI, openAIResponse, outputMessage, reasoningItem } from "./fake-openai"
 
 const outputSchema = z.object({ done: z.boolean() })
@@ -52,7 +52,7 @@ test("OpenAIModel uses the official client response and records reasoning separa
         model: "gpt-test",
         status: "succeeded"
     })
-    expect(session.messages.map((message) => [message.role, message.content])).toEqual([
+    expect(sessionTextMessages(session.messages).map((message) => [message.role, message.content])).toEqual([
         ["user", prompt],
         ["reasoning", "Checked the calculation."],
         ["assistant", assistantReply(prompt)]
@@ -77,7 +77,7 @@ test("OpenAIModel returns its final text verbatim for a root string output", asy
     const step = run.steps[0]
     if (step.kind !== "llm") throw new Error("unreachable")
     expect(step.outputJson).toBe(JSON.stringify(finalMessage))
-    expect((await loopy.sessions.get(step.sessionId!)).messages.at(-1)!.content).toBe(finalMessage)
+    expect(sessionTextMessages((await loopy.sessions.get(step.sessionId!)).messages).at(-1)!.content).toBe(finalMessage)
 })
 
 test("OpenAIModel preserves an empty final text for a root string output", async () => {
@@ -97,7 +97,7 @@ test("OpenAIModel preserves an empty final text for a root string output", async
     const step = run.steps[0]
     if (step.kind !== "llm") throw new Error("unreachable")
     expect(step.outputJson).toBe(JSON.stringify(""))
-    expect((await loopy.sessions.get(step.sessionId!)).messages.at(-1)!.content).toBe("")
+    expect(sessionTextMessages((await loopy.sessions.get(step.sessionId!)).messages).at(-1)!.content).toBe("")
 })
 
 test("OpenAIModel validates a raw final message against string checks", async () => {
@@ -139,7 +139,7 @@ test("OpenAIModel drops reasoning items that carry no summary", async () => {
     const step = run.steps[0]
     if (step.kind !== "llm") throw new Error("unreachable")
     const session = await loopy.sessions.get(step.sessionId!)
-    expect(session.messages.map((message) => message.role)).toEqual(["user", "assistant"])
+    expect(sessionTextMessages(session.messages).map((message) => message.role)).toEqual(["user", "assistant"])
 })
 
 test("OpenAIModel can opt into server-side response storage", async () => {
@@ -201,10 +201,9 @@ test.each(["max_output_tokens", "content_filter"] as const)(
         const run = await loopy.runs.get((await loopy.runs.list())[0].id)
         const step = run.steps[0]
         if (step.kind !== "llm") throw new Error("unreachable")
-        expect((await loopy.sessions.get(step.sessionId!)).messages.map((message) => message.role)).toEqual([
-            "user",
-            "assistant"
-        ])
+        expect(
+            sessionTextMessages((await loopy.sessions.get(step.sessionId!)).messages).map((message) => message.role)
+        ).toEqual(["user", "assistant"])
     }
 )
 
@@ -236,7 +235,9 @@ test("OpenAIModel rejects tool output from a request that supplied no tools", as
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
     const step = run.steps[0]
     if (step.kind !== "llm") throw new Error("unreachable")
-    expect((await loopy.sessions.get(step.sessionId!)).messages.map((message) => message.role)).toEqual(["user"])
+    expect(
+        sessionTextMessages((await loopy.sessions.get(step.sessionId!)).messages).map((message) => message.role)
+    ).toEqual(["user"])
 })
 
 test("OpenAIModel rejects and records an official refusal", async () => {
@@ -267,7 +268,10 @@ test("OpenAIModel rejects and records an official refusal", async () => {
     const step = run.steps[0]
     if (step.kind !== "llm") throw new Error("unreachable")
     expect(
-        (await loopy.sessions.get(step.sessionId!)).messages.map((message) => [message.role, message.content])
+        sessionTextMessages((await loopy.sessions.get(step.sessionId!)).messages).map((message) => [
+            message.role,
+            message.content
+        ])
     ).toEqual([
         ["user", expect.any(String)],
         ["assistant", "I cannot answer that."]
@@ -308,7 +312,7 @@ test("OpenAIModel preserves the prompt when the official client request fails", 
     if (step.kind !== "llm") throw new Error("unreachable")
     const session = await loopy.sessions.get(step.sessionId!)
     expect(session.status).toBe("failed")
-    expect(session.messages.map((message) => message.role)).toEqual(["user"])
+    expect(sessionTextMessages(session.messages).map((message) => message.role)).toEqual(["user"])
 })
 
 test("OpenAIModel replay skips a second official client request", async () => {
@@ -360,8 +364,9 @@ Answer with exactly two array entries in order: a calculation entry with express
         if (step.kind !== "llm") throw new Error("unreachable")
         const session = await loopy.sessions.get(step.sessionId!)
         expect(session.status).toBe("succeeded")
-        expect(session.messages[0].role).toBe("user")
-        expect(session.messages.slice(1, -1).every((message) => message.role === "reasoning")).toBe(true)
-        expect(session.messages.at(-1)!.role).toBe("assistant")
+        const messages = sessionTextMessages(session.messages)
+        expect(messages[0].role).toBe("user")
+        expect(messages.slice(1, -1).every((message) => message.role === "reasoning")).toBe(true)
+        expect(messages.at(-1)!.role).toBe("assistant")
     }
 )

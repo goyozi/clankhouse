@@ -11,6 +11,8 @@ import {
     instructedTags,
     runGit,
     runOutput,
+    sessionTextMessages,
+    sessionToolCallMessages,
     taggedOutput,
     tempGitRepo,
     tempLoopy,
@@ -77,29 +79,39 @@ test("ClaudeAgent maps the SDK conversation to the session and snapshots the wor
     expect(session.provider).toBe("claude")
     expect(session.model).toBe("claude-sonnet-5")
     expect(session.status).toBe("succeeded")
-    // and the conversation is mapped onto session messages, distinguishing the tool call from its result
-    expect(session.messages.map((m) => m.role)).toEqual([
+    // and the conversation is mapped onto ordered session items, distinguishing the tool call from its result
+    expect(session.messages.map((item) => (item.type === "message" ? item.role : item.type))).toEqual([
         "user",
         "system",
         "assistant",
-        "tool",
+        "tool_call",
         "tool_result",
         "assistant"
     ])
-    expect(session.messages[0].content).toMatch(/^do it\n\nIMPORTANT — requested final report:/)
-    expect(session.messages[2].content).toBe("Writing the file now.")
-    expect(session.messages[3].content).toBe(
-        JSON.stringify({ id: "toolu_write1", tool: "Write", input: { file_path: "src/hello.ts" } })
-    )
-    expect(session.messages[4].content).toBe(
-        JSON.stringify({ toolUseId: "toolu_write1", content: "File created successfully" })
-    )
+    const messages = sessionTextMessages(session.messages)
+    expect(messages[0].content).toMatch(/^do it\n\nIMPORTANT — requested final report:/)
+    expect(messages[2].content).toBe("Writing the file now.")
+    expect(session.messages[3]).toMatchObject({
+        toolCall: {
+            id: "toolu_write1",
+            name: "Write",
+            source: { kind: "native" },
+            commonName: "file.change",
+            input: { file_path: "src/hello.ts" },
+            files: ["src/hello.ts"]
+        }
+    })
+    expect(session.messages[4]).toMatchObject({
+        toolResult: {
+            toolCallId: "toolu_write1",
+            status: "succeeded",
+            output: { type: "tool_result", tool_use_id: "toolu_write1", content: "File created successfully" }
+        }
+    })
     // and the system message records the SDK session id
-    expect(JSON.parse(session.messages[1].content).sessionId).toMatch(/^[0-9a-f-]{36}$/)
+    expect(JSON.parse(messages[1].content).sessionId).toMatch(/^[0-9a-f-]{36}$/)
     // and the final assistant message carries the tagged answer exactly as the agent wrote it
-    expect(session.messages.at(-1)!.content).toBe(
-        taggedOutput(session.messages[0].content, JSON.stringify({ done: true }))
-    )
+    expect(messages.at(-1)!.content).toBe(taggedOutput(messages[0].content, JSON.stringify({ done: true })))
 })
 
 test("ClaudeAgent runs a void-output step without instructed output framing", async () => {
@@ -164,7 +176,7 @@ test("ClaudeAgent returns its result message verbatim for a root string output",
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
     expect(step.outputJson).toBe(JSON.stringify(finalMessage))
-    expect((await loopy.sessions.get(step.sessionId!)).messages.at(-1)!.content).toBe(finalMessage)
+    expect(sessionTextMessages((await loopy.sessions.get(step.sessionId!)).messages).at(-1)!.content).toBe(finalMessage)
 })
 
 test("ClaudeAgent records every supported SDK message and block type", async () => {
@@ -201,38 +213,151 @@ test("ClaudeAgent records every supported SDK message and block type", async () 
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
     const session = await loopy.sessions.get(step.sessionId!)
-    expect(session.messages.map((m) => m.role)).toEqual([
+    expect(session.messages.map((item) => (item.type === "message" ? item.role : item.type))).toEqual([
         "user", // prompt
         "system", // init
         "reasoning", // thinking
         "assistant", // text
-        "tool", // tool_use
+        "tool_call", // tool_use
         "tool_result",
-        "tool", // server_tool_use
+        "tool_call", // server_tool_use
         "tool_result",
-        "tool", // mcp_tool_use
+        "tool_call", // mcp_tool_use
         "tool_result",
         "assistant" // structured output
     ])
     // and the reasoning and assistant text are preserved verbatim
-    expect(session.messages[2].content).toBe("Let me look around.")
-    expect(session.messages[3].content).toBe("Here is my plan.")
-    // and each tool call records its name, input and correlation id regardless of the tool kind
-    expect(JSON.parse(session.messages[4].content)).toEqual({
-        id: "toolu_read1",
-        tool: "Read",
-        input: { file_path: "a.ts" }
+    expect(session.messages[2]).toMatchObject({ content: "Let me look around." })
+    expect(session.messages[3]).toMatchObject({ content: "Here is my plan." })
+    // and each tool call records its normalized identity and source without losing raw input
+    expect(session.messages[4]).toMatchObject({
+        toolCall: {
+            id: "toolu_read1",
+            name: "Read",
+            source: { kind: "native" },
+            commonName: "file.read",
+            input: { file_path: "a.ts" },
+            files: ["a.ts"]
+        }
     })
-    expect(JSON.parse(session.messages[6].content)).toEqual({
-        id: "toolu_srv1",
-        tool: "web_search",
-        input: { query: "loopy" }
+    expect(session.messages[6]).toMatchObject({
+        toolCall: {
+            id: "toolu_srv1",
+            name: "web_search",
+            source: { kind: "provider" },
+            commonName: "web.search",
+            input: { query: "loopy" }
+        }
     })
-    expect(JSON.parse(session.messages[8].content)).toEqual({ id: "toolu_mcp1", tool: "lookup", input: { key: "v" } })
+    expect(session.messages[8]).toMatchObject({
+        toolCall: {
+            id: "toolu_mcp1",
+            name: "lookup",
+            source: { kind: "mcp", server: "fake-mcp" },
+            input: { key: "v" }
+        }
+    })
     // and each result is paired to its call by the shared tool_use_id
-    expect(JSON.parse(session.messages[5].content)).toEqual({ toolUseId: "toolu_read1", content: "contents" })
-    expect(JSON.parse(session.messages[7].content)).toEqual({ toolUseId: "toolu_srv1", content: "hits" })
-    expect(JSON.parse(session.messages[9].content)).toEqual({ toolUseId: "toolu_mcp1", content: "value" })
+    expect(session.messages[5]).toMatchObject({
+        toolResult: { toolCallId: "toolu_read1", status: "succeeded" }
+    })
+    expect(session.messages[7]).toMatchObject({
+        toolResult: { toolCallId: "toolu_srv1", status: "succeeded" }
+    })
+    expect(session.messages[9]).toMatchObject({
+        toolResult: { toolCallId: "toolu_mcp1", status: "succeeded" }
+    })
+})
+
+test("ClaudeAgent normalizes native web search and configured MCP tools", async () => {
+    // given native WebSearch and configured MCP calls delivered as ordinary tool_use blocks
+    const { loopy } = tempLoopy()
+    const repo = await tempGitRepo()
+    const worktree = new Worktree(repo.path)
+    const { query } = fakeClaudeQuery(() => ({
+        toolCalls: [
+            { id: "toolu_search1", name: "WebSearch", input: { query: "loopy" }, result: "hits" },
+            {
+                id: "toolu_mcp_local1",
+                name: "mcp__project-docs__lookup_document",
+                input: { key: "sessions" },
+                result: "documentation"
+            }
+        ],
+        output: { done: true }
+    }))
+    const agent = new ClaudeAgent({ model: "claude-sonnet-5", query })
+
+    // when the agent runs both tools
+    await testRun(loopy, () => agent.run("implement", { prompt: "do it", output: outputSchema, worktree }))
+
+    // then the native search and MCP identity are normalized from their real Agent SDK names
+    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
+    if (step.kind !== "agent") throw new Error("unreachable")
+    const calls = sessionToolCallMessages((await loopy.sessions.get(step.sessionId!)).messages)
+    expect(calls.map((item) => item.toolCall)).toEqual([
+        {
+            id: "toolu_search1",
+            name: "WebSearch",
+            source: { kind: "native" },
+            commonName: "web.search",
+            input: { query: "loopy" }
+        },
+        {
+            id: "toolu_mcp_local1",
+            name: "lookup_document",
+            source: { kind: "mcp", server: "project-docs" },
+            input: { key: "sessions" }
+        }
+    ])
+})
+
+test("ClaudeAgent preserves an unknown tool and normalizes its failed result", async () => {
+    // given an unknown native Claude tool that returns an error
+    const { loopy } = tempLoopy()
+    const repo = await tempGitRepo()
+    const worktree = new Worktree(repo.path)
+    const { query } = fakeClaudeQuery(() => ({
+        toolCalls: [
+            {
+                id: "toolu_custom1",
+                name: "DeployPreview",
+                input: { environment: "test" },
+                result: [
+                    { type: "text", text: "deployment unavailable" },
+                    { type: "text", text: "try again later" }
+                ],
+                isError: true
+            }
+        ],
+        output: { done: true }
+    }))
+    const agent = new ClaudeAgent({ model: "claude-sonnet-5", query })
+
+    // when the agent runs successfully after handling the tool failure
+    await testRun(loopy, () => agent.run("implement", { prompt: "do it", output: outputSchema, worktree }))
+
+    // then the raw tool remains available without a guessed common classification
+    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const step = run.steps.find((candidate) => candidate.kind === "agent")!
+    if (step.kind !== "agent") throw new Error("unreachable")
+    const session = await loopy.sessions.get(step.sessionId!)
+    expect(session.messages.find((item) => item.type === "tool_call")).toMatchObject({
+        toolCall: {
+            id: "toolu_custom1",
+            name: "DeployPreview",
+            source: { kind: "native" },
+            input: { environment: "test" }
+        }
+    })
+    expect(session.messages.find((item) => item.type === "tool_result")).toMatchObject({
+        toolResult: {
+            toolCallId: "toolu_custom1",
+            status: "failed",
+            error: "deployment unavailable\ntry again later"
+        }
+    })
 })
 
 test("ClaudeAgent passes default options to the SDK", async () => {
@@ -381,7 +506,7 @@ test("an error result fails the step and the session", async () => {
     // and the session is marked failed with the messages recorded so far preserved
     const session = await loopy.sessions.get(step.sessionId!)
     expect(session.status).toBe("failed")
-    expect(session.messages.map((m) => m.role)).toEqual(["user", "system", "assistant"])
+    expect(sessionTextMessages(session.messages).map((item) => item.role)).toEqual(["user", "system", "assistant"])
 })
 
 test("an untagged final response fails the step", async () => {
@@ -477,7 +602,7 @@ test("a mid-stream SDK failure fails the step and preserves recorded messages", 
     const session = await loopy.sessions.get(step.sessionId!)
     expect(session.status).toBe("failed")
     // and the messages recorded before the failure are preserved
-    expect(session.messages.map((m) => m.role)).toEqual(["user", "system"])
+    expect(sessionTextMessages(session.messages).map((item) => item.role)).toEqual(["user", "system"])
 })
 
 test("a stream that ends without a result fails the step", async () => {

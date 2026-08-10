@@ -6,6 +6,7 @@ import { promisify } from "node:util"
 import { onTestFinished } from "vitest"
 import { Loopy } from "@loopy/core/loopy"
 import type { WorkflowRun } from "@loopy/core/runs"
+import type { AISessionMessage } from "@loopy/core/ai/sessions"
 import * as z from "zod"
 
 const execFileAsync = promisify(execFile)
@@ -33,17 +34,6 @@ export function tempLoopy(): { loopy: Loopy; dir: string; reopen: () => Loopy } 
         }
     })
     return { loopy, dir, reopen: open }
-}
-
-export function tempLoopyDirEnv(): string {
-    const dir = tempDir("loopy-dir-")
-    const previous = process.env.LOOPY_DIR
-    process.env.LOOPY_DIR = dir
-    onTestFinished(() => {
-        if (previous === undefined) delete process.env.LOOPY_DIR
-        else process.env.LOOPY_DIR = previous
-    })
-    return dir
 }
 
 export async function runGit(cwd: string, args: string[]): Promise<string> {
@@ -143,4 +133,20 @@ export function instructedSchema(prompt: string): unknown {
 export function taggedOutput(prompt: string, outputText: string): string {
     const { opening, closing } = instructedTags(prompt)
     return `${opening}\n${outputText}\n${closing}`
+}
+
+export function sessionTextMessages(
+    messages: AISessionMessage[]
+): Array<Extract<AISessionMessage, { type: "message" }>> {
+    return messages.filter(
+        (message): message is Extract<AISessionMessage, { type: "message" }> => message.type === "message"
+    )
+}
+
+export function sessionToolCallMessages(
+    messages: AISessionMessage[]
+): Array<Extract<AISessionMessage, { type: "tool_call" }>> {
+    return messages.filter(
+        (message): message is Extract<AISessionMessage, { type: "tool_call" }> => message.type === "tool_call"
+    )
 }

@@ -21,7 +21,7 @@ export type CodingAgentInvocation = {
  * the persisted session and its messages, prompt rendering, output validation
  * and worktree snapshotting. Replaying a stored step restores the snapshot.
  * Implementations only provide `invoke`, driving the agent against the worktree
- * and recording all session messages they can (system/user/assistant/reasoning/tool),
+ * and recording all session messages and tool activity they can,
  * including the user's prompt. Providers can use `invokeWithInstructedOutput`
  * for the shared instructed-output prompt and parser.
  */
@@ -58,7 +58,8 @@ export abstract class BaseCodingAgent implements CodingAgent {
                 session = ctx.loopy.sessions.create({
                     kind: "coding-agent",
                     provider: this.provider,
-                    model: this.model
+                    model: this.model,
+                    filesRoot: options.worktree.path
                 })
                 handle.set("session_id", session.id)
                 return this.invoke({
