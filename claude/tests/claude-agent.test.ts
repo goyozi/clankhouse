@@ -180,12 +180,12 @@ test("ClaudeAgent returns its result message verbatim for a root string output",
 })
 
 test("ClaudeAgent records every supported SDK message and block type", async () => {
-    // given a fake SDK scripted with one of each block type the recorder supports
+    // given a fake SDK scripted with one of each supported block type and an empty thinking block
     const { loopy } = tempLoopy()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { query } = fakeClaudeQuery(() => ({
-        thinking: ["Let me look around."],
+        thinking: ["", "Let me look around."],
         text: ["Here is my plan."],
         toolCalls: [
             { name: "Read", kind: "tool_use", id: "toolu_read1", input: { file_path: "a.ts" }, result: "contents" },
@@ -226,7 +226,7 @@ test("ClaudeAgent records every supported SDK message and block type", async () 
         "tool_result",
         "assistant" // structured output
     ])
-    // and the reasoning and assistant text are preserved verbatim
+    // and empty thinking is discarded while reasoning and assistant text are preserved verbatim
     expect(session.messages[2]).toMatchObject({ content: "Let me look around." })
     expect(session.messages[3]).toMatchObject({ content: "Here is my plan." })
     // and each tool call records its normalized identity and source without losing raw input

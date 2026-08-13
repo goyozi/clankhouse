@@ -108,7 +108,7 @@ type AssistantBlock = SDKAssistantMessage["message"]["content"][number]
 function recordAssistantBlock(session: SessionRecorder, block: AssistantBlock): void {
     if (block.type === "text") {
         session.addMessage("assistant", block.text)
-    } else if (block.type === "thinking") {
+    } else if (block.type === "thinking" && block.thinking.length > 0) {
         session.addMessage("reasoning", block.thinking)
     } else if (block.type === "tool_use" || block.type === "server_tool_use" || block.type === "mcp_tool_use") {
         const identity = claudeToolIdentity(block)
