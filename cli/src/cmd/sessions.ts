@@ -28,17 +28,10 @@ export function registerSessions(program: Command, runtime: Runtime): void {
         .command("watch")
         .description("Watch AI session messages")
         .argument("<session-id>")
-        .option("--after-message <message-id>", "start after a message")
-        .action(async (sessionId: string, options: { afterMessage?: string }, command: Command) => {
+        .action(async (sessionId: string, _options: unknown, command: Command) => {
             const client = await runtime.client(command)
             const output = runtime.output(command)
-            for await (const response of client.watchSession(
-                {
-                    sessionId,
-                    ...(options.afterMessage !== undefined ? { afterMessageId: options.afterMessage } : {})
-                },
-                { signal: runtime.signal }
-            )) {
+            for await (const response of client.watchSession({ sessionId }, { signal: runtime.signal })) {
                 if (output.json) await output.proto(WatchSessionResponseSchema, response)
                 else if (response.message !== undefined) await output.write(formatSessionMessage(response.message))
             }

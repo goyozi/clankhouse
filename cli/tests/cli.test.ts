@@ -244,7 +244,7 @@ test("drives FakeLLM and FakeCodingAgent workflows through the complete CLI surf
     const started = fromJsonString(StartRunResponseSchema, lines(startedResult.stdout)[0]!)
     const waiting = await waitForStep(loopy, started.runId, "wait:approval:feature-1")
 
-    // then discovery, filtering, snapshots, sessions, artifacts, and session cursors use strict ProtoJSON
+    // then discovery, filtering, snapshots, sessions, and artifacts use strict ProtoJSON
     expect(workflowList.code).toBe(0)
     expect(listed.workflows.map((workflow) => workflow.name)).toEqual(["build"])
     expect(workflowHuman.stdout.toString()).toContain("Workflow: build")
@@ -269,13 +269,10 @@ test("drives FakeLLM and FakeCodingAgent workflows through the complete CLI surf
     const sessionHuman = await runCliCommand(["sessions", "get", session.id], { env })
     expect(sessionHuman.stdout.toString()).toContain("user: cli")
     expect(sessionHuman.stdout.toString()).toContain('assistant: {"summary":"summary:cli"}')
-    const sessionTail = await runCliCommand(
-        ["sessions", "watch", session.id, "--after-message", session.messages[0]!.id, "--json"],
-        { env }
-    )
+    const sessionWatch = await runCliCommand(["sessions", "watch", session.id, "--json"], { env })
     expect(
-        lines(sessionTail.stdout).map((line) => fromJsonString(WatchSessionResponseSchema, line).message?.id)
-    ).toEqual(session.messages.slice(1).map((message) => message.id))
+        lines(sessionWatch.stdout).map((line) => fromJsonString(WatchSessionResponseSchema, line).message?.id)
+    ).toEqual(session.messages.map((message) => message.id))
     const artifactId = snapshot.run!.artifacts[0]!.id
     const artifact = await runCliCommand(["artifacts", "get", artifactId, "--json"], { env })
     expect({ code: artifact.code, stderr: artifact.stderr }).toEqual({ code: 0, stderr: "" })

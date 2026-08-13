@@ -436,7 +436,7 @@ export const scenarios: Scenario[] = [
         label: "Watch session",
         command: `loopy sessions watch ${sessionId}`,
         summary: "Session watch prints each message payload as it arrives.",
-        note: "Without an --after-message cursor, existing history is replayed without a heading or indentation.",
+        note: "Existing history is replayed without a heading or indentation.",
         delivery: "streaming",
         lines: reviewSessionMessages.map((message) => line(message))
     },
