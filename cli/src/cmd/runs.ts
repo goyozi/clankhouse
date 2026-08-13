@@ -114,13 +114,14 @@ export function registerRuns(program: Command, runtime: Runtime): void {
         .action(async (runId: string, options: { fromStep?: string; include?: "sessions" }, command: Command) => {
             const client = await runtime.client(command)
             const output = runtime.output(command)
+            const renderedSteps = new Map<string, string>()
             for await (const item of watchRun(client, {
                 runId,
                 ...(options.fromStep !== undefined ? { fromStepId: options.fromStep } : {}),
                 includeSessions: options.include === "sessions",
                 signal: runtime.signal
             })) {
-                await emitWatchItem(runtime, command, output, item)
+                await emitWatchItem(runtime, command, output, item, renderedSteps)
             }
         })
     runs.command("resume")
@@ -216,6 +217,7 @@ async function getRun(runtime: Runtime, command: Command, runId: string, options
         })
     )
     const fromStepId = watchFromStepId(initial.run?.steps ?? [])
+    const renderedSteps = new Map(initial.run?.steps.map((step) => [step.id, formatStepUpdate(step)]))
     for await (const item of watchRun(client, {
         runId,
         ...(fromStepId !== undefined ? { fromStepId } : {}),
@@ -224,7 +226,7 @@ async function getRun(runtime: Runtime, command: Command, runId: string, options
         knownSteps,
         sessionCursors
     })) {
-        await emitWatchItem(runtime, command, output, item)
+        await emitWatchItem(runtime, command, output, item, renderedSteps)
     }
 
     const final = await client.getRun({ runId }, { signal: runtime.signal })
@@ -268,7 +270,13 @@ function observeRunFailure(runtime: Runtime, response: WatchRunResponse | undefi
     if (response?.item.case === "run" && failedStatus(response.item.value.status)) runtime.failResult()
 }
 
-async function emitWatchItem(runtime: Runtime, command: Command, output: Output, item: RunWatchItem): Promise<void> {
+async function emitWatchItem(
+    runtime: Runtime,
+    command: Command,
+    output: Output,
+    item: RunWatchItem,
+    renderedSteps: Map<string, string>
+): Promise<void> {
     if (item.kind === "session-error") {
         await runtime.reportError(command, item.error, {
             prefix: `session ${item.sessionId}: `,
@@ -277,8 +285,13 @@ async function emitWatchItem(runtime: Runtime, command: Command, output: Output,
         return
     }
     if (output.json) await output.proto(item.schema, item.message)
-    else if (item.kind === "run") await output.write(formatRunWatch(item.message))
-    else if (item.message.message !== undefined) await output.write(formatSessionMessage(item.message.message))
+    else if (item.kind === "run") {
+        const rendered = formatRunWatch(item.message)
+        if (item.message.item.case !== "step" || renderedSteps.get(item.message.item.value.id) !== rendered) {
+            if (item.message.item.case === "step") renderedSteps.set(item.message.item.value.id, rendered)
+            await output.write(rendered)
+        }
+    } else if (item.message.message !== undefined) await output.write(formatSessionMessage(item.message.message))
     observeRunFailure(runtime, item.kind === "run" ? item.message : undefined)
 }
 

@@ -718,6 +718,119 @@ test("get --watch observes concurrent steps that complete out of sequence order"
     )
 })
 
+test("human run watch does not repeat a step when only hidden metadata changes", async () => {
+    // given a watched workflow that parks before attaching a session to an agent step
+    const { loopy } = tempLoopy()
+    const ready = gate()
+    const attachSession = gate()
+    const parked = gate()
+    onTestFinished(() => {
+        ready.release()
+        attachSession.release()
+        parked.release()
+    })
+    loopy.registerWorkflow(
+        "human-agent-watch",
+        { input: z.null(), output: z.void(), key: () => "human-agent-watch" },
+        async () => {
+            await loopy.step("ready", z.void(), async () => ready.released)
+            await loopy.engine.executeStep({
+                kind: "agent",
+                name: "plan",
+                schema: z.object({ done: z.boolean() }),
+                execute: async (handle) => {
+                    await attachSession.released
+                    const session = loopy.sessions.create({
+                        kind: "coding-agent",
+                        provider: "parking",
+                        model: "parking"
+                    })
+                    handle.set("session_id", session.id)
+                    session.addMessage("user", "plan")
+                    await parked.released
+                    session.succeed()
+                    return { done: true }
+                }
+            })
+        }
+    )
+    const server = await testServer(loopy)
+    const env = serverEnv(server)
+    const runId = loopy.start("human-agent-watch", null)
+    await waitForStep(loopy, runId, "ready")
+
+    // when watching starts before the agent gains its session metadata
+    const watch = startCli(["runs", "watch", runId, "--include", "sessions"], { env })
+    await waitForOutput(watch, "Step ready (custom): running")
+    ready.release()
+    await waitForOutput(watch, "Step plan (agent): running")
+    attachSession.release()
+    await waitForOutput(watch, "user: plan")
+    parked.release()
+    const code = await watch.done
+    const planUpdates = lines(watch.stdout()).filter((line) => line.startsWith("Step plan "))
+
+    // then the human output reports each visible agent state once
+    expect(code).toBe(0)
+    expect(planUpdates).toEqual(["Step plan (agent): running", "Step plan (agent): succeeded"])
+})
+
+test("human get --watch does not repeat a snapshotted step when only hidden metadata changes", async () => {
+    // given an agent step parked before attaching its session metadata
+    const { loopy } = tempLoopy()
+    const entered = gate()
+    const attachSession = gate()
+    const parked = gate()
+    onTestFinished(() => {
+        entered.release()
+        attachSession.release()
+        parked.release()
+    })
+    loopy.registerWorkflow(
+        "human-agent-get-watch",
+        { input: z.null(), output: z.void(), key: () => "human-agent-get-watch" },
+        async () => {
+            await loopy.engine.executeStep({
+                kind: "agent",
+                name: "plan",
+                schema: z.object({ done: z.boolean() }),
+                execute: async (handle) => {
+                    entered.release()
+                    await attachSession.released
+                    const session = loopy.sessions.create({
+                        kind: "coding-agent",
+                        provider: "parking",
+                        model: "parking"
+                    })
+                    handle.set("session_id", session.id)
+                    session.addMessage("user", "plan")
+                    await parked.released
+                    session.succeed()
+                    return { done: true }
+                }
+            })
+        }
+    )
+    const server = await testServer(loopy)
+    const env = serverEnv(server)
+    const runId = loopy.start("human-agent-get-watch", null)
+    await entered.released
+    const plan = await waitForStep(loopy, runId, "plan")
+
+    // when snapshot-then-tail watching starts before the session is attached
+    const watch = startCli(["runs", "get", runId, "--include", "sessions", "--watch"], { env })
+    await waitForOutput(watch, `ID: ${plan.id}`)
+    attachSession.release()
+    await waitForOutput(watch, "user: plan")
+    parked.release()
+    const code = await watch.done
+    const planUpdates = lines(watch.stdout()).filter((line) => line.startsWith("Step plan "))
+
+    // then the snapshot's visible running state is not repeated by the metadata-only update
+    expect(code).toBe(0)
+    expect(planUpdates).toEqual(["Step plan (agent): succeeded"])
+})
+
 test("included session failures do not stop the primary run watch", async () => {
     // given a live run whose completed session cursor becomes invalid after its initial snapshot
     const { loopy, dir } = tempLoopy()
