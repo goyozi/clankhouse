@@ -44,6 +44,10 @@ examples:
 - hello-world - basic Loopy workflow example
 - dual-review - code review by Claude & Codex
 
+design:
+
+- web page for CLI output design
+
 ## Testing
 
 - use real temp files / directories / git repositories

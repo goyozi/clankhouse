@@ -1,5 +1,7 @@
 node_modules/
+dist/
 scratchpad/
 .env
 .idea/
 *.tsbuildinfo
+.DS_Store

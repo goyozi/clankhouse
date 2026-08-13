@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="description" content="A design baseline for Loopy's current CLI output." />
+        <title>Loopy CLI · output baseline</title>
+    </head>
+    <body>
+        <div class="page-shell">
+            <main class="workspace">
+                <section class="controls" aria-label="Terminal preview controls">
+                    <fieldset class="control-group mode-control">
+                        <legend>Output target</legend>
+                        <div class="segmented-control">
+                            <label>
+                                <input type="radio" name="session-mode" value="interactive" checked />
+                                <span>TTY</span>
+                            </label>
+                            <label>
+                                <input type="radio" name="session-mode" value="redirected" />
+                                <span>Redirected</span>
+                            </label>
+                        </div>
+                    </fieldset>
+
+                    <label class="control-group scenario-control" for="scenario-select">
+                        <span>Command / case</span>
+                        <span class="select-shell">
+                            <select id="scenario-select"></select>
+                        </span>
+                    </label>
+
+                    <button class="replay-button" id="replay-button" type="button">
+                        <span class="replay-icon" aria-hidden="true">↻</span>
+                        Replay
+                    </button>
+                </section>
+
+                <section class="terminal-card" aria-labelledby="terminal-title">
+                    <header class="terminal-bar">
+                        <div class="window-controls" aria-hidden="true">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
+                        <p class="terminal-title" id="terminal-title">loopy / local</p>
+                        <p class="session-status">
+                            <span aria-hidden="true"></span>
+                            <span id="session-status">Interactive session</span>
+                        </p>
+                    </header>
+
+                    <div class="terminal-viewport" id="terminal-viewport" tabindex="0">
+                        <div
+                            id="terminal-output"
+                            role="log"
+                            aria-live="polite"
+                            aria-label="Simulated Loopy terminal transcript"
+                        ></div>
+                    </div>
+                </section>
+            </main>
+        </div>
+
+        <script type="module" src="/src/main.ts"></script>
+    </body>
+</html>

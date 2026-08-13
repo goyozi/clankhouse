@@ -8,6 +8,7 @@ packages:
     - test-utils
     - server
     - cli
+    - design
     - examples/*
 
 catalog:
