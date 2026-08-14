@@ -11,11 +11,12 @@ export type OpenAIModelOptions = {
 }
 
 export class OpenAIModel extends BaseLanguageModel {
+    readonly client = "openai"
     readonly provider = "openai"
     readonly model: string
     private readonly store: boolean
     private readonly clientOptions?: ClientOptions
-    private client?: OpenAI
+    private sdkClient?: OpenAI
 
     constructor(options: OpenAIModelOptions) {
         super()
@@ -47,7 +48,7 @@ export class OpenAIModel extends BaseLanguageModel {
     }
 
     private getClient(): OpenAI {
-        return (this.client ??= new OpenAI(this.clientOptions))
+        return (this.sdkClient ??= new OpenAI(this.clientOptions))
     }
 }
 

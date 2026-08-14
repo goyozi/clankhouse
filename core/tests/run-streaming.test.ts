@@ -185,6 +185,7 @@ test("stream with fromStepId on a live run resumes from the snapshot's last step
 })
 
 class ParkingLLM extends BaseLanguageModel {
+    readonly client = "fake-llm"
     readonly provider = "fake"
     readonly model = "parking"
 

@@ -26,6 +26,7 @@ export type CodingAgentInvocation = {
  * for the shared instructed-output prompt and parser.
  */
 export abstract class BaseCodingAgent implements CodingAgent {
+    abstract readonly client: string
     abstract readonly provider: string
     abstract readonly model: string
 
@@ -57,6 +58,7 @@ export abstract class BaseCodingAgent implements CodingAgent {
                 const prompt = await renderPrompt(options.prompt)
                 session = ctx.loopy.sessions.create({
                     kind: "coding-agent",
+                    client: this.client,
                     provider: this.provider,
                     model: this.model,
                     filesRoot: options.worktree.path

@@ -266,9 +266,12 @@ test("drives FakeLLM and FakeCodingAgent workflows through the complete CLI surf
     expect(snapshot.run?.steps.map((step) => step.sessionId).filter(Boolean)).toHaveLength(2)
     expect(sessionResponses).toHaveLength(2)
     const session = sessionResponses[0]!.session!
+    expect(session).toMatchObject({ client: "fake-llm", provider: "fake", model: "fake" })
     const sessionHuman = await runCliCommand(["sessions", "get", session.id], { env })
-    expect(sessionHuman.stdout.toString()).toContain("user: cli")
-    expect(sessionHuman.stdout.toString()).toContain('assistant: {"summary":"summary:cli"}')
+    const sessionHumanOutput = sessionHuman.stdout.toString()
+    expect(sessionHumanOutput).toContain("Kind: llm\nClient: fake-llm\nProvider: fake\nModel: fake")
+    expect(sessionHumanOutput).toContain("user: cli")
+    expect(sessionHumanOutput).toContain('assistant: {"summary":"summary:cli"}')
     const sessionWatch = await runCliCommand(["sessions", "watch", session.id, "--json"], { env })
     expect(
         lines(sessionWatch.stdout).map((line) => fromJsonString(WatchSessionResponseSchema, line).message?.id)
@@ -341,7 +344,12 @@ test("drives FakeLLM and FakeCodingAgent workflows through the complete CLI surf
 test("renders failed session tool results with their status and error", async () => {
     // given a completed session with a failed tool result that has no output
     const { loopy } = tempLoopy()
-    const recorder = loopy.sessions.create({ kind: "coding-agent", provider: "fake", model: "fake" })
+    const recorder = loopy.sessions.create({
+        kind: "coding-agent",
+        client: "fake-agent",
+        provider: "fake",
+        model: "fake"
+    })
     recorder.addToolCall({
         id: "call-1",
         name: "lookup",
@@ -739,6 +747,7 @@ test("human run watch does not repeat a step when only hidden metadata changes",
                     await attachSession.released
                     const session = loopy.sessions.create({
                         kind: "coding-agent",
+                        client: "parking-agent",
                         provider: "parking",
                         model: "parking"
                     })
@@ -796,6 +805,7 @@ test("human get --watch does not repeat a snapshotted step when only hidden meta
                     await attachSession.released
                     const session = loopy.sessions.create({
                         kind: "coding-agent",
+                        client: "parking-agent",
                         provider: "parking",
                         model: "parking"
                     })

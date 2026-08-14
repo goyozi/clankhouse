@@ -143,6 +143,7 @@ test("resetStep clears output, error, timestamps, and execution metadata", () =>
     sql.insertSession(loopy.db, {
         id: "sess-1",
         kind: "coding-agent",
+        client: "fake-agent",
         provider: "fake",
         model: "fake",
         started_at: "2026-01-01T00:00:00.000Z"

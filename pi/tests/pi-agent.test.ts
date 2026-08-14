@@ -55,7 +55,7 @@ test("PiAgent maps the SDK conversation to the session and snapshots the worktre
         output: { done: true }
     }))
     const agent = new PiAgent({
-        modelProvider: "openai",
+        provider: "openai",
         model: "gpt-5.4",
         sessionOptions: { modelRuntime },
         createAgentSession
@@ -82,8 +82,9 @@ test("PiAgent maps the SDK conversation to the session and snapshots the worktre
     expect((await worktree.git(["rev-parse", step.snapshotRef!])).exitCode).toBe(0)
     // and the session records Pi metadata and every supported finalized message in order
     const session = await loopy.sessions.get(step.sessionId!)
-    expect(session.provider).toBe("pi")
-    expect(session.model).toBe("openai/gpt-5.4")
+    expect(session.client).toBe("pi")
+    expect(session.provider).toBe("openai")
+    expect(session.model).toBe("gpt-5.4")
     expect(session.status).toBe("succeeded")
     expect(session.messages.map((item) => (item.type === "message" ? item.role : item.type))).toEqual([
         "user",
@@ -141,7 +142,7 @@ test("PiAgent normalizes the built-in ls tool as file search", async () => {
         output: { done: true }
     }))
     const agent = new PiAgent({
-        modelProvider: "openai",
+        provider: "openai",
         model: "gpt-5.4",
         sessionOptions: { modelRuntime, tools: ["ls"] },
         createAgentSession
@@ -185,7 +186,7 @@ test("PiAgent records extension custom messages as user messages", async () => {
         finalResponse: "All done."
     }))
     const agent = new PiAgent({
-        modelProvider: "openai",
+        provider: "openai",
         model: "gpt-5.4",
         sessionOptions: { modelRuntime },
         createAgentSession
@@ -228,7 +229,7 @@ test("PiAgent runs a void-output step without instructed output framing", async 
         finalResponse: "All done."
     }))
     const agent = new PiAgent({
-        modelProvider: "openai",
+        provider: "openai",
         model: "gpt-5.4",
         sessionOptions: { modelRuntime },
         createAgentSession
@@ -275,7 +276,7 @@ test("PiAgent preserves an unknown tool and normalizes its failed result", async
         output: { done: true }
     }))
     const agent = new PiAgent({
-        modelProvider: "openai",
+        provider: "openai",
         model: "gpt-5.4",
         sessionOptions: { modelRuntime },
         createAgentSession
@@ -314,7 +315,7 @@ test("PiAgent joins final text blocks with Pi's standard newline behavior", asyn
     const modelRuntime = await isolatedModelRuntime(dir)
     const { createAgentSession } = fakePi(() => ({ finalTextBlocks: ["first", "second", "third"] }))
     const agent = new PiAgent({
-        modelProvider: "openai",
+        provider: "openai",
         model: "gpt-5.4",
         sessionOptions: { modelRuntime },
         createAgentSession
@@ -341,7 +342,7 @@ test("PiAgent passes native defaults while locking Loopy-owned session options",
     const modelRuntime = await isolatedModelRuntime(dir)
     const { createAgentSession, calls, prompts, promptOptions } = fakePi(() => ({ output: { done: true } }))
     const agent = new PiAgent({
-        modelProvider: "openai",
+        provider: "openai",
         model: "gpt-5.4",
         sessionOptions: { modelRuntime },
         createAgentSession
@@ -380,7 +381,7 @@ test("PiAgent forwards raw session options and merges the interactive tool guard
     const modelRuntime = await isolatedModelRuntime(dir)
     const { createAgentSession, calls } = fakePi(() => ({ output: { done: true } }))
     const agent = new PiAgent({
-        modelProvider: "openai",
+        provider: "openai",
         model: "gpt-5.4",
         sessionOptions: {
             modelRuntime,
@@ -431,7 +432,7 @@ test("PiAgent resolves custom models from a custom agentDir", async () => {
     const repository = new GitRepository(repo.path)
     const { createAgentSession, calls } = fakePi(() => ({ output: { done: true } }))
     const agent = new PiAgent({
-        modelProvider: "loopy-test",
+        provider: "loopy-test",
         model: "fixture-model",
         sessionOptions: { agentDir },
         createAgentSession
@@ -458,7 +459,7 @@ test("an unknown Pi model fails before creating an SDK session", async () => {
     const modelRuntime = await isolatedModelRuntime(dir)
     const { createAgentSession, calls } = fakePi(() => ({ output: { done: true } }))
     const agent = new PiAgent({
-        modelProvider: "missing-provider",
+        provider: "missing-provider",
         model: "missing-model",
         sessionOptions: { modelRuntime },
         createAgentSession
@@ -471,7 +472,7 @@ test("an unknown Pi model fails before creating an SDK session", async () => {
     })
 
     // then model resolution fails clearly without invoking the SDK session factory
-    await expect(result).rejects.toThrow("Pi model not found: missing-provider/missing-model")
+    await expect(result).rejects.toThrow('Pi model not found: provider "missing-provider", model "missing-model"')
     expect(calls).toHaveLength(0)
 })
 
@@ -489,7 +490,7 @@ test.each(["error", "aborted", "length", "toolUse", "deferred", "pending"] as co
             errorMessage: "not successful"
         }))
         const agent = new PiAgent({
-            modelProvider: "openai",
+            provider: "openai",
             model: "gpt-5.4",
             sessionOptions: { modelRuntime },
             createAgentSession
@@ -519,7 +520,7 @@ test("a prompt failure is preserved when Pi cleanup also fails", async () => {
         disposeError: new Error("dispose failed")
     }))
     const agent = new PiAgent({
-        modelProvider: "openai",
+        provider: "openai",
         model: "gpt-5.4",
         sessionOptions: { modelRuntime },
         createAgentSession
@@ -553,7 +554,7 @@ test("a Pi cleanup failure fails an otherwise successful step", async () => {
         disposeError: new Error("dispose failed")
     }))
     const agent = new PiAgent({
-        modelProvider: "openai",
+        provider: "openai",
         model: "gpt-5.4",
         sessionOptions: { modelRuntime },
         createAgentSession
@@ -579,7 +580,7 @@ test("Pi output fails when the session has no final assistant message", async ()
     const modelRuntime = await isolatedModelRuntime(dir)
     const { createAgentSession, sessions } = fakePi(() => ({ noFinalAssistant: true }))
     const agent = new PiAgent({
-        modelProvider: "openai",
+        provider: "openai",
         model: "gpt-5.4",
         sessionOptions: { modelRuntime },
         createAgentSession
@@ -604,7 +605,7 @@ test("an untagged Pi response fails instructed-output collection", async () => {
     const modelRuntime = await isolatedModelRuntime(dir)
     const { createAgentSession } = fakePi(() => ({ finalResponse: JSON.stringify({ done: true }) }))
     const agent = new PiAgent({
-        modelProvider: "openai",
+        provider: "openai",
         model: "gpt-5.4",
         sessionOptions: { modelRuntime },
         createAgentSession
@@ -631,7 +632,7 @@ test("invalid JSON inside Pi's instructed tags fails the step", async () => {
         return { finalResponse: `${opening}\nall done\n${closing}` }
     })
     const agent = new PiAgent({
-        modelProvider: "openai",
+        provider: "openai",
         model: "gpt-5.4",
         sessionOptions: { modelRuntime },
         createAgentSession
@@ -655,7 +656,7 @@ test("Pi structured output violating the Zod schema fails the step and session",
     const modelRuntime = await isolatedModelRuntime(dir)
     const { createAgentSession } = fakePi(() => ({ output: { done: "yes" } }))
     const agent = new PiAgent({
-        modelProvider: "openai",
+        provider: "openai",
         model: "gpt-5.4",
         sessionOptions: { modelRuntime },
         createAgentSession
@@ -684,7 +685,7 @@ test("a non-JSON-representable output schema fails before creating a Pi session"
     const modelRuntime = await isolatedModelRuntime(dir)
     const { createAgentSession, calls } = fakePi(() => ({ output: { done: true } }))
     const agent = new PiAgent({
-        modelProvider: "openai",
+        provider: "openai",
         model: "gpt-5.4",
         sessionOptions: { modelRuntime },
         createAgentSession
@@ -718,7 +719,7 @@ test("Pi agent step replay restores the worktree without re-invoking the SDK", a
         output: { done: true }
     }))
     const agent = new PiAgent({
-        modelProvider: "openai",
+        provider: "openai",
         model: "gpt-5.4",
         sessionOptions: { modelRuntime },
         createAgentSession
@@ -774,7 +775,7 @@ test.skipIf(!process.env.PI_AGENT_LIVE_TEST)(
         const repo = await tempGitRepo()
         const repository = new GitRepository(repo.path)
         const agent = new PiAgent({
-            modelProvider: "openrouter",
+            provider: "openrouter",
             model: "deepseek/deepseek-v4-flash-0731"
         })
         let worktree!: Worktree

@@ -48,6 +48,7 @@ test("OpenAIModel uses the official client response and records reasoning separa
     const session = await loopy.sessions.get(step.sessionId!)
     expect(session).toMatchObject({
         kind: "llm",
+        client: "openai",
         provider: "openai",
         model: "gpt-test",
         status: "succeeded"

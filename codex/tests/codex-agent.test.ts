@@ -75,9 +75,10 @@ test("CodexAgent maps the SDK conversation to the session and snapshots the work
         `refs/loopy/agent/${uniqueName("test-workflow/test-key")}/1/${uniqueName("implement")}`
     )
     expect((await worktree.git(["rev-parse", step.snapshotRef!])).exitCode).toBe(0)
-    // and the session records provider metadata and the normalized conversation
+    // and the session records client and provider metadata and the normalized conversation
     const session = await loopy.sessions.get(step.sessionId!)
-    expect(session.provider).toBe("codex")
+    expect(session.client).toBe("codex")
+    expect(session.provider).toBe("openai")
     expect(session.model).toBe("gpt-5.4")
     expect(session.status).toBe("succeeded")
     expect(session.messages.map((item) => (item.type === "message" ? item.role : item.type))).toEqual([

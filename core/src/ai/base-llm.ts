@@ -20,6 +20,7 @@ export type LanguageModelInvocation = {
  * activity they can, including the user's prompt.
  */
 export abstract class BaseLanguageModel implements LanguageModel {
+    abstract readonly client: string
     abstract readonly provider: string
     abstract readonly model: string
 
@@ -50,6 +51,7 @@ export abstract class BaseLanguageModel implements LanguageModel {
                 const prompt = await renderPrompt(options.prompt)
                 session = loopy.sessions.create({
                     kind: "llm",
+                    client: this.client,
                     provider: this.provider,
                     model: this.model
                 })

@@ -46,7 +46,8 @@ export async function applyChange(change: FakeChange, baseDir: string): Promise<
 }
 
 export class FakeCodingAgent extends BaseCodingAgent {
-    readonly provider = "fake-agent"
+    readonly client = "fake-agent"
+    readonly provider = "fake"
     readonly model = "fake"
     private readonly fakeRun: (stepName: string, prompt: string) => FakeAgentResult
 

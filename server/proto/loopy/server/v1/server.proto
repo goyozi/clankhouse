@@ -177,12 +177,13 @@ message SessionMessage {
 message Session {
   string id = 1;
   SessionKind kind = 2;
-  string provider = 3;
-  string model = 4;
-  ExecutionStatus status = 5;
-  google.protobuf.Timestamp started_at = 6;
-  google.protobuf.Timestamp ended_at = 7;
-  repeated SessionMessage messages = 8;
+  string client = 3;
+  string provider = 4;
+  string model = 5;
+  ExecutionStatus status = 6;
+  google.protobuf.Timestamp started_at = 7;
+  google.protobuf.Timestamp ended_at = 8;
+  repeated SessionMessage messages = 9;
 }
 
 message ListWorkflowsRequest {}

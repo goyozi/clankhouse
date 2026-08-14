@@ -421,6 +421,7 @@ const SESSIONS_DDL = `
 CREATE TABLE IF NOT EXISTS sessions (
     id         TEXT PRIMARY KEY,
     kind       TEXT NOT NULL CHECK (kind IN ('llm','coding-agent')),
+    client     TEXT NOT NULL,
     provider   TEXT NOT NULL,
     model      TEXT NOT NULL,
     status     TEXT NOT NULL CHECK (status IN ('interrupted','succeeded','failed')),
@@ -442,6 +443,7 @@ CREATE TABLE IF NOT EXISTS session_messages (
 export type SessionRow = {
     id: string
     kind: "llm" | "coding-agent"
+    client: string
     provider: string
     model: string
     status: PersistedStatus
@@ -458,7 +460,7 @@ export type SessionMessageRow = {
     created_at: string
 }
 
-export type NewSessionRow = Pick<SessionRow, "id" | "kind" | "provider" | "model" | "started_at">
+export type NewSessionRow = Pick<SessionRow, "id" | "kind" | "client" | "provider" | "model" | "started_at">
 
 type SessionStatements = {
     insert: Statement
@@ -473,7 +475,7 @@ type SessionStatements = {
 function prepareSessionStatements(db: Db): SessionStatements {
     return {
         insert: db.prepare(
-            "INSERT INTO sessions (id, kind, provider, model, status, started_at) VALUES (?, ?, ?, ?, 'interrupted', ?)"
+            "INSERT INTO sessions (id, kind, client, provider, model, status, started_at) VALUES (?, ?, ?, ?, ?, 'interrupted', ?)"
         ),
         findById: db.prepare("SELECT * FROM sessions WHERE id = ?"),
         succeed: db.prepare("UPDATE sessions SET status = 'succeeded', ended_at = ? WHERE id = ?"),
@@ -487,7 +489,7 @@ function prepareSessionStatements(db: Db): SessionStatements {
 }
 
 export function insertSession(db: Db, row: NewSessionRow): void {
-    statements(db).sessions.insert.run(row.id, row.kind, row.provider, row.model, row.started_at)
+    statements(db).sessions.insert.run(row.id, row.kind, row.client, row.provider, row.model, row.started_at)
 }
 
 export function findSessionById(db: Db, id: string): SessionRow | undefined {

@@ -29,7 +29,8 @@ export type CodexAgentOptions = {
 }
 
 export class CodexAgent extends BaseCodingAgent {
-    readonly provider = "codex"
+    readonly client = "codex"
+    readonly provider = "openai"
     readonly model: string
     private readonly options: CodexAgentOptions
     private readonly codex: CodexClient

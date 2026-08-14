@@ -1,7 +1,8 @@
 import { BaseLanguageModel, type LanguageModelInvocation } from "./base-llm"
 
 export class FakeLLM extends BaseLanguageModel {
-    readonly provider = "fake-llm"
+    readonly client = "fake-llm"
+    readonly provider = "fake"
     readonly model = "fake"
     private readonly fakeCall: (stepName: string, prompt: string) => unknown
 

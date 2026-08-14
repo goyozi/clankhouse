@@ -122,6 +122,7 @@ export function toSession(session: AISession): MessageInitShape<typeof SessionSc
     return {
         id: session.id,
         kind: session.kind === "llm" ? SessionKind.LLM : SessionKind.CODING_AGENT,
+        client: session.client,
         provider: session.provider,
         model: session.model,
         status: toExecutionStatus(session.status),

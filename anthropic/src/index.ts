@@ -11,11 +11,12 @@ export type AnthropicModelOptions = {
 }
 
 export class AnthropicModel extends BaseLanguageModel {
+    readonly client = "anthropic"
     readonly provider = "anthropic"
     readonly model: string
     private readonly maxTokens: number
     private readonly clientOptions?: ClientOptions
-    private client?: Anthropic
+    private sdkClient?: Anthropic
 
     constructor(options: AnthropicModelOptions) {
         super()
@@ -44,7 +45,7 @@ export class AnthropicModel extends BaseLanguageModel {
     }
 
     private getClient(): Anthropic {
-        return (this.client ??= new Anthropic(this.clientOptions))
+        return (this.sdkClient ??= new Anthropic(this.clientOptions))
     }
 }
 

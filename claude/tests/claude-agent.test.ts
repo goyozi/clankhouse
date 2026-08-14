@@ -73,10 +73,11 @@ test("ClaudeAgent maps the SDK conversation to the session and snapshots the wor
         `refs/loopy/agent/${uniqueName("test-workflow/test-key")}/1/${uniqueName("implement")}`
     )
     expect((await worktree.git(["rev-parse", step.snapshotRef!])).exitCode).toBe(0)
-    // and the session is persisted with provider and model info and succeeds
+    // and the session is persisted with client, provider and model info and succeeds
     const session = await loopy.sessions.get(step.sessionId!)
     expect(session.kind).toBe("coding-agent")
-    expect(session.provider).toBe("claude")
+    expect(session.client).toBe("claude")
+    expect(session.provider).toBe("anthropic")
     expect(session.model).toBe("claude-sonnet-5")
     expect(session.status).toBe("succeeded")
     // and the conversation is mapped onto ordered session items, distinguishing the tool call from its result

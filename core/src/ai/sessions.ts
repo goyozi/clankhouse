@@ -23,6 +23,7 @@ export class AISessions {
         return {
             id: row.id,
             kind: row.kind,
+            client: row.client,
             provider: row.provider,
             model: row.model,
             status: observableStatus(row.status, this.active.sessions.has(row.id)),
@@ -59,6 +60,7 @@ export class AISessions {
 
     create(options: {
         kind: "llm" | "coding-agent"
+        client: string
         provider: string
         model: string
         filesRoot?: string
@@ -71,6 +73,7 @@ export class AISessions {
         sql.insertSession(db, {
             id,
             kind: options.kind,
+            client: options.client,
             provider: options.provider,
             model: options.model,
             started_at: nowIso()
@@ -222,6 +225,7 @@ export type SessionRecorder = {
 export type AISession = {
     id: string
     kind: "llm" | "coding-agent"
+    client: string
     provider: string
     model: string
     status: ObservableSessionStatus

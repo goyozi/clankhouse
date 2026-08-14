@@ -19,14 +19,15 @@ export type PiAgentSession = Pick<AgentSession, "sessionId" | "subscribe" | "pro
 export type PiAgentSessionFactory = (options: CreateAgentSessionOptions) => Promise<{ session: PiAgentSession }>
 
 export type PiAgentOptions = {
-    modelProvider: string
+    provider: string
     model: string
     sessionOptions?: PiAgentSessionOptions
     createAgentSession?: PiAgentSessionFactory
 }
 
 export class PiAgent extends BaseCodingAgent {
-    readonly provider = "pi"
+    readonly client = "pi"
+    readonly provider: string
     readonly model: string
     private readonly options: PiAgentOptions
     private readonly createAgentSessionFn: PiAgentSessionFactory
@@ -34,7 +35,8 @@ export class PiAgent extends BaseCodingAgent {
 
     constructor(options: PiAgentOptions) {
         super()
-        this.model = `${options.modelProvider}/${options.model}`
+        this.provider = options.provider
+        this.model = options.model
         this.options = options
         this.createAgentSessionFn = options.createAgentSession ?? createAgentSession
     }
@@ -42,8 +44,10 @@ export class PiAgent extends BaseCodingAgent {
     protected async invoke(invocation: CodingAgentInvocation): Promise<unknown> {
         return this.invokeWithInstructedOutput(invocation, async (prompt) => {
             const modelRuntime = await this.getModelRuntime()
-            const model = modelRuntime.getModel(this.options.modelProvider, this.options.model)
-            if (model === undefined) throw new Error(`Pi model not found: ${this.model}`)
+            const model = modelRuntime.getModel(this.provider, this.model)
+            if (model === undefined) {
+                throw new Error(`Pi model not found: provider "${this.provider}", model "${this.model}"`)
+            }
 
             const { session } = await this.createAgentSessionFn(
                 this.buildSessionOptions(invocation.worktree, modelRuntime, model)

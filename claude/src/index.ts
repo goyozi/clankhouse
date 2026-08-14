@@ -34,7 +34,8 @@ export type ClaudeAgentOptions = {
 }
 
 export class ClaudeAgent extends BaseCodingAgent {
-    readonly provider = "claude"
+    readonly client = "claude"
+    readonly provider = "anthropic"
     readonly model: string
     private readonly options: ClaudeAgentOptions
     private readonly queryFn: QueryFunction

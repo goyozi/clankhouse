@@ -47,6 +47,7 @@ export function formatSessionValue(session: Session): string {
     const lines = [
         `Session: ${session.id}`,
         `Kind: ${sessionKind(session.kind)}`,
+        `Client: ${session.client}`,
         `Provider: ${session.provider}`,
         `Model: ${session.model}`,
         `Status: ${executionStatus(session.status)}`,

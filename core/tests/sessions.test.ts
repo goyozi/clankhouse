@@ -23,6 +23,7 @@ test("session filesRoot makes files relative and preserves outside files as abso
     const { loopy } = tempLoopy()
     const recorder = loopy.sessions.create({
         kind: "coding-agent",
+        client: "fake-agent",
         provider: "fake",
         model: "m",
         filesRoot: worktree
@@ -57,6 +58,7 @@ test("session filesRoot recognizes canonical paths beneath a symlinked worktree"
     const { loopy } = tempLoopy()
     const recorder = loopy.sessions.create({
         kind: "coding-agent",
+        client: "fake-agent",
         provider: "fake",
         model: "m",
         filesRoot: linkedWorktree
@@ -78,7 +80,7 @@ test("session filesRoot recognizes canonical paths beneath a symlinked worktree"
 test("sessions without filesRoot preserve recorded file targets", async () => {
     // given a session without a files root
     const { loopy } = tempLoopy()
-    const recorder = loopy.sessions.create({ kind: "llm", provider: "fake", model: "m" })
+    const recorder = loopy.sessions.create({ kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
 
     // when recording a non-normalized file target
     recorder.addToolCall({
@@ -98,7 +100,12 @@ test("sessions without filesRoot preserve recorded file targets", async () => {
 test("tool calls normalize an absent input to JSON null", async () => {
     // given an active session
     const { loopy } = tempLoopy()
-    const recorder = loopy.sessions.create({ kind: "coding-agent", provider: "fake", model: "m" })
+    const recorder = loopy.sessions.create({
+        kind: "coding-agent",
+        client: "fake-agent",
+        provider: "fake",
+        model: "m"
+    })
 
     // when recording a tool call whose provider omitted its input
     recorder.addToolCall({ id: "call-1", name: "noop", source: { kind: "mcp", server: "fake" }, input: undefined })
@@ -114,7 +121,7 @@ test("tool calls normalize an absent input to JSON null", async () => {
 test("get returns ordered session messages and stream yields them in order", async () => {
     // given a session with messages and paired tool activity that has succeeded
     const { loopy } = tempLoopy()
-    const recorder = loopy.sessions.create({ kind: "llm", provider: "fake", model: "m" })
+    const recorder = loopy.sessions.create({ kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
     recorder.addMessage("system", "sys")
     recorder.addMessage("user", "hi")
     recorder.addMessage("reasoning", "think")
@@ -133,7 +140,8 @@ test("get returns ordered session messages and stream yields them in order", asy
     // when getting the session
     const session = await loopy.sessions.get(recorder.id)
 
-    // then it is succeeded
+    // then its identity fields round-trip and it is succeeded
+    expect(session).toMatchObject({ kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
     expect(session.status).toBe("succeeded")
     // and every message is returned in insertion order with canonical tool data
     expect(session.messages.map((message) => message.type)).toEqual([
@@ -166,7 +174,7 @@ test("get returns ordered session messages and stream yields them in order", asy
 test("stream with afterMessageId replays only later messages of an ended session", async () => {
     // given a succeeded session with three messages
     const { loopy } = tempLoopy()
-    const recorder = loopy.sessions.create({ kind: "llm", provider: "fake", model: "m" })
+    const recorder = loopy.sessions.create({ kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
     recorder.addMessage("system", "sys")
     recorder.addMessage("user", "hi")
     recorder.addMessage("assistant", "hello")
@@ -185,7 +193,7 @@ test("stream with afterMessageId replays only later messages of an ended session
 test("stream tails an active session until it ends", async () => {
     // given an active session with one message
     const { loopy } = tempLoopy()
-    const recorder = loopy.sessions.create({ kind: "llm", provider: "fake", model: "m" })
+    const recorder = loopy.sessions.create({ kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
     recorder.addMessage("user", "one")
 
     // when streaming the session
@@ -211,7 +219,7 @@ test("stream tails an active session until it ends", async () => {
 test("stream with afterMessageId on an active session yields only new messages", async () => {
     // given an active session with two messages
     const { loopy } = tempLoopy()
-    const recorder = loopy.sessions.create({ kind: "llm", provider: "fake", model: "m" })
+    const recorder = loopy.sessions.create({ kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
     recorder.addMessage("user", "one")
     recorder.addMessage("assistant", "two")
     const session = await loopy.sessions.get(recorder.id)
@@ -249,10 +257,10 @@ test("stream on a missing session throws", async () => {
 test("stream with an unknown or foreign afterMessageId throws", async () => {
     // given a succeeded session and a message belonging to another session
     const { loopy } = tempLoopy()
-    const recorder = loopy.sessions.create({ kind: "llm", provider: "fake", model: "m" })
+    const recorder = loopy.sessions.create({ kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
     recorder.addMessage("user", "hi")
     recorder.succeed()
-    const other = loopy.sessions.create({ kind: "llm", provider: "fake", model: "m" })
+    const other = loopy.sessions.create({ kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
     other.addMessage("user", "elsewhere")
     other.succeed()
     const foreignId = (await loopy.sessions.get(other.id)).messages[0]!.id
@@ -274,7 +282,7 @@ test("stream with an unknown or foreign afterMessageId throws", async () => {
 test("breaking out of a stream deregisters the listener without breaking the recorder", async () => {
     // given an active session with one message
     const { loopy } = tempLoopy()
-    const recorder = loopy.sessions.create({ kind: "llm", provider: "fake", model: "m" })
+    const recorder = loopy.sessions.create({ kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
     recorder.addMessage("user", "one")
 
     // when breaking out of the stream after the first message
@@ -303,6 +311,7 @@ test("get on a missing session throws", async () => {
 })
 
 class ParkingLLM extends BaseLanguageModel {
+    readonly client = "fake-llm"
     readonly provider = "fake"
     readonly model = "parking"
 

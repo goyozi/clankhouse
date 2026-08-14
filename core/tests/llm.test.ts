@@ -31,10 +31,11 @@ test("FakeLLM performs a durable llm step with a persisted session", async () =>
     const step = run.steps[0]
     expect(step.kind).toBe("llm")
     if (step.kind !== "llm") throw new Error("unreachable")
-    // and the session is persisted with provider and model info
+    // and the session is persisted with client, provider and model info
     const session = await loopy.sessions.get(step.sessionId!)
     expect(session.kind).toBe("llm")
-    expect(session.provider).toBe("fake-llm")
+    expect(session.client).toBe("fake-llm")
+    expect(session.provider).toBe("fake")
     expect(session.model).toBe("fake")
     expect(session.status).toBe("succeeded")
     // and the session messages contain the prompt and the response

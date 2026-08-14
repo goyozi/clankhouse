@@ -63,6 +63,7 @@ test("AnthropicModel uses the official streaming client and records thinking sep
     const splitAt = reply.indexOf(JSON.stringify(expected))
     expect(session).toMatchObject({
         kind: "llm",
+        client: "anthropic",
         provider: "anthropic",
         model: "claude-test",
         status: "succeeded"

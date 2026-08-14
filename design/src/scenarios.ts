@@ -111,6 +111,7 @@ function stepLines(
 function sessionLines(
     id: string,
     kind: string,
+    client: string,
     provider: string,
     model: string,
     started: string,
@@ -120,6 +121,7 @@ function sessionLines(
     return [
         line(`Session: ${id}`, 2),
         line(`Kind: ${kind}`, 2),
+        line(`Client: ${client}`, 2),
         line(`Provider: ${provider}`, 2),
         line(`Model: ${model}`, 2),
         line("Status: succeeded", 2),
@@ -157,6 +159,7 @@ function completedRunLines(includeSessions: boolean): TerminalLine[] {
                   contextSessionId,
                   "llm",
                   "openai",
+                  "openai",
                   "gpt-5.4",
                   startedAt,
                   "2026-08-13T09:00:01.200Z",
@@ -177,6 +180,7 @@ function completedRunLines(includeSessions: boolean): TerminalLine[] {
             ? sessionLines(
                   sessionId,
                   "coding-agent",
+                  "codex",
                   "openai",
                   "gpt-5.4-codex",
                   "2026-08-13T09:00:01.200Z",
@@ -198,6 +202,7 @@ function completedRunLines(includeSessions: boolean): TerminalLine[] {
             ? sessionLines(
                   verdictSessionId,
                   "llm",
+                  "openai",
                   "openai",
                   "gpt-5.4",
                   "2026-08-13T09:00:42.000Z",
@@ -421,6 +426,7 @@ export const scenarios: Scenario[] = [
         lines: [
             line(`Session: ${sessionId}`),
             line("Kind: coding-agent"),
+            line("Client: codex"),
             line("Provider: openai"),
             line("Model: gpt-5.4-codex"),
             line("Status: succeeded"),

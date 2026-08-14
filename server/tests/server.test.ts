@@ -236,7 +236,7 @@ test("serves a FakeLLM and FakeCodingAgent workflow through the complete RPC sur
     expect(Buffer.concat(chunks.map((chunk) => chunk.chunk)).toString()).toBe("summary:rpc")
     const sessionId = fetched.steps.find((step) => step.kind === StepKind.LLM)!.sessionId!
     const session = (await client.getSession({ sessionId })).session!
-    expect(session).toMatchObject({ provider: "fake-llm", status: ExecutionStatus.SUCCEEDED })
+    expect(session).toMatchObject({ client: "fake-llm", provider: "fake", status: ExecutionStatus.SUCCEEDED })
     expect((await Array.fromAsync(client.watchSession({ sessionId }))).map((response) => response.message!.id)).toEqual(
         session.messages.map((message) => message.id)
     )
@@ -256,7 +256,12 @@ test("serves a FakeLLM and FakeCodingAgent workflow through the complete RPC sur
 test("serves structured session messages, tool calls and tool results", async () => {
     // given a completed session containing every session message variant
     const { loopy } = tempLoopy()
-    const recorder = loopy.sessions.create({ kind: "coding-agent", provider: "fake", model: "fake" })
+    const recorder = loopy.sessions.create({
+        kind: "coding-agent",
+        client: "fake-agent",
+        provider: "fake",
+        model: "fake"
+    })
     recorder.addMessage("assistant", "checking")
     recorder.addToolCall({
         id: "read-1",
@@ -754,7 +759,12 @@ test("maps workflow lifecycle LoopyError codes to stable Connect errors", async 
 test("maps coded resource lookup failures without inspecting messages", async () => {
     // given a real server and a completed session with one message
     const { loopy } = tempLoopy()
-    const recorder = loopy.sessions.create({ kind: "llm", provider: "fake", model: "fake" })
+    const recorder = loopy.sessions.create({
+        kind: "llm",
+        client: "fake-llm",
+        provider: "fake",
+        model: "fake"
+    })
     recorder.addMessage("assistant", "done")
     recorder.succeed()
     const server = await testServer(loopy)
@@ -887,7 +897,12 @@ test("closing a server rejects active streams without closing Loopy", async () =
         { input: z.null(), output: z.number(), key: () => "waiting" },
         async () => (await loopy.waitFor({ key: "never", schema: z.object({ value: z.number() }) })).value
     )
-    const recorder = loopy.sessions.create({ kind: "llm", provider: "fake", model: "fake" })
+    const recorder = loopy.sessions.create({
+        kind: "llm",
+        client: "fake-llm",
+        provider: "fake",
+        model: "fake"
+    })
     recorder.addMessage("assistant", "working")
     let artifactCanceled = false
     loopy.artifacts.read = async () => ({
