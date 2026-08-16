@@ -1,7 +1,7 @@
 import { CommanderError, Command } from "commander"
 import { registerArtifacts } from "./cmd/artifacts"
 import { registerEvents } from "./cmd/events"
-import { registerRuns } from "./cmd/runs"
+import { registerRuns } from "./cmd/runs/command"
 import { registerSessions } from "./cmd/sessions"
 import { registerWorkflows } from "./cmd/workflows"
 import { publicError } from "./errors"

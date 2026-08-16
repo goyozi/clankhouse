@@ -7,14 +7,11 @@ import {
     RerunRunResponseSchema,
     ResumeRunResponseSchema,
     StartRunResponseSchema,
-    StepKind,
     StepSchema,
     WatchRunResponseSchema,
     WatchSessionResponseSchema,
     type GetRunResponse,
     type GetSessionResponse,
-    type ListRunsResponse,
-    type RunMetadata,
     type Session,
     type StartRunResponse,
     type Step,
@@ -23,13 +20,21 @@ import {
     type WorkflowRun
 } from "@loopy/server/proto"
 import { InvalidArgumentError, type Command } from "commander"
-import type { LoopyClient } from "../client"
-import { CliError } from "../errors"
-import { readJsonInput } from "../io"
-import { executionStatus, indent, type Output, prettyJson, table, timestamp } from "../output"
-import type { Runtime } from "../runtime"
-import { formatArtifactValue } from "./artifacts"
-import { formatSessionMessage, formatSessionValue } from "./sessions"
+import type { LoopyClient } from "../../client"
+import { CliError } from "../../errors"
+import { readJsonInput } from "../../io"
+import type { Output } from "../../output"
+import type { Runtime } from "../../runtime"
+import {
+    formatRun,
+    formatRunId,
+    formatRunOutput,
+    formatRuns,
+    formatRunWatch,
+    formatSessionErrorPrefix,
+    formatSessionWatch,
+    formatStepUpdate
+} from "./output"
 
 type RunGetOptions = {
     include?: "sessions"
@@ -67,7 +72,7 @@ export function registerRuns(program: Command, runtime: Runtime): void {
         .option("--input <file|->", "JSON input file, or - for stdin")
         .action(async (workflowName: string, options: { input?: string }, command: Command) => {
             const { response } = await startWorkflowRun(runtime, command, workflowName, options.input)
-            await runtime.emit(command, StartRunResponseSchema, response, () => `${response.runId}\n`)
+            await runtime.emit(command, StartRunResponseSchema, response, () => formatRunId(response.runId))
         })
     runs.command("list")
         .description("List workflow runs")
@@ -109,15 +114,13 @@ export function registerRuns(program: Command, runtime: Runtime): void {
     runs.command("watch")
         .description("Watch a workflow run")
         .argument("<run-id>")
-        .option("--from-step <step-id>", "resume inclusively from a step")
         .option("--include <resource>", "include related sessions", includeResource)
-        .action(async (runId: string, options: { fromStep?: string; include?: "sessions" }, command: Command) => {
+        .action(async (runId: string, options: { include?: "sessions" }, command: Command) => {
             const client = await runtime.client(command)
             const output = runtime.output(command)
             const renderedSteps = new Map<string, string>()
             for await (const item of watchRun(client, {
                 runId,
-                ...(options.fromStep !== undefined ? { fromStepId: options.fromStep } : {}),
                 includeSessions: options.include === "sessions",
                 signal: runtime.signal
             })) {
@@ -130,7 +133,7 @@ export function registerRuns(program: Command, runtime: Runtime): void {
         .action(async (runId: string, _options: unknown, command: Command) => {
             const client = await runtime.client(command)
             const response = await client.resumeRun({ runId }, { signal: runtime.signal })
-            await runtime.emit(command, ResumeRunResponseSchema, response, () => `${response.runId}\n`)
+            await runtime.emit(command, ResumeRunResponseSchema, response, () => formatRunId(response.runId))
         })
     runs.command("rerun")
         .description("Rerun a workflow from a step")
@@ -139,7 +142,7 @@ export function registerRuns(program: Command, runtime: Runtime): void {
         .action(async (runId: string, options: { from: string }, command: Command) => {
             const client = await runtime.client(command)
             const response = await client.rerunRun({ runId, fromStepKey: options.from }, { signal: runtime.signal })
-            await runtime.emit(command, RerunRunResponseSchema, response, () => `${response.runId}\n`)
+            await runtime.emit(command, RerunRunResponseSchema, response, () => formatRunId(response.runId))
         })
 }
 
@@ -153,7 +156,7 @@ async function runWorkflow(
     await waitForRunCompletion(client, response.runId, runtime.signal)
     const completed = await client.getRun({ runId: response.runId }, { signal: runtime.signal })
     const outputJson = completedRunOutput(response.runId, completed.run)
-    if (outputJson !== undefined) await runtime.output(command).write(`${outputJson}\n`)
+    if (outputJson !== undefined) await runtime.output(command).write(formatRunOutput(outputJson))
 }
 
 async function startWorkflowRun(
@@ -279,7 +282,7 @@ async function emitWatchItem(
 ): Promise<void> {
     if (item.kind === "session-error") {
         await runtime.reportError(command, item.error, {
-            prefix: `session ${item.sessionId}: `,
+            prefix: formatSessionErrorPrefix(item.sessionId),
             details: { scope: "session", sessionId: item.sessionId }
         })
         return
@@ -291,7 +294,7 @@ async function emitWatchItem(
             if (item.message.item.case === "step") renderedSteps.set(item.message.item.value.id, rendered)
             await output.write(rendered)
         }
-    } else if (item.message.message !== undefined) await output.write(formatSessionMessage(item.message.message))
+    } else if (item.message.message !== undefined) await output.write(formatSessionWatch(item.message.message))
     observeRunFailure(runtime, item.kind === "run" ? item.message : undefined)
 }
 
@@ -407,99 +410,6 @@ async function* watchRun(client: LoopyClient, options: RunWatchOptions): AsyncGe
     }
 }
 
-function formatRuns(response: ListRunsResponse): string {
-    if (response.runs.length === 0) return "No runs found.\n"
-    return table(
-        ["ID", "WORKFLOW", "KEY", "ATTEMPT", "STATUS", "STARTED", "ENDED"],
-        response.runs.map((run) => [
-            run.id,
-            run.workflowName,
-            run.key,
-            String(run.attempt),
-            executionStatus(run.status),
-            timestamp(run.startedAt),
-            timestamp(run.endedAt)
-        ])
-    )
-}
-
-function formatRun(response: GetRunResponse, sessions: ReadonlyMap<string, Session> = new Map()): string {
-    if (response.run === undefined) return "Run response is empty.\n"
-    return formatWorkflowRun(response.run, sessions)
-}
-
-function formatRunWatch(response: WatchRunResponse): string {
-    if (response.item.case === "step") return formatStepUpdate(response.item.value)
-    if (response.item.case === "run") return formatRunUpdate(response.item.value)
-    return "Run update is empty.\n"
-}
-
-function formatWorkflowRun(run: WorkflowRun, sessions: ReadonlyMap<string, Session>): string {
-    const metadata = run.metadata
-    const lines =
-        metadata === undefined
-            ? ["Run metadata is missing."]
-            : [
-                  `Run: ${metadata.id}`,
-                  `Workflow: ${metadata.workflowName}`,
-                  `Key: ${metadata.key}`,
-                  `Attempt: ${metadata.attempt}`,
-                  `Status: ${executionStatus(metadata.status)}`,
-                  `Started: ${timestamp(metadata.startedAt)}`,
-                  `Ended: ${timestamp(metadata.endedAt)}`
-              ]
-    if (run.errorCode !== undefined) lines.push(`Error code: ${run.errorCode}`)
-    if (run.error !== undefined) lines.push(`Error: ${run.error}`)
-    if (run.outputJson !== undefined) lines.push("", "Output:", indent(prettyJson(run.outputJson)))
-    lines.push("", "Steps:")
-    if (run.steps.length === 0) {
-        lines.push("  None")
-    } else {
-        for (const step of run.steps) {
-            lines.push(indent(formatStep(step).trimEnd()))
-            if (step.sessionId !== undefined) {
-                const session = sessions.get(step.sessionId)
-                if (session !== undefined) lines.push(indent(formatSessionValue(session).trimEnd(), 2))
-            }
-        }
-    }
-    lines.push("", "Artifacts:")
-    if (run.artifacts.length === 0) {
-        lines.push("  None")
-    } else {
-        for (const artifact of run.artifacts) lines.push(indent(formatArtifactValue(artifact), 1))
-    }
-    return `${lines.join("\n")}\n`
-}
-
-function formatStep(step: Step): string {
-    const lines = [
-        `${step.seq}. ${step.key} (${stepKind(step.kind)})`,
-        `ID: ${step.id}`,
-        `Name: ${step.name}`,
-        `Status: ${executionStatus(step.status)}`,
-        `Started: ${timestamp(step.startedAt)}`,
-        `Ended: ${timestamp(step.endedAt)}`
-    ]
-    if (step.sessionId !== undefined) lines.push(`Session: ${step.sessionId}`)
-    if (step.artifactId !== undefined) lines.push(`Artifact: ${step.artifactId}`)
-    if (step.eventKey !== undefined) lines.push(`Event: ${step.eventKey}`)
-    if (step.snapshotRef !== undefined) lines.push(`Snapshot: ${step.snapshotRef}`)
-    if (step.errorCode !== undefined) lines.push(`Error code: ${step.errorCode}`)
-    if (step.error !== undefined) lines.push(`Error: ${step.error}`)
-    if (step.outputJson !== undefined) lines.push("Output:", indent(prettyJson(step.outputJson)))
-    return `${lines.join("\n")}\n`
-}
-
-function formatStepUpdate(step: Step): string {
-    const suffix = step.error === undefined ? "" : `: ${step.error}`
-    return `Step ${step.key} (${stepKind(step.kind)}): ${executionStatus(step.status)}${suffix}\n`
-}
-
-function formatRunUpdate(run: RunMetadata): string {
-    return `Run ${run.id}: ${executionStatus(run.status)}\n`
-}
-
 function stepFingerprint(step: Step): string {
     return toJsonString(StepSchema, step)
 }
@@ -514,25 +424,6 @@ function terminalStatus(status: ExecutionStatus): boolean {
 
 function failedStatus(status: ExecutionStatus): boolean {
     return status === ExecutionStatus.FAILED
-}
-
-function stepKind(value: StepKind): string {
-    switch (value) {
-        case StepKind.CUSTOM:
-            return "custom"
-        case StepKind.ARTIFACT:
-            return "artifact"
-        case StepKind.LLM:
-            return "llm"
-        case StepKind.AGENT:
-            return "agent"
-        case StepKind.EVENT:
-            return "event"
-        case StepKind.WORKTREE:
-            return "worktree"
-        default:
-            return "unspecified"
-    }
 }
 
 function collectStatus(value: string, previous: ExecutionStatus[]): ExecutionStatus[] {

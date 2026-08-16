@@ -323,13 +323,6 @@ test("drives FakeLLM and FakeCodingAgent workflows through the complete CLI surf
         case: "run",
         value: { status: ExecutionStatus.SUCCEEDED }
     })
-    const fromStepWatch = await runCliCommand(["runs", "watch", started.runId, "--from-step", waiting.id, "--json"], {
-        env
-    })
-    expect(fromJsonString(WatchRunResponseSchema, lines(fromStepWatch.stdout)[0]!).item).toMatchObject({
-        case: "step",
-        value: { id: waiting.id }
-    })
     published = "v2"
     const rerunResult = await runCliCommand(["runs", "rerun", started.runId, "--from", "publish", "--json"], {
         env
@@ -769,7 +762,7 @@ test("human run watch does not repeat a step when only hidden metadata changes",
     const watch = startCli(["runs", "watch", runId, "--include", "sessions"], { env })
     await waitForOutput(watch, "Step ready (custom): running")
     ready.release()
-    await waitForOutput(watch, "Step plan (agent): running")
+    await waitForOutput(watch, "Step plan (coding-agent): running")
     attachSession.release()
     await waitForOutput(watch, "user: plan")
     parked.release()
@@ -778,7 +771,7 @@ test("human run watch does not repeat a step when only hidden metadata changes",
 
     // then the human output reports each visible agent state once
     expect(code).toBe(0)
-    expect(planUpdates).toEqual(["Step plan (agent): running", "Step plan (agent): succeeded"])
+    expect(planUpdates).toEqual(["Step plan (coding-agent): running", "Step plan (coding-agent): succeeded"])
 })
 
 test("human get --watch does not repeat a snapshotted step when only hidden metadata changes", async () => {
@@ -826,7 +819,7 @@ test("human get --watch does not repeat a snapshotted step when only hidden meta
 
     // when snapshot-then-tail watching starts before the session is attached
     const watch = startCli(["runs", "get", runId, "--include", "sessions", "--watch"], { env })
-    await waitForOutput(watch, `ID: ${plan.id}`)
+    await waitForOutput(watch, `  ${plan.seq}. ${plan.key}`)
     attachSession.release()
     await waitForOutput(watch, "user: plan")
     parked.release()
@@ -835,7 +828,7 @@ test("human get --watch does not repeat a snapshotted step when only hidden meta
 
     // then the snapshot's visible running state is not repeated by the metadata-only update
     expect(code).toBe(0)
-    expect(planUpdates).toEqual(["Step plan (agent): succeeded"])
+    expect(planUpdates).toEqual(["Step plan (coding-agent): succeeded"])
 })
 
 test("included session failures do not stop the primary run watch", async () => {

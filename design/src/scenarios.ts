@@ -18,10 +18,6 @@ const verdictSessionId = "J4wT9bH2nF7qC5yM1sV8k"
 const draftSessionId = "D6qN1vR8mK3xT9cP4wH7s"
 const artifactId = "U5zC7dF2jR9wE1bG6sA4n"
 const rerunId = "R8qM3vD7kL2xP9sF5wN1c"
-const prepareStepId = "sP7mN2qR9vK4xD1cL8wF5"
-const reviewStepId = "sC3tH8bY1nM6pQ4vR9kD2"
-const verdictStepId = "sV6xA1jF8mT3qL9cN4wP7"
-const artifactStepId = "sA9kR4mT2vC7xN1qP6wD8"
 const startedAt = "2026-08-13T09:00:00.000Z"
 const verdictEndedAt = "2026-08-13T09:00:56.000Z"
 const endedAt = "2026-08-13T09:00:56.200Z"
@@ -85,142 +81,116 @@ function stepLines(
     seq: number,
     key: string,
     kind: string,
-    id: string,
-    name: string,
     started: string,
     ended: string,
     details: {
         session?: string
         artifact?: string
-        output?: unknown
     } = {}
 ): TerminalLine[] {
     return [
-        line(`${seq}. ${key} (${kind})`, 1),
-        line(`ID: ${id}`, 1),
-        line(`Name: ${name}`, 1),
-        line("Status: succeeded", 1),
-        line(`Started: ${started}`, 1),
-        line(`Ended: ${ended}`, 1),
-        ...(details.session === undefined ? [] : [line(`Session: ${details.session}`, 1)]),
-        ...(details.artifact === undefined ? [] : [line(`Artifact: ${details.artifact}`, 1)]),
-        ...(details.output === undefined ? [] : [line("Output:", 1), ...jsonLines(details.output, 2)])
+        line(`${seq}. ${key}`, 1),
+        stepNestedLine(`${kind} · succeeded · ${formatDuration(started, ended)}`, 2),
+        ...(details.session === undefined ? [] : [blank(), stepNestedLine(`Session ${details.session}`, 2)]),
+        ...(details.artifact === undefined ? [] : [blank(), stepNestedLine(`Artifact ${details.artifact}`, 2)])
     ]
 }
 
-function sessionLines(
+function stepNestedLine(text: string, depth: number): TerminalLine {
+    return line(` ${text}`, depth)
+}
+
+function stepNestedJsonLines(value: unknown, depth: number): TerminalLine[] {
+    return jsonLines(value, depth).map((item) => stepNestedLine(item.text, item.depth ?? depth))
+}
+
+function stepOutputLines(value: unknown): TerminalLine[] {
+    return [blank(), stepNestedLine("Output", 2), ...stepNestedJsonLines(value, 3)]
+}
+
+function formatDuration(started: string, ended: string): string {
+    const milliseconds = Date.parse(ended) - Date.parse(started)
+    const totalMinutes = Math.floor(milliseconds / 60_000)
+    if (totalMinutes >= 60) {
+        const hours = Math.floor(totalMinutes / 60)
+        return `${hours}h${totalMinutes % 60}m`
+    }
+    if (totalMinutes >= 1) {
+        const seconds = Math.floor(milliseconds / 1000) % 60
+        return `${totalMinutes}m${seconds}s`
+    }
+    return `${Number((milliseconds / 1000).toFixed(3))}s`
+}
+
+function runLines(
     id: string,
-    kind: string,
-    client: string,
-    provider: string,
-    model: string,
+    workflow: string,
+    key: string,
+    attempt: number,
+    status: string,
     started: string,
-    ended: string,
-    messages: string[]
+    ended: string
 ): TerminalLine[] {
     return [
-        line(`Session: ${id}`, 2),
-        line(`Kind: ${kind}`, 2),
-        line(`Client: ${client}`, 2),
-        line(`Provider: ${provider}`, 2),
-        line(`Model: ${model}`, 2),
-        line("Status: succeeded", 2),
-        line(`Started: ${started}`, 2),
-        line(`Ended: ${ended}`, 2),
-        line("Messages:", 2),
-        ...messages.map((message) => line(message, 3))
+        line(`Run ${id}`),
+        line(`${workflow} · ${key} · attempt ${attempt}`, 1),
+        line(`${status} · ${formatDuration(started, ended)}`, 1)
     ]
+}
+
+function sessionLines(id: string, client: string, provider: string, model: string, messages: string[]): TerminalLine[] {
+    return [
+        blank(),
+        stepNestedLine(`Session ${id}`, 2),
+        stepNestedLine(`${client} · ${provider}/${model}`, 3),
+        blank(),
+        stepNestedLine("Messages", 3),
+        ...messages.map(sessionMessageLine)
+    ]
+}
+
+function sessionMessageLine(message: string): TerminalLine {
+    const separator = message.indexOf(":")
+    if (separator === -1) return stepNestedLine(message, 4)
+    const rawRole = message.slice(0, separator)
+    const role = rawRole === "tool_result" ? "result" : rawRole
+    const content = message.slice(separator + 1).trimStart()
+    return stepNestedLine(`${role.padEnd(11)}${content}`, 4)
 }
 
 function completedRunLines(includeSessions: boolean): TerminalLine[] {
     return [
-        line(`Run: ${runId}`),
-        line("Workflow: review-pull-request"),
-        line("Key: pr-482"),
-        line("Attempt: 1"),
-        line("Status: succeeded"),
-        line(`Started: ${startedAt}`),
-        line(`Ended: ${endedAt}`),
-        ...outputLines(completedOutput),
+        ...runLines(runId, "review-pull-request", "pr-482", 1, "succeeded", startedAt, endedAt),
         blank(),
-        line("Steps:"),
-        ...stepLines(
-            1,
-            "prepare-context",
-            "llm",
-            prepareStepId,
-            "prepare-context",
-            startedAt,
-            "2026-08-13T09:00:01.200Z",
-            { session: contextSessionId, output: prepareOutput }
-        ),
+        line("Steps"),
+        ...stepLines(1, "prepare-context", "llm", startedAt, "2026-08-13T09:00:01.200Z", {
+            ...(includeSessions ? {} : { session: contextSessionId })
+        }),
         ...(includeSessions
-            ? sessionLines(
-                  contextSessionId,
-                  "llm",
-                  "openai",
-                  "openai",
-                  "gpt-5.4",
-                  startedAt,
-                  "2026-08-13T09:00:01.200Z",
-                  contextSessionMessages
-              )
+            ? sessionLines(contextSessionId, "openai", "openai", "gpt-5.4", contextSessionMessages)
             : []),
-        ...stepLines(
-            2,
-            "review-changes",
-            "agent",
-            reviewStepId,
-            "review-changes",
-            "2026-08-13T09:00:01.200Z",
-            "2026-08-13T09:00:42.000Z",
-            { session: sessionId, output: reviewOutput }
-        ),
+        ...stepOutputLines(prepareOutput),
+        blank(),
+        ...stepLines(2, "review-changes", "coding-agent", "2026-08-13T09:00:01.200Z", "2026-08-13T09:00:42.000Z", {
+            ...(includeSessions ? {} : { session: sessionId })
+        }),
+        ...(includeSessions ? sessionLines(sessionId, "codex", "openai", "gpt-5.4-codex", reviewSessionMessages) : []),
+        ...stepOutputLines(reviewOutput),
+        blank(),
+        ...stepLines(3, "synthesize-verdict", "llm", "2026-08-13T09:00:42.000Z", verdictEndedAt, {
+            ...(includeSessions ? {} : { session: verdictSessionId })
+        }),
         ...(includeSessions
-            ? sessionLines(
-                  sessionId,
-                  "coding-agent",
-                  "codex",
-                  "openai",
-                  "gpt-5.4-codex",
-                  "2026-08-13T09:00:01.200Z",
-                  "2026-08-13T09:00:42.000Z",
-                  reviewSessionMessages
-              )
+            ? sessionLines(verdictSessionId, "openai", "openai", "gpt-5.4", verdictSessionMessages)
             : []),
-        ...stepLines(
-            3,
-            "synthesize-verdict",
-            "llm",
-            verdictStepId,
-            "synthesize-verdict",
-            "2026-08-13T09:00:42.000Z",
-            verdictEndedAt,
-            { session: verdictSessionId, output: verdictOutput }
-        ),
-        ...(includeSessions
-            ? sessionLines(
-                  verdictSessionId,
-                  "llm",
-                  "openai",
-                  "openai",
-                  "gpt-5.4",
-                  "2026-08-13T09:00:42.000Z",
-                  verdictEndedAt,
-                  verdictSessionMessages
-              )
-            : []),
-        ...stepLines(
-            4,
-            "artifact:review-summary",
-            "artifact",
-            artifactStepId,
-            "artifact:review-summary",
-            verdictEndedAt,
-            endedAt,
-            { artifact: artifactId, output: artifactOutput }
-        ),
-        ...artifactLines(completedArtifacts)
+        ...stepOutputLines(verdictOutput),
+        blank(),
+        ...stepLines(4, "artifact:review-summary", "artifact", verdictEndedAt, endedAt, {
+            artifact: artifactId
+        }),
+        ...stepOutputLines(artifactOutput),
+        ...artifactLines(completedArtifacts),
+        ...outputLines(completedOutput)
     ]
 }
 
@@ -265,9 +235,9 @@ export const scenarios: Scenario[] = [
             line("Step prepare-context (llm): running"),
             ...contextSessionMessages.map((message) => line(message)),
             line("Step prepare-context (llm): succeeded"),
-            line("Step review-changes (agent): running"),
+            line("Step review-changes (coding-agent): running"),
             ...reviewSessionMessages.map((message) => line(message)),
-            line("Step review-changes (agent): succeeded"),
+            line("Step review-changes (coding-agent): succeeded"),
             line("Step synthesize-verdict (llm): running"),
             ...verdictSessionMessages.map((message) => line(message)),
             line("Step synthesize-verdict (llm): succeeded"),
@@ -286,9 +256,9 @@ export const scenarios: Scenario[] = [
         delivery: "streaming",
         lines: [
             line("Step collect-changes (custom): succeeded"),
-            line("Step draft-notes (agent): running"),
+            line("Step draft-notes (coding-agent): running"),
             ...failedReviewSessionMessages.map((message) => line(message)),
-            line("Step draft-notes (agent): failed: Repository checks failed"),
+            line("Step draft-notes (coding-agent): failed: Repository checks failed"),
             line(`Run ${runId}: failed`)
         ]
     },
@@ -327,8 +297,8 @@ export const scenarios: Scenario[] = [
         group: "Snapshots",
         label: "Completed run",
         command: `loopy runs get ${runId}`,
-        summary: "A run snapshot prints metadata, pretty JSON output, detailed steps, and artifacts in that order.",
-        note: "Every step uses a multi-line labeled record in the current output.",
+        summary: "A run snapshot prints metadata, detailed steps, artifacts, and its final output in that order.",
+        note: "Run and step metadata is grouped beneath semantic headings using indentation and spacing.",
         delivery: "instant",
         startAtTop: true,
         lines: completedRunLines(false)
@@ -339,7 +309,7 @@ export const scenarios: Scenario[] = [
         label: "Completed run including sessions",
         command: `loopy runs get ${runId} --include sessions`,
         summary: "Included session snapshots are nested beneath the steps that reference them.",
-        note: "Session fields are indented four spaces and messages six spaces within the run snapshot.",
+        note: "Included sessions nest client, provider, model, and aligned message roles beneath their owning step.",
         delivery: "instant",
         startAtTop: true,
         lines: completedRunLines(true)
@@ -354,39 +324,28 @@ export const scenarios: Scenario[] = [
         delivery: "instant",
         startAtTop: true,
         lines: [
-            line(`Run: ${stringRunId}`),
-            line("Workflow: release-notes"),
-            line("Key: v0.1.0"),
-            line("Attempt: 1"),
-            line("Status: succeeded"),
-            line("Started: 2026-08-13T10:15:00.000Z"),
-            line("Ended: 2026-08-13T10:15:04.800Z"),
-            ...outputLines("Release notes are ready for review."),
-            blank(),
-            line("Steps:"),
-            ...stepLines(
+            ...runLines(
+                stringRunId,
+                "release-notes",
+                "v0.1.0",
                 1,
-                "collect-changes",
-                "custom",
-                "sG2mP8vD4xN7qL1cR6wK9",
-                "collect-changes",
+                "succeeded",
                 "2026-08-13T10:15:00.000Z",
-                "2026-08-13T10:15:00.400Z",
-                { output: { count: 3 } }
-            ),
-            ...stepLines(
-                2,
-                "draft-notes",
-                "llm",
-                "sN5tA9jH3mQ8vF2cL7xR1",
-                "draft-notes",
-                "2026-08-13T10:15:00.400Z",
-                "2026-08-13T10:15:04.800Z",
-                { session: draftSessionId, output: "Release notes are ready for review." }
+                "2026-08-13T10:15:04.800Z"
             ),
             blank(),
-            line("Artifacts:"),
-            line("None", 1)
+            line("Steps"),
+            ...stepLines(1, "collect-changes", "custom", "2026-08-13T10:15:00.000Z", "2026-08-13T10:15:00.400Z"),
+            ...stepOutputLines({ count: 3 }),
+            blank(),
+            ...stepLines(2, "draft-notes", "llm", "2026-08-13T10:15:00.400Z", "2026-08-13T10:15:04.800Z", {
+                session: draftSessionId
+            }),
+            ...stepOutputLines("Release notes are ready for review."),
+            blank(),
+            line("Artifacts"),
+            line("None", 1),
+            ...outputLines("Release notes are ready for review.")
         ]
     },
     {

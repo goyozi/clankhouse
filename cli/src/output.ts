@@ -70,6 +70,43 @@ export function timestamp(value: Parameters<typeof timestampDate>[0] | undefined
     return value === undefined ? "-" : timestampDate(value).toISOString()
 }
 
+export function executionTiming(
+    startedAt: Parameters<typeof timestampDate>[0] | undefined,
+    endedAt: Parameters<typeof timestampDate>[0] | undefined,
+    now = new Date()
+): string | undefined {
+    if (startedAt === undefined) return undefined
+    const started = timestampDate(startedAt)
+    if (endedAt !== undefined) {
+        const milliseconds = Math.max(0, timestampDate(endedAt).getTime() - started.getTime())
+        const totalMinutes = Math.floor(milliseconds / 60_000)
+        if (totalMinutes >= 60) {
+            const hours = Math.floor(totalMinutes / 60)
+            return `${hours}h${totalMinutes % 60}m`
+        }
+        if (totalMinutes >= 1) {
+            const seconds = Math.floor(milliseconds / 1000) % 60
+            return `${totalMinutes}m${seconds}s`
+        }
+        return `${Number((milliseconds / 1000).toFixed(3))}s`
+    }
+    const time = `${twoDigits(started.getHours())}:${twoDigits(started.getMinutes())}`
+    if (sameLocalDate(started, now)) return `from ${time}`
+    return `from ${started.getFullYear()}-${twoDigits(started.getMonth() + 1)}-${twoDigits(started.getDate())} ${time}`
+}
+
+function sameLocalDate(left: Date, right: Date): boolean {
+    return (
+        left.getFullYear() === right.getFullYear() &&
+        left.getMonth() === right.getMonth() &&
+        left.getDate() === right.getDate()
+    )
+}
+
+function twoDigits(value: number): string {
+    return String(value).padStart(2, "0")
+}
+
 export function indent(value: string, levels = 1): string {
     const prefix = "  ".repeat(levels)
     return value

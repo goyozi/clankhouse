@@ -29,14 +29,14 @@ export const line = (text: string, depth = 0): TerminalLine => ({ text, depth })
 export const blank = (): TerminalLine => line("")
 
 export function outputLines(value: unknown): TerminalLine[] {
-    return [blank(), line("Output:"), ...jsonLines(value, 1)]
+    return [blank(), line("Output"), ...jsonLines(value, 1)]
 }
 
 export function artifactLines(artifacts: ArtifactFixture[]): TerminalLine[] {
     if (artifacts.length === 0) return []
     return [
         blank(),
-        line("Artifacts:"),
+        line("Artifacts"),
         ...artifacts.map((artifact) =>
             line(`${artifact.id}: ${artifact.name} (${artifact.kind}, ${artifact.mediaType})`, 1)
         )
