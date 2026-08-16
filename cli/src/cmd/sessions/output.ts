@@ -1,63 +1,53 @@
 import {
-    GetSessionResponseSchema,
     SessionKind,
     SessionRole,
     ToolResultStatus,
     ToolSourceKind,
-    WatchSessionResponseSchema,
     type GetSessionResponse,
     type Session,
     type SessionMessage
 } from "@loopy/server/proto"
-import type { Command } from "commander"
-import { executionStatus, indent, timestamp } from "../output"
-import type { Runtime } from "../runtime"
+import { executionStatus, executionTiming, indent } from "../../output"
 
-export function registerSessions(program: Command, runtime: Runtime): void {
-    const sessions = program.command("sessions").description("Inspect AI sessions")
-    sessions
-        .command("get")
-        .description("Get an AI session")
-        .argument("<session-id>")
-        .action(async (sessionId: string, _options: unknown, command: Command) => {
-            const client = await runtime.client(command)
-            const response = await client.getSession({ sessionId }, { signal: runtime.signal })
-            await runtime.emit(command, GetSessionResponseSchema, response, () => formatSession(response))
-        })
-    sessions
-        .command("watch")
-        .description("Watch AI session messages")
-        .argument("<session-id>")
-        .action(async (sessionId: string, _options: unknown, command: Command) => {
-            const client = await runtime.client(command)
-            const output = runtime.output(command)
-            for await (const response of client.watchSession({ sessionId }, { signal: runtime.signal })) {
-                if (output.json) await output.proto(WatchSessionResponseSchema, response)
-                else if (response.message !== undefined) await output.write(formatSessionMessage(response.message))
-            }
-        })
-}
-
-function formatSession(response: GetSessionResponse): string {
+export function formatSession(response: GetSessionResponse): string {
     if (response.session === undefined) return "Session response is empty.\n"
     return formatSessionValue(response.session)
 }
 
 export function formatSessionValue(session: Session): string {
-    const lines = [
-        `Session: ${session.id}`,
-        `Kind: ${sessionKind(session.kind)}`,
-        `Client: ${session.client}`,
-        `Provider: ${session.provider}`,
-        `Model: ${session.model}`,
-        `Status: ${executionStatus(session.status)}`,
-        `Started: ${timestamp(session.startedAt)}`,
-        `Ended: ${timestamp(session.endedAt)}`,
-        "Messages:"
-    ]
-    if (session.messages.length === 0) lines.push("  None")
-    else for (const message of session.messages) lines.push(indent(formatSessionMessage(message).trimEnd()))
+    const lines = [...formatSessionHeader(session, new Date()), "", "Messages"]
+    if (session.messages.length === 0) lines.push(indent("None"))
+    else {
+        for (const message of session.messages) {
+            lines.push(...formatAlignedSessionMessage(message).map((line) => nestedLine(line)))
+        }
+    }
     return `${lines.join("\n")}\n`
+}
+
+export function formatSessionWatchHeader(response: GetSessionResponse): string {
+    if (response.session === undefined) return "Session response is empty.\n"
+    return `${formatSessionHeader(response.session, new Date()).join("\n")}\n\nMessages\n`
+}
+
+export function formatSessionMessageLines(message: SessionMessage): string {
+    return `${formatAlignedSessionMessage(message)
+        .map((line) => nestedLine(line))
+        .join("\n")}\n`
+}
+
+export function formatAlignedSessionMessage(message: SessionMessage): string[] {
+    const formatted = formatSessionMessage(message).trimEnd()
+    const separator = formatted.indexOf(":")
+    if (separator === -1) return formatted.split("\n")
+    const rawRole = formatted.slice(0, separator)
+    const role = rawRole === "tool_result" ? "result" : rawRole
+    const rawContent = formatted.slice(separator + 1)
+    const content = rawContent.startsWith(" ") ? rawContent.slice(1) : rawContent
+    const prefix = role.padEnd(11)
+    return content
+        .split("\n")
+        .map((line, index) => `${index === 0 ? prefix : " ".repeat(prefix.length)}${line}`.trimEnd())
 }
 
 export function formatSessionMessage(message: SessionMessage): string {
@@ -85,6 +75,21 @@ export function formatSessionMessage(message: SessionMessage): string {
         default:
             return "unspecified:\n"
     }
+}
+
+function formatSessionHeader(session: Session, now: Date): string[] {
+    const timing = executionTiming(session.startedAt, session.endedAt, now)
+    const execution =
+        timing === undefined ? executionStatus(session.status) : `${executionStatus(session.status)} · ${timing}`
+    return [
+        `Session ${session.id}`,
+        indent(`${sessionKind(session.kind)} · ${session.client} · ${session.provider}/${session.model}`),
+        indent(execution)
+    ]
+}
+
+function nestedLine(value: string): string {
+    return value.length === 0 ? "" : indent(value)
 }
 
 function toolResultStatus(value: ToolResultStatus): string {

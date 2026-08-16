@@ -181,15 +181,29 @@ function alignedSessionMessageLines(message: string): string[] {
     const rawRole = message.slice(0, separator)
     const role = rawRole === "tool_result" ? "result" : rawRole
     const prefix = role.padEnd(11)
-    return message
-        .slice(separator + 1)
-        .trimStart()
+    const content = message.slice(separator + 1)
+    return (content.startsWith(" ") ? content.slice(1) : content)
         .split("\n")
         .map((content, index) => `${index === 0 ? prefix : " ".repeat(prefix.length)}${content}`.trimEnd())
 }
 
 function sessionMessageLines(message: string): TerminalLine[] {
     return alignedSessionMessageLines(message).map((text) => stepNestedLine(text, 4))
+}
+
+function sessionHeaderLines(
+    id: string,
+    kind: string,
+    client: string,
+    provider: string,
+    model: string,
+    state: string
+): TerminalLine[] {
+    return [line(`Session ${id}`), line(`${kind} · ${client} · ${provider}/${model}`, 1), line(state, 1)]
+}
+
+function standaloneSessionMessageLines(message: string): TerminalLine[] {
+    return alignedSessionMessageLines(message).map((text) => line(text, 1))
 }
 
 function completedRunLines(includeSessions: boolean): TerminalLine[] {
@@ -449,6 +463,20 @@ const failedWatchChunks = [
     ]),
     activityLines("14:05:12", `Run ${failedRunId}`, ["failed · 12.4s", "Error Repository checks failed"])
 ]
+const sessionGetLines = [
+    ...sessionHeaderLines(sessionId, "coding-agent", "codex", "openai", "gpt-5.4-codex", "succeeded · 40.8s"),
+    blank(),
+    line("Messages"),
+    ...reviewSessionMessages.flatMap(standaloneSessionMessageLines)
+]
+const sessionWatchChunks = [
+    [
+        ...sessionHeaderLines(sessionId, "coding-agent", "codex", "openai", "gpt-5.4-codex", "running · from 09:00"),
+        blank(),
+        line("Messages")
+    ],
+    ...reviewSessionMessages.map(standaloneSessionMessageLines)
+]
 
 export const scenarios: Scenario[] = [
     {
@@ -620,32 +648,23 @@ export const scenarios: Scenario[] = [
         group: "Sessions",
         label: "Get session",
         command: `loopy sessions get ${sessionId}`,
-        summary: "A session snapshot prints identity, model metadata, timestamps, and its message history.",
-        note: "Messages are indented two spaces beneath the Messages heading.",
+        summary:
+            "A session snapshot groups its identity, client and model metadata, terminal state, and message history.",
+        note: "The compact header mirrors a run snapshot; message roles are aligned and tool_result is shortened to result.",
         delivery: "instant",
         startAtTop: true,
-        lines: [
-            line(`Session: ${sessionId}`),
-            line("Kind: coding-agent"),
-            line("Client: codex"),
-            line("Provider: openai"),
-            line("Model: gpt-5.4-codex"),
-            line("Status: succeeded"),
-            line("Started: 2026-08-13T09:00:01.200Z"),
-            line("Ended: 2026-08-13T09:00:42.000Z"),
-            line("Messages:"),
-            ...reviewSessionMessages.map((message) => line(message, 1))
-        ]
+        lines: sessionGetLines
     },
     {
         id: "sessions-watch",
         group: "Sessions",
         label: "Watch session",
         command: `loopy sessions watch ${sessionId}`,
-        summary: "Session watch prints each message payload as it arrives.",
-        note: "Existing history is replayed without a heading or indentation.",
+        summary: "Session watch emits an append-only stream of aligned messages.",
+        note: "Existing history and live arrivals share the snapshot's message format; the stream ends without a status update.",
         delivery: "streaming",
-        lines: reviewSessionMessages.map((message) => line(message))
+        lines: sessionWatchChunks.flat(),
+        chunks: sessionWatchChunks
     },
     {
         id: "artifacts-get",

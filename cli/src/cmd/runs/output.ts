@@ -12,7 +12,7 @@ import {
 } from "@loopy/server/proto"
 import { executionStatus, executionTiming, indent, prettyJson, table, timestamp } from "../../output"
 import { formatArtifactValue } from "../artifacts"
-import { formatSessionMessage } from "../sessions"
+import { formatAlignedSessionMessage, formatSessionMessage } from "../sessions/output"
 
 export function formatRunId(runId: string): string {
     return `${runId}\n`
@@ -130,20 +130,6 @@ function formatIncludedSession(session: Session): string[] {
 
 function formatIncludedSessionMessage(message: Session["messages"][number]): string[] {
     return formatAlignedSessionMessage(message)
-}
-
-function formatAlignedSessionMessage(message: SessionMessage): string[] {
-    const formatted = formatSessionMessage(message).trimEnd()
-    const separator = formatted.indexOf(":")
-    if (separator === -1) return [formatted]
-    const rawRole = formatted.slice(0, separator)
-    const role = rawRole === "tool_result" ? "result" : rawRole
-    const content = formatted
-        .slice(separator + 1)
-        .trimStart()
-        .split("\n")
-    const prefix = role.padEnd(11)
-    return content.map((line, index) => `${index === 0 ? prefix : " ".repeat(prefix.length)}${line}`.trimEnd())
 }
 
 function formatExecution(
