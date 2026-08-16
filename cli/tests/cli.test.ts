@@ -760,18 +760,22 @@ test("human run watch does not repeat a step when only hidden metadata changes",
 
     // when watching starts before the agent gains its session metadata
     const watch = startCli(["runs", "watch", runId, "--include", "sessions"], { env })
-    await waitForOutput(watch, "Step ready (custom): running")
+    await waitForOutput(watch, "1. ready")
     ready.release()
-    await waitForOutput(watch, "Step plan (coding-agent): running")
+    await waitForOutput(watch, "2. plan")
     attachSession.release()
-    await waitForOutput(watch, "user: plan")
+    await waitForOutput(watch, "user       plan")
     parked.release()
     const code = await watch.done
-    const planUpdates = lines(watch.stdout()).filter((line) => line.startsWith("Step plan "))
+    const planUpdates = lines(watch.stdout())
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith("coding-agent ·"))
 
     // then the human output reports each visible agent state once
     expect(code).toBe(0)
-    expect(planUpdates).toEqual(["Step plan (coding-agent): running", "Step plan (coding-agent): succeeded"])
+    expect(planUpdates).toHaveLength(2)
+    expect(planUpdates[0]).toBe("coding-agent · running")
+    expect(planUpdates[1]).toMatch(/^coding-agent · succeeded · /)
 })
 
 test("human get --watch does not repeat a snapshotted step when only hidden metadata changes", async () => {
@@ -819,16 +823,22 @@ test("human get --watch does not repeat a snapshotted step when only hidden meta
 
     // when snapshot-then-tail watching starts before the session is attached
     const watch = startCli(["runs", "get", runId, "--include", "sessions", "--watch"], { env })
-    await waitForOutput(watch, `  ${plan.seq}. ${plan.key}`)
+    await waitForOutput(watch, `  ${plan.seq + 1}. ${plan.key}`)
     attachSession.release()
-    await waitForOutput(watch, "user: plan")
+    await waitForOutput(watch, "user       plan")
     parked.release()
     const code = await watch.done
-    const planUpdates = lines(watch.stdout()).filter((line) => line.startsWith("Step plan "))
+    const updates = watch.stdout().toString("utf8").split("\nUpdates\n")[1] ?? ""
+    const planUpdates = updates
+        .trim()
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith("coding-agent ·"))
 
     // then the snapshot's visible running state is not repeated by the metadata-only update
     expect(code).toBe(0)
-    expect(planUpdates).toEqual(["Step plan (coding-agent): succeeded"])
+    expect(planUpdates).toHaveLength(1)
+    expect(planUpdates[0]).toMatch(/^coding-agent · succeeded · /)
 })
 
 test("included session failures do not stop the primary run watch", async () => {

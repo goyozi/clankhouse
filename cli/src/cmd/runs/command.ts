@@ -27,13 +27,12 @@ import type { Output } from "../../output"
 import type { Runtime } from "../../runtime"
 import {
     formatRun,
+    formatRunActivityHeader,
     formatRunId,
     formatRunOutput,
     formatRuns,
-    formatRunWatch,
     formatSessionErrorPrefix,
-    formatSessionWatch,
-    formatStepUpdate
+    RunActivityFormatter
 } from "./output"
 
 type RunGetOptions = {
@@ -53,6 +52,11 @@ type RunWatchOptions = {
     signal: AbortSignal
     knownSteps?: ReadonlyMap<string, string>
     sessionCursors?: ReadonlyMap<string, string | undefined>
+}
+
+type HumanRunWatch = {
+    formatter: RunActivityFormatter
+    sessions: Map<string, Session>
 }
 
 export function registerRuns(program: Command, runtime: Runtime): void {
@@ -118,13 +122,21 @@ export function registerRuns(program: Command, runtime: Runtime): void {
         .action(async (runId: string, options: { include?: "sessions" }, command: Command) => {
             const client = await runtime.client(command)
             const output = runtime.output(command)
-            const renderedSteps = new Map<string, string>()
+            let human: HumanRunWatch | undefined
+            if (!output.json) {
+                const initial = await client.getRun({ runId }, { signal: runtime.signal })
+                await output.write(formatRunActivityHeader(initial))
+                human = {
+                    formatter: new RunActivityFormatter(initial.run?.steps ?? []),
+                    sessions: new Map()
+                }
+            }
             for await (const item of watchRun(client, {
                 runId,
                 includeSessions: options.include === "sessions",
                 signal: runtime.signal
             })) {
-                await emitWatchItem(runtime, command, output, item, renderedSteps)
+                await emitWatchItem(runtime, command, client, output, item, human)
             }
         })
     runs.command("resume")
@@ -220,7 +232,17 @@ async function getRun(runtime: Runtime, command: Command, runId: string, options
         })
     )
     const fromStepId = watchFromStepId(initial.run?.steps ?? [])
-    const renderedSteps = new Map(initial.run?.steps.map((step) => [step.id, formatStepUpdate(step)]))
+    const sessions = sessionMap(initialSessions)
+    const human = output.json
+        ? undefined
+        : {
+              formatter: new RunActivityFormatter(initial.run?.steps ?? [], sessions.values(), {
+                  renderedSteps: true,
+                  introducedSessions: true
+              }),
+              sessions
+          }
+    if (human !== undefined) await output.write("\nUpdates\n")
     for await (const item of watchRun(client, {
         runId,
         ...(fromStepId !== undefined ? { fromStepId } : {}),
@@ -229,12 +251,14 @@ async function getRun(runtime: Runtime, command: Command, runId: string, options
         knownSteps,
         sessionCursors
     })) {
-        await emitWatchItem(runtime, command, output, item, renderedSteps)
+        await emitWatchItem(runtime, command, client, output, item, human)
     }
 
-    const final = await client.getRun({ runId }, { signal: runtime.signal })
-    await emitRunSnapshot(output, final, [])
-    if (final.run?.metadata !== undefined && failedStatus(final.run.metadata.status)) runtime.failResult()
+    if (output.json) {
+        const final = await client.getRun({ runId }, { signal: runtime.signal })
+        await emitRunSnapshot(output, final, [])
+        if (final.run?.metadata !== undefined && failedStatus(final.run.metadata.status)) runtime.failResult()
+    }
 }
 
 async function getRunSessions(
@@ -269,6 +293,14 @@ async function emitRunSnapshot(
     await output.write(formatRun(response, sessions))
 }
 
+function sessionMap(responses: readonly GetSessionResponse[]): Map<string, Session> {
+    const sessions = new Map<string, Session>()
+    for (const response of responses) {
+        if (response.session !== undefined) sessions.set(response.session.id, response.session)
+    }
+    return sessions
+}
+
 function observeRunFailure(runtime: Runtime, response: WatchRunResponse | undefined): void {
     if (response?.item.case === "run" && failedStatus(response.item.value.status)) runtime.failResult()
 }
@@ -276,9 +308,10 @@ function observeRunFailure(runtime: Runtime, response: WatchRunResponse | undefi
 async function emitWatchItem(
     runtime: Runtime,
     command: Command,
+    client: LoopyClient,
     output: Output,
     item: RunWatchItem,
-    renderedSteps: Map<string, string>
+    human: HumanRunWatch | undefined
 ): Promise<void> {
     if (item.kind === "session-error") {
         await runtime.reportError(command, item.error, {
@@ -287,14 +320,31 @@ async function emitWatchItem(
         })
         return
     }
-    if (output.json) await output.proto(item.schema, item.message)
-    else if (item.kind === "run") {
-        const rendered = formatRunWatch(item.message)
-        if (item.message.item.case !== "step" || renderedSteps.get(item.message.item.value.id) !== rendered) {
-            if (item.message.item.case === "step") renderedSteps.set(item.message.item.value.id, rendered)
-            await output.write(rendered)
+    if (output.json) {
+        await output.proto(item.schema, item.message)
+    } else if (human !== undefined && item.kind === "run") {
+        if (item.message.item.case === "step") {
+            const rendered = human.formatter.formatStep(item.message.item.value)
+            if (rendered.length > 0) await output.write(rendered)
+        } else if (item.message.item.case === "run") {
+            const response = await client.getRun({ runId: item.message.item.value.id }, { signal: runtime.signal })
+            const rendered = human.formatter.formatRun(response)
+            if (rendered.length > 0) await output.write(rendered)
         }
-    } else if (item.message.message !== undefined) await output.write(formatSessionWatch(item.message.message))
+    } else if (human !== undefined && item.kind === "session" && item.message.message !== undefined) {
+        const message = item.message.message
+        let session = human.sessions.get(message.sessionId)
+        if (session === undefined) {
+            const response = await client.getSession({ sessionId: message.sessionId }, { signal: runtime.signal })
+            session = response.session
+            if (session !== undefined) {
+                human.sessions.set(session.id, session)
+                human.formatter.registerSession(session)
+            }
+        }
+        const rendered = human.formatter.formatSessionMessage(message)
+        if (rendered.length > 0) await output.write(rendered)
+    }
     observeRunFailure(runtime, item.kind === "run" ? item.message : undefined)
 }
 
