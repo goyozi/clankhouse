@@ -18,9 +18,12 @@ const verdictSessionId = "J4wT9bH2nF7qC5yM1sV8k"
 const draftSessionId = "D6qN1vR8mK3xT9cP4wH7s"
 const artifactId = "U5zC7dF2jR9wE1bG6sA4n"
 const rerunId = "R8qM3vD7kL2xP9sF5wN1c"
+const releaseRunId = "cJ6yF1bL8qS3wG9nE2zM5"
 const startedAt = "2026-08-13T09:00:00.000Z"
 const verdictEndedAt = "2026-08-13T09:00:56.000Z"
 const endedAt = "2026-08-13T09:00:56.200Z"
+const releaseStartedAt = "2026-08-13T11:20:00.000Z"
+const releaseEndedAt = "2026-08-13T11:21:18.600Z"
 const artifactFile = `artifacts/${runId}/artifact-review-summary-70303574`
 const completedOutput = {
     verdict: "approve",
@@ -45,6 +48,20 @@ const completedArtifacts: ArtifactFixture[] = [
         mediaType: "text/markdown"
     }
 ]
+const packageOutput = {
+    file: "loopy-0.1.0.tgz",
+    integrity: "sha512-m7GK9wQ3V1tC6xP8"
+}
+const approvalOutput = {
+    key: "approval:release-0.1",
+    event: {
+        approved: true
+    }
+}
+const releaseOutput = {
+    package: "@loopy/core",
+    version: "0.1.0"
+}
 const workflowInputSchema = {
     type: "object",
     properties: {
@@ -194,6 +211,55 @@ function completedRunLines(includeSessions: boolean): TerminalLine[] {
     ]
 }
 
+function runningReleaseLines(): TerminalLine[] {
+    return [
+        line(`Run ${releaseRunId}`),
+        line("publish-release · release-0.1 · attempt 1", 1),
+        line("running · from 13:20", 1),
+        blank(),
+        line("Steps"),
+        ...stepLines(1, "build-package", "custom", releaseStartedAt, "2026-08-13T11:20:03.400Z"),
+        ...stepOutputLines(packageOutput),
+        blank(),
+        line("2. wait:approval:release-0.1", 1),
+        stepNestedLine("event · running · from 13:20", 2),
+        blank(),
+        line("Artifacts"),
+        line("None", 1)
+    ]
+}
+
+function completedReleaseLines(): TerminalLine[] {
+    return [
+        ...runLines(releaseRunId, "publish-release", "release-0.1", 1, "succeeded", releaseStartedAt, releaseEndedAt),
+        blank(),
+        line("Steps"),
+        ...stepLines(1, "build-package", "custom", releaseStartedAt, "2026-08-13T11:20:03.400Z"),
+        ...stepOutputLines(packageOutput),
+        blank(),
+        ...stepLines(2, "wait:approval:release-0.1", "event", "2026-08-13T11:20:03.400Z", "2026-08-13T11:21:14.100Z"),
+        blank(),
+        stepNestedLine("Event approval:release-0.1", 2),
+        ...stepOutputLines(approvalOutput),
+        blank(),
+        ...stepLines(3, "publish-package", "custom", "2026-08-13T11:21:14.100Z", releaseEndedAt),
+        ...stepOutputLines(releaseOutput),
+        blank(),
+        line("Artifacts"),
+        line("None", 1),
+        ...outputLines(releaseOutput)
+    ]
+}
+
+const releaseWatchChunks = [
+    runningReleaseLines(),
+    [line("Step wait:approval:release-0.1 (event): succeeded")],
+    [line("Step publish-package (custom): running")],
+    [line("Step publish-package (custom): succeeded")],
+    [line(`Run ${releaseRunId}: succeeded`)],
+    completedReleaseLines()
+]
+
 export const scenarios: Scenario[] = [
     {
         id: "workflows-list",
@@ -261,6 +327,17 @@ export const scenarios: Scenario[] = [
             line("Step draft-notes (coding-agent): failed: Repository checks failed"),
             line(`Run ${runId}: failed`)
         ]
+    },
+    {
+        id: "get-watch-success",
+        group: "Live runs",
+        label: "Get and watch run",
+        command: `loopy runs get ${releaseRunId} --watch`,
+        summary: "Get with watch prints a running snapshot, tails later updates, then prints the completed snapshot.",
+        note: "The initial and final snapshots arrive as blocks; only state changes are streamed between them.",
+        delivery: "streaming",
+        lines: releaseWatchChunks.flat(),
+        chunks: releaseWatchChunks
     },
     {
         id: "runs-start",
@@ -359,15 +436,7 @@ export const scenarios: Scenario[] = [
         lines: tableLines(
             ["ID", "WORKFLOW", "KEY", "ATTEMPT", "STATUS", "STARTED", "ENDED"],
             [
-                [
-                    "cJ6yF1bL8qS3wG9nE2zM5",
-                    "publish-release",
-                    "release-0.1",
-                    "1",
-                    "running",
-                    "2026-08-13T11:20:00.000Z",
-                    "-"
-                ],
+                [releaseRunId, "publish-release", "release-0.1", "1", "running", "2026-08-13T11:20:00.000Z", "-"],
                 ["aP4vR9tN2xH7mK1dQ6sW8", "release-notes", "v0.1.0", "1", "running", "2026-08-13T11:17:18.000Z", "-"],
                 [runId, "review-pull-request", "pr-482", "1", "succeeded", startedAt, endedAt]
             ]

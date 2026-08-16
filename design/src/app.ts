@@ -31,15 +31,19 @@ export function startApp(): void {
         terminal.setLabel(scenario.label)
     }
 
-    const playStreamingLines = async (lines: TerminalLine[], signal: AbortSignal): Promise<void> => {
+    const playStreamingLines = async (
+        lines: TerminalLine[],
+        chunks: TerminalLine[][] | undefined,
+        signal: AbortSignal
+    ): Promise<void> => {
         if (reducedMotion.matches) {
             terminal.renderLines(lines)
             return
         }
         const visible: TerminalLine[] = []
-        for (const item of lines) {
+        for (const chunk of chunks ?? lines.map((item) => [item])) {
             await pause(260, signal)
-            visible.push(item)
+            visible.push(...chunk)
             terminal.renderLines(visible)
         }
     }
@@ -61,7 +65,7 @@ export function startApp(): void {
             if (scenario.delivery === "instant") {
                 terminal.renderLines(scenario.lines)
             } else {
-                await playStreamingLines(scenario.lines, controller.signal)
+                await playStreamingLines(scenario.lines, scenario.chunks, controller.signal)
             }
             if (mode === "interactive") terminal.renderEmptyPrompt()
             if (scenario.startAtTop === true) terminal.scrollToTop()

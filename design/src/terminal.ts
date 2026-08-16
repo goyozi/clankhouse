@@ -22,6 +22,7 @@ export type Scenario = {
     note: string
     delivery: ResultDelivery
     lines: TerminalLine[]
+    chunks?: TerminalLine[][]
     startAtTop?: boolean
 }
 
