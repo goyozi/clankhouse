@@ -494,16 +494,16 @@ export const scenarios: Scenario[] = [
         group: "Workflows",
         label: "Get workflow",
         command: "loopy workflows get dual-review",
-        summary: "A workflow definition prints its input and output JSON Schemas.",
-        note: "Schemas are pretty-printed JSON indented by two spaces.",
+        summary: "A workflow definition groups its name and input and output schemas into a compact snapshot.",
+        note: "The entity header mirrors run and session snapshots; schemas sit beneath short semantic headings.",
         delivery: "instant",
         lines: [
-            line("Workflow: dual-review"),
+            line("Workflow dual-review"),
             blank(),
-            line("Input schema:"),
+            line("Input"),
             ...jsonLines(workflowInputSchema, 1),
             blank(),
-            line("Output schema:"),
+            line("Output"),
             ...jsonLines(workflowOutputSchema, 1)
         ]
     },
@@ -671,16 +671,14 @@ export const scenarios: Scenario[] = [
         group: "Artifacts",
         label: "Get artifact metadata",
         command: `loopy artifacts get ${artifactId}`,
-        summary: "Artifact metadata is printed as six labeled fields.",
-        note: "The current field order begins with the artifact ID and owning run.",
+        summary: "Artifact metadata groups identity, format, ownership, and storage location into a compact snapshot.",
+        note: "Name, kind, and media type share one summary line; the owning run and file remain explicit references.",
         delivery: "instant",
         lines: [
-            line(`Artifact: ${artifactId}`),
-            line(`Run: ${runId}`),
-            line("Name: review-summary"),
-            line("Kind: text"),
-            line(`File: ${artifactFile}`),
-            line("MIME type: text/markdown")
+            line(`Artifact ${artifactId}`),
+            line("review-summary · text · text/markdown", 1),
+            line(`Run ${runId}`, 1),
+            line(`File ${artifactFile}`, 1)
         ]
     },
     {

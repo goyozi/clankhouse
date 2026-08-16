@@ -37,16 +37,17 @@ function formatWorkflows(response: ListWorkflowsResponse): string {
 function formatWorkflow(response: GetWorkflowResponse): string {
     const workflow = response.workflow
     if (workflow === undefined) return "Workflow response is empty.\n"
-    const lines = [`Workflow: ${workflow.name}`]
+    const lines = [`Workflow ${workflow.name}`, "", "Input"]
     if (workflow.inputSchemaJson === undefined) {
-        lines.push("", "Input: none")
+        lines.push(indent("None"))
     } else {
-        lines.push("", "Input schema:", indent(prettyJson(workflow.inputSchemaJson)))
+        lines.push(indent(prettyJson(workflow.inputSchemaJson)))
     }
+    lines.push("", "Output")
     if (workflow.outputSchemaJson === undefined) {
-        lines.push("", "Output: none")
+        lines.push(indent("None"))
     } else {
-        lines.push("", "Output schema:", indent(prettyJson(workflow.outputSchemaJson)))
+        lines.push(indent(prettyJson(workflow.outputSchemaJson)))
     }
     return `${lines.join("\n")}\n`
 }

@@ -8,6 +8,7 @@ import {
 } from "@loopy/server/proto"
 import type { Command } from "commander"
 import { copyWithoutClobber, writeBytes } from "../io"
+import { indent } from "../output"
 import type { Runtime } from "../runtime"
 
 export function registerArtifacts(program: Command, runtime: Runtime): void {
@@ -61,12 +62,10 @@ function formatArtifact(response: GetArtifactResponse): string {
     if (artifact === undefined) return "Artifact response is empty.\n"
     return (
         [
-            `Artifact: ${artifact.id}`,
-            `Run: ${artifact.runId}`,
-            `Name: ${artifact.name}`,
-            `Kind: ${artifactKind(artifact.kind)}`,
-            `File: ${artifact.file}`,
-            `MIME type: ${artifact.mimeType ?? "-"}`
+            `Artifact ${artifact.id}`,
+            indent(`${artifact.name} · ${artifactKind(artifact.kind)} · ${artifact.mimeType ?? "-"}`),
+            indent(`Run ${artifact.runId}`),
+            indent(`File ${artifact.file}`)
         ].join("\n") + "\n"
     )
 }

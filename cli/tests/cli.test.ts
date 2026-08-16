@@ -247,8 +247,8 @@ test("drives FakeLLM and FakeCodingAgent workflows through the complete CLI surf
     // then discovery, filtering, snapshots, sessions, and artifacts use strict ProtoJSON
     expect(workflowList.code).toBe(0)
     expect(listed.workflows.map((workflow) => workflow.name)).toEqual(["build"])
-    expect(workflowHuman.stdout.toString()).toContain("Workflow: build")
-    expect(workflowHuman.stdout.toString()).toContain("Input schema:\n  {")
+    expect(workflowHuman.stdout.toString()).toContain("Workflow build")
+    expect(workflowHuman.stdout.toString()).toContain("\n\nInput\n  {")
     expect(startedResult.code).toBe(0)
     const runList = await runCliCommand(
         ["runs", "list", "--workflow", "build", "--key", "feature-1", "--status", "running", "--limit", "1", "--json"],
@@ -277,7 +277,18 @@ test("drives FakeLLM and FakeCodingAgent workflows through the complete CLI surf
         lines(sessionWatch.stdout).map((line) => fromJsonString(WatchSessionResponseSchema, line).message?.id)
     ).toEqual(session.messages.map((message) => message.id))
     const artifactId = snapshot.run!.artifacts[0]!.id
+    const artifactHuman = await runCliCommand(["artifacts", "get", artifactId], { env })
     const artifact = await runCliCommand(["artifacts", "get", artifactId, "--json"], { env })
+    const artifactMetadata = snapshot.run!.artifacts[0]!
+    expect(artifactHuman.stdout.toString()).toBe(
+        [
+            `Artifact ${artifactId}`,
+            "  summary · text · text/plain",
+            `  Run ${started.runId}`,
+            `  File ${artifactMetadata.file}`,
+            ""
+        ].join("\n")
+    )
     expect({ code: artifact.code, stderr: artifact.stderr }).toEqual({ code: 0, stderr: "" })
     expect(fromJsonString(GetArtifactResponseSchema, lines(artifact.stdout)[0]!).artifact).toMatchObject({
         id: artifactId,
@@ -359,11 +370,11 @@ test("starts void-input workflows without an input file", async () => {
     const rejected = await runCliCommand(["runs", "start", "required-input", "--json"], { env })
 
     // then the void workflow advertises and accepts absent input
-    expect(workflow.stdout.toString()).toContain("Input: none")
+    expect(workflow.stdout.toString()).toContain("Input\n  None")
     expect(startedResult.code).toBe(0)
     expect(output).toBe("done")
     // and an absent output schema is reported the same way as an absent input schema
-    expect(voidOutputWorkflow.stdout.toString()).toContain("Output: none")
+    expect(voidOutputWorkflow.stdout.toString()).toContain("Output\n  None")
     // and a normal workflow rejects absent input with the reason the schema gave
     expect(rejected.code).toBe(1)
     expect(JSON.parse(rejected.stderr)).toMatchObject({
