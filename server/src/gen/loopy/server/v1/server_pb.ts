@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf"
 export const file_loopy_server_v1_server: GenFile =
     /*@__PURE__*/
     fileDesc(
-        "Chxsb29weS9zZXJ2ZXIvdjEvc2VydmVyLnByb3RvEg9sb29weS5zZXJ2ZXIudjEiHwoPV29ya2Zsb3dTdW1tYXJ5EgwKBG5hbWUYASABKAkikAEKEldvcmtmbG93RGVmaW5pdGlvbhIMCgRuYW1lGAEgASgJEh4KEWlucHV0X3NjaGVtYV9qc29uGAIgASgJSACIAQESHwoSb3V0cHV0X3NjaGVtYV9qc29uGAMgASgJSAGIAQFCFAoSX2lucHV0X3NjaGVtYV9qc29uQhUKE19vdXRwdXRfc2NoZW1hX2pzb24ilQEKCEFydGlmYWN0EgoKAmlkGAEgASgJEg4KBnJ1bl9pZBgCIAEoCRIMCgRuYW1lGAMgASgJEgwKBGZpbGUYBCABKAkSKwoEa2luZBgFIAEoDjIdLmxvb3B5LnNlcnZlci52MS5BcnRpZmFjdEtpbmQSFgoJbWltZV90eXBlGAYgASgJSACIAQFCDAoKX21pbWVfdHlwZSKXBAoEU3RlcBIKCgJpZBgBIAEoCRIOCgZydW5faWQYAiABKAkSCwoDa2V5GAMgASgJEgwKBG5hbWUYBCABKAkSCwoDc2VxGAUgASgNEicKBGtpbmQYBiABKA4yGS5sb29weS5zZXJ2ZXIudjEuU3RlcEtpbmQSMAoGc3RhdHVzGAcgASgOMiAubG9vcHkuc2VydmVyLnYxLkV4ZWN1dGlvblN0YXR1cxIuCgpzdGFydGVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIsCghlbmRlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoFZXJyb3IYCiABKAlIAIgBARIYCgtvdXRwdXRfanNvbhgLIAEoCUgBiAEBEhcKCnNlc3Npb25faWQYDCABKAlIAogBARIZCgxzbmFwc2hvdF9yZWYYDSABKAlIA4gBARIYCgthcnRpZmFjdF9pZBgOIAEoCUgEiAEBEhYKCWV2ZW50X2tleRgPIAEoCUgFiAEBEhcKCmVycm9yX2NvZGUYECABKAlIBogBAUIICgZfZXJyb3JCDgoMX291dHB1dF9qc29uQg0KC19zZXNzaW9uX2lkQg8KDV9zbmFwc2hvdF9yZWZCDgoMX2FydGlmYWN0X2lkQgwKCl9ldmVudF9rZXlCDQoLX2Vycm9yX2NvZGUi3gEKC1J1bk1ldGFkYXRhEgoKAmlkGAEgASgJEgsKA2tleRgCIAEoCRIPCgdhdHRlbXB0GAMgASgNEhUKDXdvcmtmbG93X25hbWUYBCABKAkSLgoKc3RhcnRlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoIZW5kZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjAKBnN0YXR1cxgHIAEoDjIgLmxvb3B5LnNlcnZlci52MS5FeGVjdXRpb25TdGF0dXMigQIKC1dvcmtmbG93UnVuEi4KCG1ldGFkYXRhGAEgASgLMhwubG9vcHkuc2VydmVyLnYxLlJ1bk1ldGFkYXRhEhgKC291dHB1dF9qc29uGAIgASgJSACIAQESEgoFZXJyb3IYAyABKAlIAYgBARIkCgVzdGVwcxgEIAMoCzIVLmxvb3B5LnNlcnZlci52MS5TdGVwEiwKCWFydGlmYWN0cxgFIAMoCzIZLmxvb3B5LnNlcnZlci52MS5BcnRpZmFjdBIXCgplcnJvcl9jb2RlGAYgASgJSAKIAQFCDgoMX291dHB1dF9qc29uQggKBl9lcnJvckINCgtfZXJyb3JfY29kZSJKCgtTZXNzaW9uVGV4dBIqCgRyb2xlGAEgASgOMhwubG9vcHkuc2VydmVyLnYxLlNlc3Npb25Sb2xlEg8KB2NvbnRlbnQYAiABKAkiYgoRU2Vzc2lvblRvb2xTb3VyY2USLQoEa2luZBgBIAEoDjIfLmxvb3B5LnNlcnZlci52MS5Ub29sU291cmNlS2luZBITCgZzZXJ2ZXIYAiABKAlIAIgBAUIJCgdfc2VydmVyIrgBCg9TZXNzaW9uVG9vbENhbGwSCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRIyCgZzb3VyY2UYAyABKAsyIi5sb29weS5zZXJ2ZXIudjEuU2Vzc2lvblRvb2xTb3VyY2USNAoLY29tbW9uX25hbWUYBCABKA4yHy5sb29weS5zZXJ2ZXIudjEuQ29tbW9uVG9vbE5hbWUSEgoKaW5wdXRfanNvbhgFIAEoCRINCgVmaWxlcxgGIAMoCSKkAQoRU2Vzc2lvblRvb2xSZXN1bHQSFAoMdG9vbF9jYWxsX2lkGAEgASgJEjEKBnN0YXR1cxgCIAEoDjIhLmxvb3B5LnNlcnZlci52MS5Ub29sUmVzdWx0U3RhdHVzEhgKC291dHB1dF9qc29uGAMgASgJSACIAQESEgoFZXJyb3IYBCABKAlIAYgBAUIOCgxfb3V0cHV0X2pzb25CCAoGX2Vycm9yIo4CCg5TZXNzaW9uTWVzc2FnZRIKCgJpZBgBIAEoCRISCgpzZXNzaW9uX2lkGAIgASgJEi4KCmNyZWF0ZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KB21lc3NhZ2UYBCABKAsyHC5sb29weS5zZXJ2ZXIudjEuU2Vzc2lvblRleHRIABI1Cgl0b29sX2NhbGwYBSABKAsyIC5sb29weS5zZXJ2ZXIudjEuU2Vzc2lvblRvb2xDYWxsSAASOQoLdG9vbF9yZXN1bHQYBiABKAsyIi5sb29weS5zZXJ2ZXIudjEuU2Vzc2lvblRvb2xSZXN1bHRIAEIJCgdwYXlsb2FkIrUCCgdTZXNzaW9uEgoKAmlkGAEgASgJEioKBGtpbmQYAiABKA4yHC5sb29weS5zZXJ2ZXIudjEuU2Vzc2lvbktpbmQSDgoGY2xpZW50GAMgASgJEhAKCHByb3ZpZGVyGAQgASgJEg0KBW1vZGVsGAUgASgJEjAKBnN0YXR1cxgGIAEoDjIgLmxvb3B5LnNlcnZlci52MS5FeGVjdXRpb25TdGF0dXMSLgoKc3RhcnRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoIZW5kZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjEKCG1lc3NhZ2VzGAkgAygLMh8ubG9vcHkuc2VydmVyLnYxLlNlc3Npb25NZXNzYWdlIhYKFExpc3RXb3JrZmxvd3NSZXF1ZXN0IkwKFUxpc3RXb3JrZmxvd3NSZXNwb25zZRIzCgl3b3JrZmxvd3MYASADKAsyIC5sb29weS5zZXJ2ZXIudjEuV29ya2Zsb3dTdW1tYXJ5IiIKEkdldFdvcmtmbG93UmVxdWVzdBIMCgRuYW1lGAEgASgJIkwKE0dldFdvcmtmbG93UmVzcG9uc2USNQoId29ya2Zsb3cYASABKAsyIy5sb29weS5zZXJ2ZXIudjEuV29ya2Zsb3dEZWZpbml0aW9uIlAKD1N0YXJ0UnVuUmVxdWVzdBIVCg13b3JrZmxvd19uYW1lGAEgASgJEhcKCmlucHV0X2pzb24YAiABKAlIAIgBAUINCgtfaW5wdXRfanNvbiIiChBTdGFydFJ1blJlc3BvbnNlEg4KBnJ1bl9pZBgBIAEoCSKrAQoPTGlzdFJ1bnNSZXF1ZXN0EhoKDXdvcmtmbG93X25hbWUYASABKAlIAIgBARIQCgNrZXkYAiABKAlIAYgBARIyCghzdGF0dXNlcxgDIAMoDjIgLmxvb3B5LnNlcnZlci52MS5FeGVjdXRpb25TdGF0dXMSEgoFbGltaXQYBCABKA1IAogBAUIQCg5fd29ya2Zsb3dfbmFtZUIGCgRfa2V5QggKBl9saW1pdCI+ChBMaXN0UnVuc1Jlc3BvbnNlEioKBHJ1bnMYASADKAsyHC5sb29weS5zZXJ2ZXIudjEuUnVuTWV0YWRhdGEiHwoNR2V0UnVuUmVxdWVzdBIOCgZydW5faWQYASABKAkiOwoOR2V0UnVuUmVzcG9uc2USKQoDcnVuGAEgASgLMhwubG9vcHkuc2VydmVyLnYxLldvcmtmbG93UnVuIk0KD1dhdGNoUnVuUmVxdWVzdBIOCgZydW5faWQYASABKAkSGQoMZnJvbV9zdGVwX2lkGAIgASgJSACIAQFCDwoNX2Zyb21fc3RlcF9pZCJuChBXYXRjaFJ1blJlc3BvbnNlEiUKBHN0ZXAYASABKAsyFS5sb29weS5zZXJ2ZXIudjEuU3RlcEgAEisKA3J1bhgCIAEoCzIcLmxvb3B5LnNlcnZlci52MS5SdW5NZXRhZGF0YUgAQgYKBGl0ZW0iIgoQUmVzdW1lUnVuUmVxdWVzdBIOCgZydW5faWQYASABKAkiIwoRUmVzdW1lUnVuUmVzcG9uc2USDgoGcnVuX2lkGAEgASgJIjgKD1JlcnVuUnVuUmVxdWVzdBIOCgZydW5faWQYASABKAkSFQoNZnJvbV9zdGVwX2tleRgCIAEoCSIiChBSZXJ1blJ1blJlc3BvbnNlEg4KBnJ1bl9pZBgBIAEoCSJHChBFbWl0RXZlbnRSZXF1ZXN0EgsKA2tleRgBIAEoCRIXCgppbnB1dF9qc29uGAIgASgJSACIAQFCDQoLX2lucHV0X2pzb24iEwoRRW1pdEV2ZW50UmVzcG9uc2UiKQoSR2V0QXJ0aWZhY3RSZXF1ZXN0EhMKC2FydGlmYWN0X2lkGAEgASgJIkIKE0dldEFydGlmYWN0UmVzcG9uc2USKwoIYXJ0aWZhY3QYASABKAsyGS5sb29weS5zZXJ2ZXIudjEuQXJ0aWZhY3QiKgoTUmVhZEFydGlmYWN0UmVxdWVzdBITCgthcnRpZmFjdF9pZBgBIAEoCSIlChRSZWFkQXJ0aWZhY3RSZXNwb25zZRINCgVjaHVuaxgBIAEoDCInChFHZXRTZXNzaW9uUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJIj8KEkdldFNlc3Npb25SZXNwb25zZRIpCgdzZXNzaW9uGAEgASgLMhgubG9vcHkuc2VydmVyLnYxLlNlc3Npb24iXQoTV2F0Y2hTZXNzaW9uUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEh0KEGFmdGVyX21lc3NhZ2VfaWQYAiABKAlIAIgBAUITChFfYWZ0ZXJfbWVzc2FnZV9pZCJIChRXYXRjaFNlc3Npb25SZXNwb25zZRIwCgdtZXNzYWdlGAEgASgLMh8ubG9vcHkuc2VydmVyLnYxLlNlc3Npb25NZXNzYWdlKrABCg9FeGVjdXRpb25TdGF0dXMSIAocRVhFQ1VUSU9OX1NUQVRVU19VTlNQRUNJRklFRBAAEiAKHEVYRUNVVElPTl9TVEFUVVNfSU5URVJSVVBURUQQARIcChhFWEVDVVRJT05fU1RBVFVTX1JVTk5JTkcQAhIeChpFWEVDVVRJT05fU1RBVFVTX1NVQ0NFRURFRBADEhsKF0VYRUNVVElPTl9TVEFUVVNfRkFJTEVEEAQqqAEKCFN0ZXBLaW5kEhkKFVNURVBfS0lORF9VTlNQRUNJRklFRBAAEhQKEFNURVBfS0lORF9DVVNUT00QARIWChJTVEVQX0tJTkRfQVJUSUZBQ1QQAhIRCg1TVEVQX0tJTkRfTExNEAMSEwoPU1RFUF9LSU5EX0FHRU5UEAQSEwoPU1RFUF9LSU5EX0VWRU5UEAUSFgoSU1RFUF9LSU5EX1dPUktUUkVFEAYqXwoMQXJ0aWZhY3RLaW5kEh0KGUFSVElGQUNUX0tJTkRfVU5TUEVDSUZJRUQQABIWChJBUlRJRkFDVF9LSU5EX1RFWFQQARIYChRBUlRJRkFDVF9LSU5EX0JJTkFSWRACKmAKC1Nlc3Npb25LaW5kEhwKGFNFU1NJT05fS0lORF9VTlNQRUNJRklFRBAAEhQKEFNFU1NJT05fS0lORF9MTE0QARIdChlTRVNTSU9OX0tJTkRfQ09ESU5HX0FHRU5UEAIqkwEKC1Nlc3Npb25Sb2xlEhwKGFNFU1NJT05fUk9MRV9VTlNQRUNJRklFRBAAEhcKE1NFU1NJT05fUk9MRV9TWVNURU0QARIVChFTRVNTSU9OX1JPTEVfVVNFUhACEhoKFlNFU1NJT05fUk9MRV9BU1NJU1RBTlQQAxIaChZTRVNTSU9OX1JPTEVfUkVBU09OSU5HEAQq2wEKDkNvbW1vblRvb2xOYW1lEiAKHENPTU1PTl9UT09MX05BTUVfVU5TUEVDSUZJRUQQABIeChpDT01NT05fVE9PTF9OQU1FX0ZJTEVfUkVBRBABEiAKHENPTU1PTl9UT09MX05BTUVfRklMRV9DSEFOR0UQAhIiCh5DT01NT05fVE9PTF9OQU1FX1NIRUxMX0VYRUNVVEUQAxIgChxDT01NT05fVE9PTF9OQU1FX0ZJTEVfU0VBUkNIEAQSHwobQ09NTU9OX1RPT0xfTkFNRV9XRUJfU0VBUkNIEAUqiAEKDlRvb2xTb3VyY2VLaW5kEiAKHFRPT0xfU09VUkNFX0tJTkRfVU5TUEVDSUZJRUQQABIbChdUT09MX1NPVVJDRV9LSU5EX05BVElWRRABEh0KGVRPT0xfU09VUkNFX0tJTkRfUFJPVklERVIQAhIYChRUT09MX1NPVVJDRV9LSU5EX01DUBADKncKEFRvb2xSZXN1bHRTdGF0dXMSIgoeVE9PTF9SRVNVTFRfU1RBVFVTX1VOU1BFQ0lGSUVEEAASIAocVE9PTF9SRVNVTFRfU1RBVFVTX1NVQ0NFRURFRBABEh0KGVRPT0xfUkVTVUxUX1NUQVRVU19GQUlMRUQQAjLwCAoMTG9vcHlTZXJ2aWNlEl4KDUxpc3RXb3JrZmxvd3MSJS5sb29weS5zZXJ2ZXIudjEuTGlzdFdvcmtmbG93c1JlcXVlc3QaJi5sb29weS5zZXJ2ZXIudjEuTGlzdFdvcmtmbG93c1Jlc3BvbnNlElgKC0dldFdvcmtmbG93EiMubG9vcHkuc2VydmVyLnYxLkdldFdvcmtmbG93UmVxdWVzdBokLmxvb3B5LnNlcnZlci52MS5HZXRXb3JrZmxvd1Jlc3BvbnNlEk8KCFN0YXJ0UnVuEiAubG9vcHkuc2VydmVyLnYxLlN0YXJ0UnVuUmVxdWVzdBohLmxvb3B5LnNlcnZlci52MS5TdGFydFJ1blJlc3BvbnNlEk8KCExpc3RSdW5zEiAubG9vcHkuc2VydmVyLnYxLkxpc3RSdW5zUmVxdWVzdBohLmxvb3B5LnNlcnZlci52MS5MaXN0UnVuc1Jlc3BvbnNlEkkKBkdldFJ1bhIeLmxvb3B5LnNlcnZlci52MS5HZXRSdW5SZXF1ZXN0Gh8ubG9vcHkuc2VydmVyLnYxLkdldFJ1blJlc3BvbnNlElEKCFdhdGNoUnVuEiAubG9vcHkuc2VydmVyLnYxLldhdGNoUnVuUmVxdWVzdBohLmxvb3B5LnNlcnZlci52MS5XYXRjaFJ1blJlc3BvbnNlMAESUgoJUmVzdW1lUnVuEiEubG9vcHkuc2VydmVyLnYxLlJlc3VtZVJ1blJlcXVlc3QaIi5sb29weS5zZXJ2ZXIudjEuUmVzdW1lUnVuUmVzcG9uc2USTwoIUmVydW5SdW4SIC5sb29weS5zZXJ2ZXIudjEuUmVydW5SdW5SZXF1ZXN0GiEubG9vcHkuc2VydmVyLnYxLlJlcnVuUnVuUmVzcG9uc2USUgoJRW1pdEV2ZW50EiEubG9vcHkuc2VydmVyLnYxLkVtaXRFdmVudFJlcXVlc3QaIi5sb29weS5zZXJ2ZXIudjEuRW1pdEV2ZW50UmVzcG9uc2USWAoLR2V0QXJ0aWZhY3QSIy5sb29weS5zZXJ2ZXIudjEuR2V0QXJ0aWZhY3RSZXF1ZXN0GiQubG9vcHkuc2VydmVyLnYxLkdldEFydGlmYWN0UmVzcG9uc2USXQoMUmVhZEFydGlmYWN0EiQubG9vcHkuc2VydmVyLnYxLlJlYWRBcnRpZmFjdFJlcXVlc3QaJS5sb29weS5zZXJ2ZXIudjEuUmVhZEFydGlmYWN0UmVzcG9uc2UwARJVCgpHZXRTZXNzaW9uEiIubG9vcHkuc2VydmVyLnYxLkdldFNlc3Npb25SZXF1ZXN0GiMubG9vcHkuc2VydmVyLnYxLkdldFNlc3Npb25SZXNwb25zZRJdCgxXYXRjaFNlc3Npb24SJC5sb29weS5zZXJ2ZXIudjEuV2F0Y2hTZXNzaW9uUmVxdWVzdBolLmxvb3B5LnNlcnZlci52MS5XYXRjaFNlc3Npb25SZXNwb25zZTABYgZwcm90bzM",
+        "Chxsb29weS9zZXJ2ZXIvdjEvc2VydmVyLnByb3RvEg9sb29weS5zZXJ2ZXIudjEiHwoPV29ya2Zsb3dTdW1tYXJ5EgwKBG5hbWUYASABKAkikAEKEldvcmtmbG93RGVmaW5pdGlvbhIMCgRuYW1lGAEgASgJEh4KEWlucHV0X3NjaGVtYV9qc29uGAIgASgJSACIAQESHwoSb3V0cHV0X3NjaGVtYV9qc29uGAMgASgJSAGIAQFCFAoSX2lucHV0X3NjaGVtYV9qc29uQhUKE19vdXRwdXRfc2NoZW1hX2pzb24ilQEKCEFydGlmYWN0EgoKAmlkGAEgASgJEg4KBnJ1bl9pZBgCIAEoCRIMCgRuYW1lGAMgASgJEgwKBGZpbGUYBCABKAkSKwoEa2luZBgFIAEoDjIdLmxvb3B5LnNlcnZlci52MS5BcnRpZmFjdEtpbmQSFgoJbWltZV90eXBlGAYgASgJSACIAQFCDAoKX21pbWVfdHlwZSKXBAoEU3RlcBIKCgJpZBgBIAEoCRIOCgZydW5faWQYAiABKAkSCwoDa2V5GAMgASgJEgwKBG5hbWUYBCABKAkSCwoDc2VxGAUgASgNEicKBGtpbmQYBiABKA4yGS5sb29weS5zZXJ2ZXIudjEuU3RlcEtpbmQSMAoGc3RhdHVzGAcgASgOMiAubG9vcHkuc2VydmVyLnYxLkV4ZWN1dGlvblN0YXR1cxIuCgpzdGFydGVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIsCghlbmRlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoFZXJyb3IYCiABKAlIAIgBARIYCgtvdXRwdXRfanNvbhgLIAEoCUgBiAEBEhcKCnNlc3Npb25faWQYDCABKAlIAogBARIZCgxzbmFwc2hvdF9yZWYYDSABKAlIA4gBARIYCgthcnRpZmFjdF9pZBgOIAEoCUgEiAEBEhYKCWV2ZW50X2tleRgPIAEoCUgFiAEBEhcKCmVycm9yX2NvZGUYECABKAlIBogBAUIICgZfZXJyb3JCDgoMX291dHB1dF9qc29uQg0KC19zZXNzaW9uX2lkQg8KDV9zbmFwc2hvdF9yZWZCDgoMX2FydGlmYWN0X2lkQgwKCl9ldmVudF9rZXlCDQoLX2Vycm9yX2NvZGUi3gEKC1J1bk1ldGFkYXRhEgoKAmlkGAEgASgJEgsKA2tleRgCIAEoCRIPCgdhdHRlbXB0GAMgASgNEhUKDXdvcmtmbG93X25hbWUYBCABKAkSLgoKc3RhcnRlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoIZW5kZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjAKBnN0YXR1cxgHIAEoDjIgLmxvb3B5LnNlcnZlci52MS5FeGVjdXRpb25TdGF0dXMigQIKC1dvcmtmbG93UnVuEi4KCG1ldGFkYXRhGAEgASgLMhwubG9vcHkuc2VydmVyLnYxLlJ1bk1ldGFkYXRhEhgKC291dHB1dF9qc29uGAIgASgJSACIAQESEgoFZXJyb3IYAyABKAlIAYgBARIkCgVzdGVwcxgEIAMoCzIVLmxvb3B5LnNlcnZlci52MS5TdGVwEiwKCWFydGlmYWN0cxgFIAMoCzIZLmxvb3B5LnNlcnZlci52MS5BcnRpZmFjdBIXCgplcnJvcl9jb2RlGAYgASgJSAKIAQFCDgoMX291dHB1dF9qc29uQggKBl9lcnJvckINCgtfZXJyb3JfY29kZSJKCgtTZXNzaW9uVGV4dBIqCgRyb2xlGAEgASgOMhwubG9vcHkuc2VydmVyLnYxLlNlc3Npb25Sb2xlEg8KB2NvbnRlbnQYAiABKAkiYgoRU2Vzc2lvblRvb2xTb3VyY2USLQoEa2luZBgBIAEoDjIfLmxvb3B5LnNlcnZlci52MS5Ub29sU291cmNlS2luZBITCgZzZXJ2ZXIYAiABKAlIAIgBAUIJCgdfc2VydmVyIh8KD1Nlc3Npb25GaWxlUmVhZBIMCgRwYXRoGAEgASgJIiIKEVNlc3Npb25GaWxlQ2hhbmdlEg0KBXBhdGhzGAEgAygJIiYKE1Nlc3Npb25TaGVsbEV4ZWN1dGUSDwoHY29tbWFuZBgBIAEoCSJRChFTZXNzaW9uRmlsZVNlYXJjaBIUCgdwYXR0ZXJuGAEgASgJSACIAQESEQoEcGF0aBgCIAEoCUgBiAEBQgoKCF9wYXR0ZXJuQgcKBV9wYXRoIiEKEFNlc3Npb25XZWJTZWFyY2gSDQoFcXVlcnkYASABKAkiogMKD1Nlc3Npb25Ub29sQ2FsbBIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEjIKBnNvdXJjZRgDIAEoCzIiLmxvb3B5LnNlcnZlci52MS5TZXNzaW9uVG9vbFNvdXJjZRISCgppbnB1dF9qc29uGAUgASgJEjUKCWZpbGVfcmVhZBgGIAEoCzIgLmxvb3B5LnNlcnZlci52MS5TZXNzaW9uRmlsZVJlYWRIABI5CgtmaWxlX2NoYW5nZRgHIAEoCzIiLmxvb3B5LnNlcnZlci52MS5TZXNzaW9uRmlsZUNoYW5nZUgAEj0KDXNoZWxsX2V4ZWN1dGUYCCABKAsyJC5sb29weS5zZXJ2ZXIudjEuU2Vzc2lvblNoZWxsRXhlY3V0ZUgAEjkKC2ZpbGVfc2VhcmNoGAkgASgLMiIubG9vcHkuc2VydmVyLnYxLlNlc3Npb25GaWxlU2VhcmNoSAASNwoKd2ViX3NlYXJjaBgKIAEoCzIhLmxvb3B5LnNlcnZlci52MS5TZXNzaW9uV2ViU2VhcmNoSABCCAoGY29tbW9uIqQBChFTZXNzaW9uVG9vbFJlc3VsdBIUCgx0b29sX2NhbGxfaWQYASABKAkSMQoGc3RhdHVzGAIgASgOMiEubG9vcHkuc2VydmVyLnYxLlRvb2xSZXN1bHRTdGF0dXMSGAoLb3V0cHV0X2pzb24YAyABKAlIAIgBARISCgVlcnJvchgEIAEoCUgBiAEBQg4KDF9vdXRwdXRfanNvbkIICgZfZXJyb3IijgIKDlNlc3Npb25NZXNzYWdlEgoKAmlkGAEgASgJEhIKCnNlc3Npb25faWQYAiABKAkSLgoKY3JlYXRlZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLwoHbWVzc2FnZRgEIAEoCzIcLmxvb3B5LnNlcnZlci52MS5TZXNzaW9uVGV4dEgAEjUKCXRvb2xfY2FsbBgFIAEoCzIgLmxvb3B5LnNlcnZlci52MS5TZXNzaW9uVG9vbENhbGxIABI5Cgt0b29sX3Jlc3VsdBgGIAEoCzIiLmxvb3B5LnNlcnZlci52MS5TZXNzaW9uVG9vbFJlc3VsdEgAQgkKB3BheWxvYWQitQIKB1Nlc3Npb24SCgoCaWQYASABKAkSKgoEa2luZBgCIAEoDjIcLmxvb3B5LnNlcnZlci52MS5TZXNzaW9uS2luZBIOCgZjbGllbnQYAyABKAkSEAoIcHJvdmlkZXIYBCABKAkSDQoFbW9kZWwYBSABKAkSMAoGc3RhdHVzGAYgASgOMiAubG9vcHkuc2VydmVyLnYxLkV4ZWN1dGlvblN0YXR1cxIuCgpzdGFydGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIsCghlbmRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMQoIbWVzc2FnZXMYCSADKAsyHy5sb29weS5zZXJ2ZXIudjEuU2Vzc2lvbk1lc3NhZ2UiFgoUTGlzdFdvcmtmbG93c1JlcXVlc3QiTAoVTGlzdFdvcmtmbG93c1Jlc3BvbnNlEjMKCXdvcmtmbG93cxgBIAMoCzIgLmxvb3B5LnNlcnZlci52MS5Xb3JrZmxvd1N1bW1hcnkiIgoSR2V0V29ya2Zsb3dSZXF1ZXN0EgwKBG5hbWUYASABKAkiTAoTR2V0V29ya2Zsb3dSZXNwb25zZRI1Cgh3b3JrZmxvdxgBIAEoCzIjLmxvb3B5LnNlcnZlci52MS5Xb3JrZmxvd0RlZmluaXRpb24iUAoPU3RhcnRSdW5SZXF1ZXN0EhUKDXdvcmtmbG93X25hbWUYASABKAkSFwoKaW5wdXRfanNvbhgCIAEoCUgAiAEBQg0KC19pbnB1dF9qc29uIiIKEFN0YXJ0UnVuUmVzcG9uc2USDgoGcnVuX2lkGAEgASgJIqsBCg9MaXN0UnVuc1JlcXVlc3QSGgoNd29ya2Zsb3dfbmFtZRgBIAEoCUgAiAEBEhAKA2tleRgCIAEoCUgBiAEBEjIKCHN0YXR1c2VzGAMgAygOMiAubG9vcHkuc2VydmVyLnYxLkV4ZWN1dGlvblN0YXR1cxISCgVsaW1pdBgEIAEoDUgCiAEBQhAKDl93b3JrZmxvd19uYW1lQgYKBF9rZXlCCAoGX2xpbWl0Ij4KEExpc3RSdW5zUmVzcG9uc2USKgoEcnVucxgBIAMoCzIcLmxvb3B5LnNlcnZlci52MS5SdW5NZXRhZGF0YSIfCg1HZXRSdW5SZXF1ZXN0Eg4KBnJ1bl9pZBgBIAEoCSI7Cg5HZXRSdW5SZXNwb25zZRIpCgNydW4YASABKAsyHC5sb29weS5zZXJ2ZXIudjEuV29ya2Zsb3dSdW4iTQoPV2F0Y2hSdW5SZXF1ZXN0Eg4KBnJ1bl9pZBgBIAEoCRIZCgxmcm9tX3N0ZXBfaWQYAiABKAlIAIgBAUIPCg1fZnJvbV9zdGVwX2lkIm4KEFdhdGNoUnVuUmVzcG9uc2USJQoEc3RlcBgBIAEoCzIVLmxvb3B5LnNlcnZlci52MS5TdGVwSAASKwoDcnVuGAIgASgLMhwubG9vcHkuc2VydmVyLnYxLlJ1bk1ldGFkYXRhSABCBgoEaXRlbSIiChBSZXN1bWVSdW5SZXF1ZXN0Eg4KBnJ1bl9pZBgBIAEoCSIjChFSZXN1bWVSdW5SZXNwb25zZRIOCgZydW5faWQYASABKAkiOAoPUmVydW5SdW5SZXF1ZXN0Eg4KBnJ1bl9pZBgBIAEoCRIVCg1mcm9tX3N0ZXBfa2V5GAIgASgJIiIKEFJlcnVuUnVuUmVzcG9uc2USDgoGcnVuX2lkGAEgASgJIkcKEEVtaXRFdmVudFJlcXVlc3QSCwoDa2V5GAEgASgJEhcKCmlucHV0X2pzb24YAiABKAlIAIgBAUINCgtfaW5wdXRfanNvbiITChFFbWl0RXZlbnRSZXNwb25zZSIpChJHZXRBcnRpZmFjdFJlcXVlc3QSEwoLYXJ0aWZhY3RfaWQYASABKAkiQgoTR2V0QXJ0aWZhY3RSZXNwb25zZRIrCghhcnRpZmFjdBgBIAEoCzIZLmxvb3B5LnNlcnZlci52MS5BcnRpZmFjdCIqChNSZWFkQXJ0aWZhY3RSZXF1ZXN0EhMKC2FydGlmYWN0X2lkGAEgASgJIiUKFFJlYWRBcnRpZmFjdFJlc3BvbnNlEg0KBWNodW5rGAEgASgMIicKEUdldFNlc3Npb25SZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkiPwoSR2V0U2Vzc2lvblJlc3BvbnNlEikKB3Nlc3Npb24YASABKAsyGC5sb29weS5zZXJ2ZXIudjEuU2Vzc2lvbiJdChNXYXRjaFNlc3Npb25SZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSHQoQYWZ0ZXJfbWVzc2FnZV9pZBgCIAEoCUgAiAEBQhMKEV9hZnRlcl9tZXNzYWdlX2lkIkgKFFdhdGNoU2Vzc2lvblJlc3BvbnNlEjAKB21lc3NhZ2UYASABKAsyHy5sb29weS5zZXJ2ZXIudjEuU2Vzc2lvbk1lc3NhZ2UqsAEKD0V4ZWN1dGlvblN0YXR1cxIgChxFWEVDVVRJT05fU1RBVFVTX1VOU1BFQ0lGSUVEEAASIAocRVhFQ1VUSU9OX1NUQVRVU19JTlRFUlJVUFRFRBABEhwKGEVYRUNVVElPTl9TVEFUVVNfUlVOTklORxACEh4KGkVYRUNVVElPTl9TVEFUVVNfU1VDQ0VFREVEEAMSGwoXRVhFQ1VUSU9OX1NUQVRVU19GQUlMRUQQBCqoAQoIU3RlcEtpbmQSGQoVU1RFUF9LSU5EX1VOU1BFQ0lGSUVEEAASFAoQU1RFUF9LSU5EX0NVU1RPTRABEhYKElNURVBfS0lORF9BUlRJRkFDVBACEhEKDVNURVBfS0lORF9MTE0QAxITCg9TVEVQX0tJTkRfQUdFTlQQBBITCg9TVEVQX0tJTkRfRVZFTlQQBRIWChJTVEVQX0tJTkRfV09SS1RSRUUQBipfCgxBcnRpZmFjdEtpbmQSHQoZQVJUSUZBQ1RfS0lORF9VTlNQRUNJRklFRBAAEhYKEkFSVElGQUNUX0tJTkRfVEVYVBABEhgKFEFSVElGQUNUX0tJTkRfQklOQVJZEAIqYAoLU2Vzc2lvbktpbmQSHAoYU0VTU0lPTl9LSU5EX1VOU1BFQ0lGSUVEEAASFAoQU0VTU0lPTl9LSU5EX0xMTRABEh0KGVNFU1NJT05fS0lORF9DT0RJTkdfQUdFTlQQAiqTAQoLU2Vzc2lvblJvbGUSHAoYU0VTU0lPTl9ST0xFX1VOU1BFQ0lGSUVEEAASFwoTU0VTU0lPTl9ST0xFX1NZU1RFTRABEhUKEVNFU1NJT05fUk9MRV9VU0VSEAISGgoWU0VTU0lPTl9ST0xFX0FTU0lTVEFOVBADEhoKFlNFU1NJT05fUk9MRV9SRUFTT05JTkcQBCqIAQoOVG9vbFNvdXJjZUtpbmQSIAocVE9PTF9TT1VSQ0VfS0lORF9VTlNQRUNJRklFRBAAEhsKF1RPT0xfU09VUkNFX0tJTkRfTkFUSVZFEAESHQoZVE9PTF9TT1VSQ0VfS0lORF9QUk9WSURFUhACEhgKFFRPT0xfU09VUkNFX0tJTkRfTUNQEAMqdwoQVG9vbFJlc3VsdFN0YXR1cxIiCh5UT09MX1JFU1VMVF9TVEFUVVNfVU5TUEVDSUZJRUQQABIgChxUT09MX1JFU1VMVF9TVEFUVVNfU1VDQ0VFREVEEAESHQoZVE9PTF9SRVNVTFRfU1RBVFVTX0ZBSUxFRBACMvAICgxMb29weVNlcnZpY2USXgoNTGlzdFdvcmtmbG93cxIlLmxvb3B5LnNlcnZlci52MS5MaXN0V29ya2Zsb3dzUmVxdWVzdBomLmxvb3B5LnNlcnZlci52MS5MaXN0V29ya2Zsb3dzUmVzcG9uc2USWAoLR2V0V29ya2Zsb3cSIy5sb29weS5zZXJ2ZXIudjEuR2V0V29ya2Zsb3dSZXF1ZXN0GiQubG9vcHkuc2VydmVyLnYxLkdldFdvcmtmbG93UmVzcG9uc2USTwoIU3RhcnRSdW4SIC5sb29weS5zZXJ2ZXIudjEuU3RhcnRSdW5SZXF1ZXN0GiEubG9vcHkuc2VydmVyLnYxLlN0YXJ0UnVuUmVzcG9uc2USTwoITGlzdFJ1bnMSIC5sb29weS5zZXJ2ZXIudjEuTGlzdFJ1bnNSZXF1ZXN0GiEubG9vcHkuc2VydmVyLnYxLkxpc3RSdW5zUmVzcG9uc2USSQoGR2V0UnVuEh4ubG9vcHkuc2VydmVyLnYxLkdldFJ1blJlcXVlc3QaHy5sb29weS5zZXJ2ZXIudjEuR2V0UnVuUmVzcG9uc2USUQoIV2F0Y2hSdW4SIC5sb29weS5zZXJ2ZXIudjEuV2F0Y2hSdW5SZXF1ZXN0GiEubG9vcHkuc2VydmVyLnYxLldhdGNoUnVuUmVzcG9uc2UwARJSCglSZXN1bWVSdW4SIS5sb29weS5zZXJ2ZXIudjEuUmVzdW1lUnVuUmVxdWVzdBoiLmxvb3B5LnNlcnZlci52MS5SZXN1bWVSdW5SZXNwb25zZRJPCghSZXJ1blJ1bhIgLmxvb3B5LnNlcnZlci52MS5SZXJ1blJ1blJlcXVlc3QaIS5sb29weS5zZXJ2ZXIudjEuUmVydW5SdW5SZXNwb25zZRJSCglFbWl0RXZlbnQSIS5sb29weS5zZXJ2ZXIudjEuRW1pdEV2ZW50UmVxdWVzdBoiLmxvb3B5LnNlcnZlci52MS5FbWl0RXZlbnRSZXNwb25zZRJYCgtHZXRBcnRpZmFjdBIjLmxvb3B5LnNlcnZlci52MS5HZXRBcnRpZmFjdFJlcXVlc3QaJC5sb29weS5zZXJ2ZXIudjEuR2V0QXJ0aWZhY3RSZXNwb25zZRJdCgxSZWFkQXJ0aWZhY3QSJC5sb29weS5zZXJ2ZXIudjEuUmVhZEFydGlmYWN0UmVxdWVzdBolLmxvb3B5LnNlcnZlci52MS5SZWFkQXJ0aWZhY3RSZXNwb25zZTABElUKCkdldFNlc3Npb24SIi5sb29weS5zZXJ2ZXIudjEuR2V0U2Vzc2lvblJlcXVlc3QaIy5sb29weS5zZXJ2ZXIudjEuR2V0U2Vzc2lvblJlc3BvbnNlEl0KDFdhdGNoU2Vzc2lvbhIkLmxvb3B5LnNlcnZlci52MS5XYXRjaFNlc3Npb25SZXF1ZXN0GiUubG9vcHkuc2VydmVyLnYxLldhdGNoU2Vzc2lvblJlc3BvbnNlMAFiBnByb3RvMw",
         [file_google_protobuf_timestamp]
     )
 
@@ -328,6 +328,101 @@ export const SessionToolSourceSchema: GenMessage<SessionToolSource> =
     messageDesc(file_loopy_server_v1_server, 7)
 
 /**
+ * @generated from message loopy.server.v1.SessionFileRead
+ */
+export type SessionFileRead = Message<"loopy.server.v1.SessionFileRead"> & {
+    /**
+     * @generated from field: string path = 1;
+     */
+    path: string
+}
+
+/**
+ * Describes the message loopy.server.v1.SessionFileRead.
+ * Use `create(SessionFileReadSchema)` to create a new message.
+ */
+export const SessionFileReadSchema: GenMessage<SessionFileRead> =
+    /*@__PURE__*/
+    messageDesc(file_loopy_server_v1_server, 8)
+
+/**
+ * @generated from message loopy.server.v1.SessionFileChange
+ */
+export type SessionFileChange = Message<"loopy.server.v1.SessionFileChange"> & {
+    /**
+     * @generated from field: repeated string paths = 1;
+     */
+    paths: string[]
+}
+
+/**
+ * Describes the message loopy.server.v1.SessionFileChange.
+ * Use `create(SessionFileChangeSchema)` to create a new message.
+ */
+export const SessionFileChangeSchema: GenMessage<SessionFileChange> =
+    /*@__PURE__*/
+    messageDesc(file_loopy_server_v1_server, 9)
+
+/**
+ * @generated from message loopy.server.v1.SessionShellExecute
+ */
+export type SessionShellExecute = Message<"loopy.server.v1.SessionShellExecute"> & {
+    /**
+     * @generated from field: string command = 1;
+     */
+    command: string
+}
+
+/**
+ * Describes the message loopy.server.v1.SessionShellExecute.
+ * Use `create(SessionShellExecuteSchema)` to create a new message.
+ */
+export const SessionShellExecuteSchema: GenMessage<SessionShellExecute> =
+    /*@__PURE__*/
+    messageDesc(file_loopy_server_v1_server, 10)
+
+/**
+ * @generated from message loopy.server.v1.SessionFileSearch
+ */
+export type SessionFileSearch = Message<"loopy.server.v1.SessionFileSearch"> & {
+    /**
+     * @generated from field: optional string pattern = 1;
+     */
+    pattern?: string | undefined
+
+    /**
+     * @generated from field: optional string path = 2;
+     */
+    path?: string | undefined
+}
+
+/**
+ * Describes the message loopy.server.v1.SessionFileSearch.
+ * Use `create(SessionFileSearchSchema)` to create a new message.
+ */
+export const SessionFileSearchSchema: GenMessage<SessionFileSearch> =
+    /*@__PURE__*/
+    messageDesc(file_loopy_server_v1_server, 11)
+
+/**
+ * @generated from message loopy.server.v1.SessionWebSearch
+ */
+export type SessionWebSearch = Message<"loopy.server.v1.SessionWebSearch"> & {
+    /**
+     * @generated from field: string query = 1;
+     */
+    query: string
+}
+
+/**
+ * Describes the message loopy.server.v1.SessionWebSearch.
+ * Use `create(SessionWebSearchSchema)` to create a new message.
+ */
+export const SessionWebSearchSchema: GenMessage<SessionWebSearch> =
+    /*@__PURE__*/
+    messageDesc(file_loopy_server_v1_server, 12)
+
+/**
  * @generated from message loopy.server.v1.SessionToolCall
  */
 export type SessionToolCall = Message<"loopy.server.v1.SessionToolCall"> & {
@@ -347,19 +442,50 @@ export type SessionToolCall = Message<"loopy.server.v1.SessionToolCall"> & {
     source?: SessionToolSource | undefined
 
     /**
-     * @generated from field: loopy.server.v1.CommonToolName common_name = 4;
-     */
-    commonName: CommonToolName
-
-    /**
      * @generated from field: string input_json = 5;
      */
     inputJson: string
 
     /**
-     * @generated from field: repeated string files = 6;
+     * @generated from oneof loopy.server.v1.SessionToolCall.common
      */
-    files: string[]
+    common:
+        | {
+              /**
+               * @generated from field: loopy.server.v1.SessionFileRead file_read = 6;
+               */
+              value: SessionFileRead
+              case: "fileRead"
+          }
+        | {
+              /**
+               * @generated from field: loopy.server.v1.SessionFileChange file_change = 7;
+               */
+              value: SessionFileChange
+              case: "fileChange"
+          }
+        | {
+              /**
+               * @generated from field: loopy.server.v1.SessionShellExecute shell_execute = 8;
+               */
+              value: SessionShellExecute
+              case: "shellExecute"
+          }
+        | {
+              /**
+               * @generated from field: loopy.server.v1.SessionFileSearch file_search = 9;
+               */
+              value: SessionFileSearch
+              case: "fileSearch"
+          }
+        | {
+              /**
+               * @generated from field: loopy.server.v1.SessionWebSearch web_search = 10;
+               */
+              value: SessionWebSearch
+              case: "webSearch"
+          }
+        | { case: undefined; value?: undefined }
 }
 
 /**
@@ -368,7 +494,7 @@ export type SessionToolCall = Message<"loopy.server.v1.SessionToolCall"> & {
  */
 export const SessionToolCallSchema: GenMessage<SessionToolCall> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 8)
+    messageDesc(file_loopy_server_v1_server, 13)
 
 /**
  * @generated from message loopy.server.v1.SessionToolResult
@@ -401,7 +527,7 @@ export type SessionToolResult = Message<"loopy.server.v1.SessionToolResult"> & {
  */
 export const SessionToolResultSchema: GenMessage<SessionToolResult> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 9)
+    messageDesc(file_loopy_server_v1_server, 14)
 
 /**
  * @generated from message loopy.server.v1.SessionMessage
@@ -456,7 +582,7 @@ export type SessionMessage = Message<"loopy.server.v1.SessionMessage"> & {
  */
 export const SessionMessageSchema: GenMessage<SessionMessage> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 10)
+    messageDesc(file_loopy_server_v1_server, 15)
 
 /**
  * @generated from message loopy.server.v1.Session
@@ -512,7 +638,7 @@ export type Session = Message<"loopy.server.v1.Session"> & {
  * Describes the message loopy.server.v1.Session.
  * Use `create(SessionSchema)` to create a new message.
  */
-export const SessionSchema: GenMessage<Session> = /*@__PURE__*/ messageDesc(file_loopy_server_v1_server, 11)
+export const SessionSchema: GenMessage<Session> = /*@__PURE__*/ messageDesc(file_loopy_server_v1_server, 16)
 
 /**
  * @generated from message loopy.server.v1.ListWorkflowsRequest
@@ -525,7 +651,7 @@ export type ListWorkflowsRequest = Message<"loopy.server.v1.ListWorkflowsRequest
  */
 export const ListWorkflowsRequestSchema: GenMessage<ListWorkflowsRequest> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 12)
+    messageDesc(file_loopy_server_v1_server, 17)
 
 /**
  * @generated from message loopy.server.v1.ListWorkflowsResponse
@@ -543,7 +669,7 @@ export type ListWorkflowsResponse = Message<"loopy.server.v1.ListWorkflowsRespon
  */
 export const ListWorkflowsResponseSchema: GenMessage<ListWorkflowsResponse> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 13)
+    messageDesc(file_loopy_server_v1_server, 18)
 
 /**
  * @generated from message loopy.server.v1.GetWorkflowRequest
@@ -561,7 +687,7 @@ export type GetWorkflowRequest = Message<"loopy.server.v1.GetWorkflowRequest"> &
  */
 export const GetWorkflowRequestSchema: GenMessage<GetWorkflowRequest> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 14)
+    messageDesc(file_loopy_server_v1_server, 19)
 
 /**
  * @generated from message loopy.server.v1.GetWorkflowResponse
@@ -579,7 +705,7 @@ export type GetWorkflowResponse = Message<"loopy.server.v1.GetWorkflowResponse">
  */
 export const GetWorkflowResponseSchema: GenMessage<GetWorkflowResponse> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 15)
+    messageDesc(file_loopy_server_v1_server, 20)
 
 /**
  * @generated from message loopy.server.v1.StartRunRequest
@@ -602,7 +728,7 @@ export type StartRunRequest = Message<"loopy.server.v1.StartRunRequest"> & {
  */
 export const StartRunRequestSchema: GenMessage<StartRunRequest> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 16)
+    messageDesc(file_loopy_server_v1_server, 21)
 
 /**
  * @generated from message loopy.server.v1.StartRunResponse
@@ -620,7 +746,7 @@ export type StartRunResponse = Message<"loopy.server.v1.StartRunResponse"> & {
  */
 export const StartRunResponseSchema: GenMessage<StartRunResponse> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 17)
+    messageDesc(file_loopy_server_v1_server, 22)
 
 /**
  * @generated from message loopy.server.v1.ListRunsRequest
@@ -653,7 +779,7 @@ export type ListRunsRequest = Message<"loopy.server.v1.ListRunsRequest"> & {
  */
 export const ListRunsRequestSchema: GenMessage<ListRunsRequest> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 18)
+    messageDesc(file_loopy_server_v1_server, 23)
 
 /**
  * @generated from message loopy.server.v1.ListRunsResponse
@@ -671,7 +797,7 @@ export type ListRunsResponse = Message<"loopy.server.v1.ListRunsResponse"> & {
  */
 export const ListRunsResponseSchema: GenMessage<ListRunsResponse> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 19)
+    messageDesc(file_loopy_server_v1_server, 24)
 
 /**
  * @generated from message loopy.server.v1.GetRunRequest
@@ -687,7 +813,7 @@ export type GetRunRequest = Message<"loopy.server.v1.GetRunRequest"> & {
  * Describes the message loopy.server.v1.GetRunRequest.
  * Use `create(GetRunRequestSchema)` to create a new message.
  */
-export const GetRunRequestSchema: GenMessage<GetRunRequest> = /*@__PURE__*/ messageDesc(file_loopy_server_v1_server, 20)
+export const GetRunRequestSchema: GenMessage<GetRunRequest> = /*@__PURE__*/ messageDesc(file_loopy_server_v1_server, 25)
 
 /**
  * @generated from message loopy.server.v1.GetRunResponse
@@ -705,7 +831,7 @@ export type GetRunResponse = Message<"loopy.server.v1.GetRunResponse"> & {
  */
 export const GetRunResponseSchema: GenMessage<GetRunResponse> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 21)
+    messageDesc(file_loopy_server_v1_server, 26)
 
 /**
  * @generated from message loopy.server.v1.WatchRunRequest
@@ -728,7 +854,7 @@ export type WatchRunRequest = Message<"loopy.server.v1.WatchRunRequest"> & {
  */
 export const WatchRunRequestSchema: GenMessage<WatchRunRequest> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 22)
+    messageDesc(file_loopy_server_v1_server, 27)
 
 /**
  * @generated from message loopy.server.v1.WatchRunResponse
@@ -761,7 +887,7 @@ export type WatchRunResponse = Message<"loopy.server.v1.WatchRunResponse"> & {
  */
 export const WatchRunResponseSchema: GenMessage<WatchRunResponse> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 23)
+    messageDesc(file_loopy_server_v1_server, 28)
 
 /**
  * @generated from message loopy.server.v1.ResumeRunRequest
@@ -779,7 +905,7 @@ export type ResumeRunRequest = Message<"loopy.server.v1.ResumeRunRequest"> & {
  */
 export const ResumeRunRequestSchema: GenMessage<ResumeRunRequest> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 24)
+    messageDesc(file_loopy_server_v1_server, 29)
 
 /**
  * @generated from message loopy.server.v1.ResumeRunResponse
@@ -797,7 +923,7 @@ export type ResumeRunResponse = Message<"loopy.server.v1.ResumeRunResponse"> & {
  */
 export const ResumeRunResponseSchema: GenMessage<ResumeRunResponse> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 25)
+    messageDesc(file_loopy_server_v1_server, 30)
 
 /**
  * @generated from message loopy.server.v1.RerunRunRequest
@@ -820,7 +946,7 @@ export type RerunRunRequest = Message<"loopy.server.v1.RerunRunRequest"> & {
  */
 export const RerunRunRequestSchema: GenMessage<RerunRunRequest> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 26)
+    messageDesc(file_loopy_server_v1_server, 31)
 
 /**
  * @generated from message loopy.server.v1.RerunRunResponse
@@ -838,7 +964,7 @@ export type RerunRunResponse = Message<"loopy.server.v1.RerunRunResponse"> & {
  */
 export const RerunRunResponseSchema: GenMessage<RerunRunResponse> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 27)
+    messageDesc(file_loopy_server_v1_server, 32)
 
 /**
  * @generated from message loopy.server.v1.EmitEventRequest
@@ -861,7 +987,7 @@ export type EmitEventRequest = Message<"loopy.server.v1.EmitEventRequest"> & {
  */
 export const EmitEventRequestSchema: GenMessage<EmitEventRequest> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 28)
+    messageDesc(file_loopy_server_v1_server, 33)
 
 /**
  * @generated from message loopy.server.v1.EmitEventResponse
@@ -874,7 +1000,7 @@ export type EmitEventResponse = Message<"loopy.server.v1.EmitEventResponse"> & {
  */
 export const EmitEventResponseSchema: GenMessage<EmitEventResponse> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 29)
+    messageDesc(file_loopy_server_v1_server, 34)
 
 /**
  * @generated from message loopy.server.v1.GetArtifactRequest
@@ -892,7 +1018,7 @@ export type GetArtifactRequest = Message<"loopy.server.v1.GetArtifactRequest"> &
  */
 export const GetArtifactRequestSchema: GenMessage<GetArtifactRequest> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 30)
+    messageDesc(file_loopy_server_v1_server, 35)
 
 /**
  * @generated from message loopy.server.v1.GetArtifactResponse
@@ -910,7 +1036,7 @@ export type GetArtifactResponse = Message<"loopy.server.v1.GetArtifactResponse">
  */
 export const GetArtifactResponseSchema: GenMessage<GetArtifactResponse> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 31)
+    messageDesc(file_loopy_server_v1_server, 36)
 
 /**
  * @generated from message loopy.server.v1.ReadArtifactRequest
@@ -928,7 +1054,7 @@ export type ReadArtifactRequest = Message<"loopy.server.v1.ReadArtifactRequest">
  */
 export const ReadArtifactRequestSchema: GenMessage<ReadArtifactRequest> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 32)
+    messageDesc(file_loopy_server_v1_server, 37)
 
 /**
  * @generated from message loopy.server.v1.ReadArtifactResponse
@@ -946,7 +1072,7 @@ export type ReadArtifactResponse = Message<"loopy.server.v1.ReadArtifactResponse
  */
 export const ReadArtifactResponseSchema: GenMessage<ReadArtifactResponse> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 33)
+    messageDesc(file_loopy_server_v1_server, 38)
 
 /**
  * @generated from message loopy.server.v1.GetSessionRequest
@@ -964,7 +1090,7 @@ export type GetSessionRequest = Message<"loopy.server.v1.GetSessionRequest"> & {
  */
 export const GetSessionRequestSchema: GenMessage<GetSessionRequest> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 34)
+    messageDesc(file_loopy_server_v1_server, 39)
 
 /**
  * @generated from message loopy.server.v1.GetSessionResponse
@@ -982,7 +1108,7 @@ export type GetSessionResponse = Message<"loopy.server.v1.GetSessionResponse"> &
  */
 export const GetSessionResponseSchema: GenMessage<GetSessionResponse> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 35)
+    messageDesc(file_loopy_server_v1_server, 40)
 
 /**
  * @generated from message loopy.server.v1.WatchSessionRequest
@@ -1005,7 +1131,7 @@ export type WatchSessionRequest = Message<"loopy.server.v1.WatchSessionRequest">
  */
 export const WatchSessionRequestSchema: GenMessage<WatchSessionRequest> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 36)
+    messageDesc(file_loopy_server_v1_server, 41)
 
 /**
  * @generated from message loopy.server.v1.WatchSessionResponse
@@ -1023,7 +1149,7 @@ export type WatchSessionResponse = Message<"loopy.server.v1.WatchSessionResponse
  */
 export const WatchSessionResponseSchema: GenMessage<WatchSessionResponse> =
     /*@__PURE__*/
-    messageDesc(file_loopy_server_v1_server, 37)
+    messageDesc(file_loopy_server_v1_server, 42)
 
 /**
  * @generated from enum loopy.server.v1.ExecutionStatus
@@ -1191,46 +1317,6 @@ export enum SessionRole {
 export const SessionRoleSchema: GenEnum<SessionRole> = /*@__PURE__*/ enumDesc(file_loopy_server_v1_server, 4)
 
 /**
- * @generated from enum loopy.server.v1.CommonToolName
- */
-export enum CommonToolName {
-    /**
-     * @generated from enum value: COMMON_TOOL_NAME_UNSPECIFIED = 0;
-     */
-    UNSPECIFIED = 0,
-
-    /**
-     * @generated from enum value: COMMON_TOOL_NAME_FILE_READ = 1;
-     */
-    FILE_READ = 1,
-
-    /**
-     * @generated from enum value: COMMON_TOOL_NAME_FILE_CHANGE = 2;
-     */
-    FILE_CHANGE = 2,
-
-    /**
-     * @generated from enum value: COMMON_TOOL_NAME_SHELL_EXECUTE = 3;
-     */
-    SHELL_EXECUTE = 3,
-
-    /**
-     * @generated from enum value: COMMON_TOOL_NAME_FILE_SEARCH = 4;
-     */
-    FILE_SEARCH = 4,
-
-    /**
-     * @generated from enum value: COMMON_TOOL_NAME_WEB_SEARCH = 5;
-     */
-    WEB_SEARCH = 5
-}
-
-/**
- * Describes the enum loopy.server.v1.CommonToolName.
- */
-export const CommonToolNameSchema: GenEnum<CommonToolName> = /*@__PURE__*/ enumDesc(file_loopy_server_v1_server, 5)
-
-/**
  * @generated from enum loopy.server.v1.ToolSourceKind
  */
 export enum ToolSourceKind {
@@ -1258,7 +1344,7 @@ export enum ToolSourceKind {
 /**
  * Describes the enum loopy.server.v1.ToolSourceKind.
  */
-export const ToolSourceKindSchema: GenEnum<ToolSourceKind> = /*@__PURE__*/ enumDesc(file_loopy_server_v1_server, 6)
+export const ToolSourceKindSchema: GenEnum<ToolSourceKind> = /*@__PURE__*/ enumDesc(file_loopy_server_v1_server, 5)
 
 /**
  * @generated from enum loopy.server.v1.ToolResultStatus
@@ -1283,7 +1369,7 @@ export enum ToolResultStatus {
 /**
  * Describes the enum loopy.server.v1.ToolResultStatus.
  */
-export const ToolResultStatusSchema: GenEnum<ToolResultStatus> = /*@__PURE__*/ enumDesc(file_loopy_server_v1_server, 7)
+export const ToolResultStatusSchema: GenEnum<ToolResultStatus> = /*@__PURE__*/ enumDesc(file_loopy_server_v1_server, 6)
 
 /**
  * @generated from service loopy.server.v1.LoopyService

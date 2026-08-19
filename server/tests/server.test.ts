@@ -11,7 +11,6 @@ import { FakeLLM } from "@loopy/core/ai/fake-llm"
 import { GitRepository } from "@loopy/core/git"
 import type { Loopy } from "@loopy/core/loopy"
 import {
-    CommonToolName,
     ExecutionStatus,
     LoopyService,
     ReadArtifactRequestSchema,
@@ -267,11 +266,38 @@ test("serves structured session messages, tool calls and tool results", async ()
         id: "read-1",
         name: "Read",
         source: { kind: "native" },
-        commonName: "file.read",
         input: { file_path: "src/a.ts" },
-        files: ["src/a.ts"]
+        common: { name: "file.read", path: "src/a.ts" }
     })
     recorder.addToolResult({ toolCallId: "read-1", status: "succeeded", output: "contents" })
+    recorder.addToolCall({
+        id: "change-1",
+        name: "Edit",
+        source: { kind: "native" },
+        input: { file_path: "src/a.ts" },
+        common: { name: "file.change", paths: ["src/a.ts", "src/b.ts"] }
+    })
+    recorder.addToolCall({
+        id: "shell-1",
+        name: "Bash",
+        source: { kind: "native" },
+        input: { command: "pnpm test", timeout: 1000 },
+        common: { name: "shell.execute", command: "pnpm test" }
+    })
+    recorder.addToolCall({
+        id: "file-search-1",
+        name: "Grep",
+        source: { kind: "native" },
+        input: { pattern: "needle", path: "src", glob: "*.ts" },
+        common: { name: "file.search", pattern: "needle", path: "src" }
+    })
+    recorder.addToolCall({
+        id: "web-search-1",
+        name: "WebSearch",
+        source: { kind: "provider" },
+        input: { query: "loopy", allowed_domains: ["example.com"] },
+        common: { name: "web.search", query: "loopy" }
+    })
     recorder.addToolCall({
         id: "mcp-1",
         name: "lookup",
@@ -293,6 +319,10 @@ test("serves structured session messages, tool calls and tool results", async ()
         "toolCall",
         "toolResult",
         "toolCall",
+        "toolCall",
+        "toolCall",
+        "toolCall",
+        "toolCall",
         "toolResult"
     ])
     expect(session.messages[1]?.payload).toMatchObject({
@@ -301,9 +331,8 @@ test("serves structured session messages, tool calls and tool results", async ()
             id: "read-1",
             name: "Read",
             source: { kind: ToolSourceKind.NATIVE },
-            commonName: CommonToolName.FILE_READ,
             inputJson: JSON.stringify({ file_path: "src/a.ts" }),
-            files: ["src/a.ts"]
+            common: { case: "fileRead", value: { path: "src/a.ts" } }
         }
     })
     expect(session.messages[2]?.payload).toMatchObject({
@@ -316,9 +345,25 @@ test("serves structured session messages, tool calls and tool results", async ()
     })
     expect(session.messages[3]?.payload).toMatchObject({
         case: "toolCall",
-        value: { source: { kind: ToolSourceKind.MCP, server: "docs" }, commonName: CommonToolName.UNSPECIFIED }
+        value: { common: { case: "fileChange", value: { paths: ["src/a.ts", "src/b.ts"] } } }
     })
     expect(session.messages[4]?.payload).toMatchObject({
+        case: "toolCall",
+        value: { common: { case: "shellExecute", value: { command: "pnpm test" } } }
+    })
+    expect(session.messages[5]?.payload).toMatchObject({
+        case: "toolCall",
+        value: { common: { case: "fileSearch", value: { pattern: "needle", path: "src" } } }
+    })
+    expect(session.messages[6]?.payload).toMatchObject({
+        case: "toolCall",
+        value: { common: { case: "webSearch", value: { query: "loopy" } } }
+    })
+    expect(session.messages[7]?.payload).toMatchObject({
+        case: "toolCall",
+        value: { source: { kind: ToolSourceKind.MCP, server: "docs" }, common: { case: undefined } }
+    })
+    expect(session.messages[8]?.payload).toMatchObject({
         case: "toolResult",
         value: { status: ToolResultStatus.FAILED, error: "unavailable" }
     })

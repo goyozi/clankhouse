@@ -97,14 +97,14 @@ export class AISessions {
                 appendMessage("message", { role, content })
             },
             addToolCall(call) {
-                const files =
-                    call.files === undefined || filesRoot === undefined
-                        ? call.files
-                        : normalizeFileTargets(filesRoot, call.files)
+                const common =
+                    call.common === undefined || filesRoot === undefined
+                        ? call.common
+                        : normalizeCommonTool(filesRoot, call.common)
                 appendMessage("tool_call", {
                     ...call,
                     input: jsonValue(call.input),
-                    ...(files !== undefined ? { files } : {})
+                    ...(common !== undefined ? { common } : {})
                 })
             },
             addToolResult(result) {
@@ -162,12 +162,31 @@ function normalizeFileTargets(filesRoot: string, targets: readonly string[]): st
     const files = new Set<string>()
     for (const target of targets) {
         if (target.length === 0) continue
-        const absolute = canonicalPath(path.resolve(filesRoot, target))
-        const relative = path.relative(filesRoot, absolute)
-        const inside = relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
-        files.add((inside ? relative || "." : absolute).split(path.sep).join("/"))
+        files.add(normalizeFileTarget(filesRoot, target))
     }
     return [...files]
+}
+
+function normalizeCommonTool(filesRoot: string, common: CommonTool): CommonTool {
+    switch (common.name) {
+        case "file.read":
+            return { ...common, path: normalizeFileTarget(filesRoot, common.path) }
+        case "file.change":
+            return { ...common, paths: normalizeFileTargets(filesRoot, common.paths) }
+        case "file.search":
+            return common.path === undefined ? common : { ...common, path: normalizeFileTarget(filesRoot, common.path) }
+        case "shell.execute":
+        case "web.search":
+            return common
+    }
+}
+
+function normalizeFileTarget(filesRoot: string, target: string): string {
+    if (target.length === 0) return target
+    const absolute = canonicalPath(path.resolve(filesRoot, target))
+    const relative = path.relative(filesRoot, absolute)
+    const inside = relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
+    return (inside ? relative || "." : absolute).split(path.sep).join("/")
 }
 
 function canonicalPath(target: string): string {
@@ -189,7 +208,12 @@ export type JsonValue = null | boolean | number | string | JsonValue[] | JsonObj
 
 export type JsonObject = { [key: string]: JsonValue }
 
-export type CommonToolName = "file.read" | "file.change" | "shell.execute" | "file.search" | "web.search"
+export type CommonTool =
+    | { name: "file.read"; path: string }
+    | { name: "file.change"; paths: string[] }
+    | { name: "shell.execute"; command: string }
+    | { name: "file.search"; pattern?: string; path?: string }
+    | { name: "web.search"; query: string }
 
 export type ToolSource = { kind: "native" } | { kind: "provider" } | { kind: "mcp"; server: string }
 
@@ -197,9 +221,8 @@ export type SessionToolCall = {
     id: string
     name: string
     source: ToolSource
-    commonName?: CommonToolName
+    common?: CommonTool
     input: JsonValue
-    files?: string[]
 }
 
 export type SessionToolResult = {

@@ -97,9 +97,8 @@ test("ClaudeAgent maps the SDK conversation to the session and snapshots the wor
             id: "toolu_write1",
             name: "Write",
             source: { kind: "native" },
-            commonName: "file.change",
             input: { file_path: "src/hello.ts" },
-            files: ["src/hello.ts"]
+            common: { name: "file.change", paths: ["src/hello.ts"] }
         }
     })
     expect(session.messages[4]).toMatchObject({
@@ -236,9 +235,8 @@ test("ClaudeAgent records every supported SDK message and block type", async () 
             id: "toolu_read1",
             name: "Read",
             source: { kind: "native" },
-            commonName: "file.read",
             input: { file_path: "a.ts" },
-            files: ["a.ts"]
+            common: { name: "file.read", path: "a.ts" }
         }
     })
     expect(session.messages[6]).toMatchObject({
@@ -246,8 +244,8 @@ test("ClaudeAgent records every supported SDK message and block type", async () 
             id: "toolu_srv1",
             name: "web_search",
             source: { kind: "provider" },
-            commonName: "web.search",
-            input: { query: "loopy" }
+            input: { query: "loopy" },
+            common: { name: "web.search", query: "loopy" }
         }
     })
     expect(session.messages[8]).toMatchObject({
@@ -270,46 +268,124 @@ test("ClaudeAgent records every supported SDK message and block type", async () 
     })
 })
 
-test("ClaudeAgent normalizes native web search and configured MCP tools", async () => {
-    // given native WebSearch and configured MCP calls delivered as ordinary tool_use blocks
+test("ClaudeAgent normalizes every native common tool and configured MCP tools", async () => {
+    // given every native common tool and a configured MCP call delivered as ordinary tool_use blocks
     const { loopy } = tempLoopy()
     const repo = await tempGitRepo()
     const worktree = new Worktree(repo.path)
     const { query } = fakeClaudeQuery(() => ({
         toolCalls: [
-            { id: "toolu_search1", name: "WebSearch", input: { query: "loopy" }, result: "hits" },
+            { id: "toolu_read1", name: "Read", input: { file_path: "src/a.ts", offset: 2 } },
+            { id: "toolu_write1", name: "Write", input: { file_path: "src/new.ts", content: "new" } },
+            {
+                id: "toolu_edit1",
+                name: "Edit",
+                input: { file_path: "src/a.ts", old_string: "old", new_string: "new" }
+            },
+            { id: "toolu_bash1", name: "Bash", input: { command: "pnpm test", timeout: 1000 } },
+            { id: "toolu_glob1", name: "Glob", input: { pattern: "*.ts", path: "src" } },
+            { id: "toolu_grep1", name: "Grep", input: { pattern: "needle", path: "src", glob: "*.ts" } },
+            {
+                id: "toolu_search1",
+                name: "WebSearch",
+                input: { query: "loopy", allowed_domains: ["example.com"] },
+                result: "hits"
+            },
             {
                 id: "toolu_mcp_local1",
                 name: "mcp__project-docs__lookup_document",
                 input: { key: "sessions" },
                 result: "documentation"
-            }
+            },
+            { id: "toolu_invalid_read", name: "Read", input: { offset: 2 } },
+            { id: "toolu_invalid_glob", name: "Glob", input: { path: "src" } },
+            { id: "toolu_invalid_grep", name: "Grep", input: { pattern: "", path: "src" } }
         ],
         output: { done: true }
     }))
     const agent = new ClaudeAgent({ model: "claude-sonnet-5", query })
 
-    // when the agent runs both tools
+    // when the agent runs the tools
     await testRun(loopy, () => agent.run("implement", { prompt: "do it", output: outputSchema, worktree }))
 
-    // then the native search and MCP identity are normalized from their real Agent SDK names
+    // then common calls keep raw inputs and normalized essentials while MCP and malformed calls have no common payload
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
     const calls = sessionToolCallMessages((await loopy.sessions.get(step.sessionId!)).messages)
     expect(calls.map((item) => item.toolCall)).toEqual([
         {
+            id: "toolu_read1",
+            name: "Read",
+            source: { kind: "native" },
+            input: { file_path: "src/a.ts", offset: 2 },
+            common: { name: "file.read", path: "src/a.ts" }
+        },
+        {
+            id: "toolu_write1",
+            name: "Write",
+            source: { kind: "native" },
+            input: { file_path: "src/new.ts", content: "new" },
+            common: { name: "file.change", paths: ["src/new.ts"] }
+        },
+        {
+            id: "toolu_edit1",
+            name: "Edit",
+            source: { kind: "native" },
+            input: { file_path: "src/a.ts", old_string: "old", new_string: "new" },
+            common: { name: "file.change", paths: ["src/a.ts"] }
+        },
+        {
+            id: "toolu_bash1",
+            name: "Bash",
+            source: { kind: "native" },
+            input: { command: "pnpm test", timeout: 1000 },
+            common: { name: "shell.execute", command: "pnpm test" }
+        },
+        {
+            id: "toolu_glob1",
+            name: "Glob",
+            source: { kind: "native" },
+            input: { pattern: "*.ts", path: "src" },
+            common: { name: "file.search", pattern: "*.ts", path: "src" }
+        },
+        {
+            id: "toolu_grep1",
+            name: "Grep",
+            source: { kind: "native" },
+            input: { pattern: "needle", path: "src", glob: "*.ts" },
+            common: { name: "file.search", pattern: "needle", path: "src" }
+        },
+        {
             id: "toolu_search1",
             name: "WebSearch",
             source: { kind: "native" },
-            commonName: "web.search",
-            input: { query: "loopy" }
+            input: { query: "loopy", allowed_domains: ["example.com"] },
+            common: { name: "web.search", query: "loopy" }
         },
         {
             id: "toolu_mcp_local1",
             name: "lookup_document",
             source: { kind: "mcp", server: "project-docs" },
             input: { key: "sessions" }
+        },
+        {
+            id: "toolu_invalid_read",
+            name: "Read",
+            source: { kind: "native" },
+            input: { offset: 2 }
+        },
+        {
+            id: "toolu_invalid_glob",
+            name: "Glob",
+            source: { kind: "native" },
+            input: { path: "src" }
+        },
+        {
+            id: "toolu_invalid_grep",
+            name: "Grep",
+            source: { kind: "native" },
+            input: { pattern: "", path: "src" }
         }
     ])
 })

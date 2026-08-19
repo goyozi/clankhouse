@@ -108,9 +108,8 @@ test("PiAgent maps the SDK conversation to the session and snapshots the worktre
             id: "tool_write_1",
             name: "write",
             source: { kind: "native" },
-            commonName: "file.change",
             input: { path: "src/hello.ts" },
-            files: ["src/hello.ts"]
+            common: { name: "file.change", paths: ["src/hello.ts"] }
         }
     })
     expect(session.messages[5]).toMatchObject({
@@ -131,41 +130,120 @@ test("PiAgent maps the SDK conversation to the session and snapshots the worktre
     expect(sessions).toEqual([{ disposed: true, unsubscribed: true }])
 })
 
-test("PiAgent normalizes the built-in ls tool as file search", async () => {
-    // given a Pi session with the optional built-in ls tool enabled
+test("PiAgent normalizes every built-in common tool", async () => {
+    // given a Pi session containing every built-in common tool
     const { loopy, dir } = tempLoopy()
     const repo = await tempGitRepo()
     const worktree = new Worktree(repo.path)
     const modelRuntime = await isolatedModelRuntime(dir)
     const { createAgentSession } = fakePi(() => ({
-        toolCalls: [{ id: "tool_ls_1", name: "ls", arguments: { path: "src" }, result: "hello.ts" }],
+        toolCalls: [
+            { id: "tool_read_1", name: "read", arguments: { path: "src/a.ts", offset: 2 } },
+            { id: "tool_write_1", name: "write", arguments: { path: "src/new.ts", content: "new" } },
+            {
+                id: "tool_edit_1",
+                name: "edit",
+                arguments: { path: "src/a.ts", edits: [{ oldText: "old", newText: "new" }] }
+            },
+            { id: "tool_bash_1", name: "bash", arguments: { command: "pnpm test", timeout: 1000 } },
+            {
+                id: "tool_grep_1",
+                name: "grep",
+                arguments: { pattern: "needle", path: "src", glob: "*.ts", ignoreCase: true }
+            },
+            { id: "tool_find_1", name: "find", arguments: { pattern: "*.ts", path: "src", limit: 10 } },
+            { id: "tool_ls_1", name: "ls", arguments: { path: "src", limit: 10 }, result: "hello.ts" },
+            { id: "tool_ls_default", name: "ls", arguments: {}, result: "src" },
+            { id: "tool_invalid_grep", name: "grep", arguments: { path: "src" } },
+            { id: "tool_invalid_find", name: "find", arguments: { pattern: "", path: "src" } }
+        ],
         output: { done: true }
     }))
     const agent = new PiAgent({
         provider: "openai",
         model: "gpt-5.4",
-        sessionOptions: { modelRuntime, tools: ["ls"] },
+        sessionOptions: { modelRuntime, tools: ["read", "write", "edit", "bash", "grep", "find", "ls"] },
         createAgentSession
     })
 
-    // when the agent lists a directory
-    await testRun(loopy, () => agent.run("inspect", { prompt: "list files", output: outputSchema, worktree }))
+    // when the agent runs the tools
+    await testRun(loopy, () => agent.run("inspect", { prompt: "inspect files", output: outputSchema, worktree }))
 
-    // then the call uses the shared file-search classification
+    // then valid calls keep normalized essentials while malformed searches keep only their raw inputs
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
     const calls = sessionToolCallMessages((await loopy.sessions.get(step.sessionId!)).messages)
-    expect(calls).toHaveLength(1)
-    expect(calls[0]).toMatchObject({
-        toolCall: {
+    expect(calls.map((item) => item.toolCall)).toEqual([
+        {
+            id: "tool_read_1",
+            name: "read",
+            source: { kind: "native" },
+            input: { path: "src/a.ts", offset: 2 },
+            common: { name: "file.read", path: "src/a.ts" }
+        },
+        {
+            id: "tool_write_1",
+            name: "write",
+            source: { kind: "native" },
+            input: { path: "src/new.ts", content: "new" },
+            common: { name: "file.change", paths: ["src/new.ts"] }
+        },
+        {
+            id: "tool_edit_1",
+            name: "edit",
+            source: { kind: "native" },
+            input: { path: "src/a.ts", edits: [{ oldText: "old", newText: "new" }] },
+            common: { name: "file.change", paths: ["src/a.ts"] }
+        },
+        {
+            id: "tool_bash_1",
+            name: "bash",
+            source: { kind: "native" },
+            input: { command: "pnpm test", timeout: 1000 },
+            common: { name: "shell.execute", command: "pnpm test" }
+        },
+        {
+            id: "tool_grep_1",
+            name: "grep",
+            source: { kind: "native" },
+            input: { pattern: "needle", path: "src", glob: "*.ts", ignoreCase: true },
+            common: { name: "file.search", pattern: "needle", path: "src" }
+        },
+        {
+            id: "tool_find_1",
+            name: "find",
+            source: { kind: "native" },
+            input: { pattern: "*.ts", path: "src", limit: 10 },
+            common: { name: "file.search", pattern: "*.ts", path: "src" }
+        },
+        {
             id: "tool_ls_1",
             name: "ls",
             source: { kind: "native" },
-            commonName: "file.search",
+            input: { path: "src", limit: 10 },
+            common: { name: "file.search", path: "src" }
+        },
+        {
+            id: "tool_ls_default",
+            name: "ls",
+            source: { kind: "native" },
+            input: {},
+            common: { name: "file.search" }
+        },
+        {
+            id: "tool_invalid_grep",
+            name: "grep",
+            source: { kind: "native" },
             input: { path: "src" }
+        },
+        {
+            id: "tool_invalid_find",
+            name: "find",
+            source: { kind: "native" },
+            input: { pattern: "", path: "src" }
         }
-    })
+    ])
 })
 
 test("PiAgent records extension custom messages as user messages", async () => {

@@ -7,7 +7,7 @@ import type {
     SDKUserMessage
 } from "@anthropic-ai/claude-agent-sdk"
 import { BaseCodingAgent, type CodingAgentInvocation } from "@loopy/core/ai/base-agent"
-import { type CommonToolName, type SessionRecorder, type ToolSource } from "@loopy/core/ai/sessions"
+import { type CommonTool, type SessionRecorder, type ToolSource } from "@loopy/core/ai/sessions"
 import type { Worktree } from "@loopy/core/git"
 
 export type QueryFunction = (input: {
@@ -113,15 +113,13 @@ function recordAssistantBlock(session: SessionRecorder, block: AssistantBlock): 
         session.addMessage("reasoning", block.thinking)
     } else if (block.type === "tool_use" || block.type === "server_tool_use" || block.type === "mcp_tool_use") {
         const identity = claudeToolIdentity(block)
-        const commonName = claudeCommonTool(block.type, block.name)
-        const files = claudeFiles(commonName, block.input)
+        const common = claudeCommonTool(block.type, block.name, block.input)
         session.addToolCall({
             id: block.id,
             name: identity.name,
             source: identity.source,
-            ...(commonName !== undefined ? { commonName } : {}),
             input: block.input,
-            ...(files.length > 0 ? { files } : {})
+            ...(common !== undefined ? { common } : {})
         })
     } else if (isToolResultBlock(block)) {
         const failed = toolResultFailed(block)
@@ -156,32 +154,50 @@ function claudeMcpTool(name: string): { name: string; source: ToolSource } | und
     }
 }
 
-function claudeCommonTool(type: AssistantBlock["type"], name: string): CommonToolName | undefined {
-    if (type === "server_tool_use") return name === "web_search" ? "web.search" : undefined
+function claudeCommonTool(type: AssistantBlock["type"], name: string, input: unknown): CommonTool | undefined {
+    if (type === "server_tool_use") return name === "web_search" ? webSearchTool(input) : undefined
     if (type !== "tool_use") return undefined
     switch (name) {
-        case "Read":
-            return "file.read"
+        case "Read": {
+            const path = inputString(input, "file_path")
+            return path === undefined ? undefined : { name: "file.read", path }
+        }
         case "Write":
-        case "Edit":
-            return "file.change"
-        case "Bash":
-            return "shell.execute"
+        case "Edit": {
+            const path = inputString(input, "file_path")
+            return path === undefined ? undefined : { name: "file.change", paths: [path] }
+        }
+        case "Bash": {
+            const command = inputString(input, "command")
+            return command === undefined ? undefined : { name: "shell.execute", command }
+        }
         case "Glob":
-        case "Grep":
-            return "file.search"
+        case "Grep": {
+            const pattern = inputString(input, "pattern")
+            if (pattern === undefined) return undefined
+            const path = inputString(input, "path")
+            return {
+                name: "file.search",
+                pattern,
+                ...(path !== undefined ? { path } : {})
+            }
+        }
         case "WebSearch":
-            return "web.search"
+            return webSearchTool(input)
         default:
             return undefined
     }
 }
 
-function claudeFiles(commonName: CommonToolName | undefined, input: unknown): string[] {
-    if (commonName !== "file.read" && commonName !== "file.change") return []
-    if (typeof input !== "object" || input === null || !("file_path" in input)) return []
-    const file = (input as { file_path?: unknown }).file_path
-    return typeof file === "string" && file.length > 0 ? [file] : []
+function webSearchTool(input: unknown): CommonTool | undefined {
+    const query = inputString(input, "query")
+    return query === undefined ? undefined : { name: "web.search", query }
+}
+
+function inputString(input: unknown, key: string): string | undefined {
+    if (typeof input !== "object" || input === null || !(key in input)) return undefined
+    const value = (input as Record<string, unknown>)[key]
+    return typeof value === "string" && value.length > 0 ? value : undefined
 }
 
 function isToolResultBlock(block: AssistantBlock): block is AssistantBlock & { tool_use_id: string; content: unknown } {

@@ -153,19 +153,18 @@ function recordToolCall(session: SessionRecorder, item: CodexToolItem, recordedT
                 id: item.id,
                 name: item.type,
                 source: { kind: "native" },
-                commonName: "shell.execute",
-                input: { command: item.command }
+                input: { command: item.command },
+                common: { name: "shell.execute", command: item.command }
             })
             break
         case "file_change": {
-            const files = item.changes.map((change) => change.path)
+            const paths = item.changes.map((change) => change.path)
             session.addToolCall({
                 id: item.id,
                 name: item.type,
                 source: { kind: "native" },
-                commonName: "file.change",
                 input: { changes: item.changes },
-                ...(files.length > 0 ? { files } : {})
+                common: { name: "file.change", paths }
             })
             break
         }
@@ -182,8 +181,8 @@ function recordToolCall(session: SessionRecorder, item: CodexToolItem, recordedT
                 id: item.id,
                 name: item.type,
                 source: { kind: "provider" },
-                commonName: "web.search",
-                input: { query: item.query }
+                input: { query: item.query },
+                common: { name: "web.search", query: item.query }
             })
             break
     }

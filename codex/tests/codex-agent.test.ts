@@ -101,9 +101,8 @@ test("CodexAgent maps the SDK conversation to the session and snapshots the work
             id: "change_1",
             name: "file_change",
             source: { kind: "native" },
-            commonName: "file.change",
             input: { changes: [{ path: "src/hello.ts", kind: "add" }] },
-            files: ["src/hello.ts"]
+            common: { name: "file.change", paths: ["src/hello.ts"] }
         }
     })
     // and the final agent message is recorded once, verbatim, with no re-stringified duplicate
@@ -295,15 +294,14 @@ test("CodexAgent records every supported SDK item type", async () => {
             id: "command_1",
             name: "command_execution",
             source: { kind: "native" },
-            commonName: "shell.execute",
-            input: { command: "pnpm test" }
+            input: { command: "pnpm test" },
+            common: { name: "shell.execute", command: "pnpm test" }
         }
     })
     expect(session.messages[5]).toMatchObject({
         toolCall: {
             id: "change_1",
-            commonName: "file.change",
-            files: ["a.ts"]
+            common: { name: "file.change", paths: ["a.ts"] }
         }
     })
     expect(session.messages[7]).toMatchObject({
@@ -319,8 +317,8 @@ test("CodexAgent records every supported SDK item type", async () => {
             id: "search_1",
             name: "web_search",
             source: { kind: "provider" },
-            commonName: "web.search",
-            input: { query: "loopy" }
+            input: { query: "loopy" },
+            common: { name: "web.search", query: "loopy" }
         }
     })
     // and tool completions preserve the authoritative completed item

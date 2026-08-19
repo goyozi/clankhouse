@@ -4,7 +4,7 @@ import type { Artifact as CoreArtifact } from "@loopy/core/artifacts"
 import type {
     AISession,
     AISessionMessage,
-    CommonToolName as CoreCommonToolName,
+    CommonTool as CoreCommonTool,
     SessionMessageRole,
     ToolSource
 } from "@loopy/core/ai/sessions"
@@ -18,13 +18,13 @@ import type {
 import {
     ArtifactKind,
     ArtifactSchema,
-    CommonToolName,
     ExecutionStatus,
     RunMetadataSchema,
     SessionMessageSchema,
     SessionKind,
     SessionRole,
     SessionSchema,
+    SessionToolCallSchema,
     StepKind,
     StepSchema,
     ToolResultStatus,
@@ -166,9 +166,8 @@ export function toSessionMessage(message: AISessionMessage): MessageInitShape<ty
                         id: message.toolCall.id,
                         name: message.toolCall.name,
                         source: toToolSource(message.toolCall.source),
-                        commonName: toCommonToolName(message.toolCall.commonName),
                         inputJson: JSON.stringify(message.toolCall.input),
-                        files: message.toolCall.files ?? []
+                        common: toCommonTool(message.toolCall.common)
                     }
                 }
             }
@@ -217,19 +216,25 @@ function toToolSource(source: ToolSource): { kind: ToolSourceKind; server?: stri
     }
 }
 
-function toCommonToolName(commonName: CoreCommonToolName | undefined): CommonToolName {
-    switch (commonName) {
+function toCommonTool(common: CoreCommonTool | undefined): MessageInitShape<typeof SessionToolCallSchema>["common"] {
+    switch (common?.name) {
         case "file.read":
-            return CommonToolName.FILE_READ
+            return { case: "fileRead" as const, value: { path: common.path } }
         case "file.change":
-            return CommonToolName.FILE_CHANGE
+            return { case: "fileChange" as const, value: { paths: common.paths } }
         case "shell.execute":
-            return CommonToolName.SHELL_EXECUTE
+            return { case: "shellExecute" as const, value: { command: common.command } }
         case "file.search":
-            return CommonToolName.FILE_SEARCH
+            return {
+                case: "fileSearch" as const,
+                value: {
+                    ...(common.pattern !== undefined ? { pattern: common.pattern } : {}),
+                    ...(common.path !== undefined ? { path: common.path } : {})
+                }
+            }
         case "web.search":
-            return CommonToolName.WEB_SEARCH
+            return { case: "webSearch" as const, value: { query: common.query } }
         case undefined:
-            return CommonToolName.UNSPECIFIED
+            return { case: undefined }
     }
 }

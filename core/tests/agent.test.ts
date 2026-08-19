@@ -60,12 +60,11 @@ test("FakeCodingAgent applies changes and snapshots the worktree", async () => {
         toolCall: {
             name: "write",
             source: { kind: "native" },
-            commonName: "file.change",
-            files: ["src/hello.ts"]
+            common: { name: "file.change", paths: ["src/hello.ts"] }
         }
     })
     expect(session.messages[3]).toMatchObject({
-        toolCall: { name: "edit", commonName: "file.change", files: ["README.md"] }
+        toolCall: { name: "edit", common: { name: "file.change", paths: ["README.md"] } }
     })
     // and the final assistant message carries the agent's output
     expect(session.messages.at(-1)).toMatchObject({ type: "message", content: JSON.stringify({ done: true }) })

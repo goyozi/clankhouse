@@ -58,15 +58,6 @@ enum SessionRole {
   SESSION_ROLE_REASONING = 4;
 }
 
-enum CommonToolName {
-  COMMON_TOOL_NAME_UNSPECIFIED = 0;
-  COMMON_TOOL_NAME_FILE_READ = 1;
-  COMMON_TOOL_NAME_FILE_CHANGE = 2;
-  COMMON_TOOL_NAME_SHELL_EXECUTE = 3;
-  COMMON_TOOL_NAME_FILE_SEARCH = 4;
-  COMMON_TOOL_NAME_WEB_SEARCH = 5;
-}
-
 enum ToolSourceKind {
   TOOL_SOURCE_KIND_UNSPECIFIED = 0;
   TOOL_SOURCE_KIND_NATIVE = 1;
@@ -147,13 +138,39 @@ message SessionToolSource {
   optional string server = 2;
 }
 
+message SessionFileRead {
+  string path = 1;
+}
+
+message SessionFileChange {
+  repeated string paths = 1;
+}
+
+message SessionShellExecute {
+  string command = 1;
+}
+
+message SessionFileSearch {
+  optional string pattern = 1;
+  optional string path = 2;
+}
+
+message SessionWebSearch {
+  string query = 1;
+}
+
 message SessionToolCall {
   string id = 1;
   string name = 2;
   SessionToolSource source = 3;
-  CommonToolName common_name = 4;
   string input_json = 5;
-  repeated string files = 6;
+  oneof common {
+    SessionFileRead file_read = 6;
+    SessionFileChange file_change = 7;
+    SessionShellExecute shell_execute = 8;
+    SessionFileSearch file_search = 9;
+    SessionWebSearch web_search = 10;
+  }
 }
 
 message SessionToolResult {

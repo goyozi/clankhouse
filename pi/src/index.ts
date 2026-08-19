@@ -9,7 +9,7 @@ import {
     type CreateAgentSessionOptions
 } from "@earendil-works/pi-coding-agent"
 import { BaseCodingAgent, type CodingAgentInvocation } from "@loopy/core/ai/base-agent"
-import type { CommonToolName, SessionRecorder } from "@loopy/core/ai/sessions"
+import type { CommonTool, SessionRecorder } from "@loopy/core/ai/sessions"
 import type { Worktree } from "@loopy/core/git"
 
 export type PiAgentSessionOptions = Omit<CreateAgentSessionOptions, "cwd" | "model" | "sessionManager">
@@ -141,15 +141,13 @@ function recordMessage(session: SessionRecorder, message: PiMessage): void {
             } else if (block.type === "thinking") {
                 session.addMessage("reasoning", block.thinking)
             } else if (block.type === "toolCall") {
-                const commonName = piCommonTool(block.name)
-                const files = piFiles(commonName, block.arguments)
+                const common = piCommonTool(block.name, block.arguments)
                 session.addToolCall({
                     id: block.id,
                     name: block.name,
                     source: { kind: "native" },
-                    ...(commonName !== undefined ? { commonName } : {}),
                     input: block.arguments,
-                    ...(files.length > 0 ? { files } : {})
+                    ...(common !== undefined ? { common } : {})
                 })
             }
         }
@@ -179,29 +177,45 @@ function recordMessage(session: SessionRecorder, message: PiMessage): void {
     }
 }
 
-function piCommonTool(name: string): CommonToolName | undefined {
+function piCommonTool(name: string, input: unknown): CommonTool | undefined {
     switch (name) {
-        case "read":
-            return "file.read"
+        case "read": {
+            const path = inputString(input, "path")
+            return path === undefined ? undefined : { name: "file.read", path }
+        }
         case "write":
-        case "edit":
-            return "file.change"
-        case "bash":
-            return "shell.execute"
+        case "edit": {
+            const path = inputString(input, "path")
+            return path === undefined ? undefined : { name: "file.change", paths: [path] }
+        }
+        case "bash": {
+            const command = inputString(input, "command")
+            return command === undefined ? undefined : { name: "shell.execute", command }
+        }
         case "grep":
-        case "find":
-        case "ls":
-            return "file.search"
+        case "find": {
+            const pattern = inputString(input, "pattern")
+            if (pattern === undefined) return undefined
+            const path = inputString(input, "path")
+            return {
+                name: "file.search",
+                pattern,
+                ...(path !== undefined ? { path } : {})
+            }
+        }
+        case "ls": {
+            const path = inputString(input, "path")
+            return { name: "file.search", ...(path !== undefined ? { path } : {}) }
+        }
         default:
             return undefined
     }
 }
 
-function piFiles(commonName: CommonToolName | undefined, input: unknown): string[] {
-    if (commonName !== "file.read" && commonName !== "file.change") return []
-    if (typeof input !== "object" || input === null || !("path" in input)) return []
-    const file = (input as { path?: unknown }).path
-    return typeof file === "string" && file.length > 0 ? [file] : []
+function inputString(input: unknown, key: string): string | undefined {
+    if (typeof input !== "object" || input === null || !(key in input)) return undefined
+    const value = (input as Record<string, unknown>)[key]
+    return typeof value === "string" && value.length > 0 ? value : undefined
 }
 
 function collectFinalMessage(message: PiAssistantMessage | undefined): string | undefined {

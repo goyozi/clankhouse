@@ -11,15 +11,15 @@ function textMessage(message: AISessionMessage): Extract<AISessionMessage, { typ
     return message
 }
 
-test("session filesRoot makes files relative and preserves outside files as absolute", async () => {
-    // given a worktree, duplicate relative paths and an absolute path outside it
+test("session filesRoot normalizes common tool paths", async () => {
+    // given a worktree, duplicate change paths, a search path and an absolute path outside it
     const parent = tempDir("loopy-session-files-")
     const worktree = path.join(parent, "worktree")
     const outside = path.join(parent, "shared.ts")
     fs.mkdirSync(worktree)
     fs.writeFileSync(outside, "")
 
-    // when recording file targets against the worktree root
+    // when recording change and search calls against the worktree root
     const { loopy } = tempLoopy()
     const recorder = loopy.sessions.create({
         kind: "coding-agent",
@@ -33,15 +33,34 @@ test("session filesRoot makes files relative and preserves outside files as abso
         name: "edit",
         source: { kind: "native" },
         input: {},
-        files: ["src/a.ts", "src/../src/a.ts", outside]
+        common: { name: "file.change", paths: ["src/a.ts", "src/../src/a.ts", outside] }
+    })
+    recorder.addToolCall({
+        id: "call-2",
+        name: "grep",
+        source: { kind: "native" },
+        input: { pattern: "needle", path: "src/../src" },
+        common: { name: "file.search", pattern: "needle", path: "src/../src" }
     })
     recorder.succeed()
 
     // then paths are normalized, deduplicated and retain their first-seen order
-    const message = (await loopy.sessions.get(recorder.id)).messages[0]
-    expect(message).toMatchObject({
+    const messages = (await loopy.sessions.get(recorder.id)).messages
+    expect(messages[0]).toMatchObject({
         type: "tool_call",
-        toolCall: { files: ["src/a.ts", fs.realpathSync(outside).split(path.sep).join("/")] }
+        toolCall: {
+            common: {
+                name: "file.change",
+                paths: ["src/a.ts", fs.realpathSync(outside).split(path.sep).join("/")]
+            }
+        }
+    })
+    expect(messages[1]).toMatchObject({
+        type: "tool_call",
+        toolCall: {
+            input: { pattern: "needle", path: "src/../src" },
+            common: { name: "file.search", pattern: "needle", path: "src" }
+        }
     })
 })
 
@@ -68,13 +87,16 @@ test("session filesRoot recognizes canonical paths beneath a symlinked worktree"
         name: "read",
         source: { kind: "native" },
         input: {},
-        files: [target]
+        common: { name: "file.read", path: target }
     })
     recorder.succeed()
 
     // then the target is represented relative to the worktree
     const message = (await loopy.sessions.get(recorder.id)).messages[0]
-    expect(message).toMatchObject({ type: "tool_call", toolCall: { files: ["src/a.ts"] } })
+    expect(message).toMatchObject({
+        type: "tool_call",
+        toolCall: { common: { name: "file.read", path: "src/a.ts" } }
+    })
 })
 
 test("sessions without filesRoot preserve recorded file targets", async () => {
@@ -88,13 +110,16 @@ test("sessions without filesRoot preserve recorded file targets", async () => {
         name: "read",
         source: { kind: "native" },
         input: {},
-        files: ["src/../src/a.ts"]
+        common: { name: "file.read", path: "src/../src/a.ts" }
     })
     recorder.succeed()
 
     // then the target is stored as supplied
     const message = (await loopy.sessions.get(recorder.id)).messages[0]
-    expect(message).toMatchObject({ type: "tool_call", toolCall: { files: ["src/../src/a.ts"] } })
+    expect(message).toMatchObject({
+        type: "tool_call",
+        toolCall: { common: { name: "file.read", path: "src/../src/a.ts" } }
+    })
 })
 
 test("tool calls normalize an absent input to JSON null", async () => {
@@ -116,6 +141,67 @@ test("tool calls normalize an absent input to JSON null", async () => {
         type: "tool_call",
         toolCall: { id: "call-1", input: null }
     })
+    expect((await loopy.sessions.get(recorder.id)).messages[0]).not.toHaveProperty("toolCall.common")
+})
+
+test("common tool arguments and raw inputs round-trip", async () => {
+    // given one call for every common tool and one non-common tool
+    const { loopy } = tempLoopy()
+    const recorder = loopy.sessions.create({ kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
+    const calls = [
+        {
+            id: "read",
+            name: "Read",
+            source: { kind: "native" as const },
+            input: { file_path: "a.ts", offset: 10 },
+            common: { name: "file.read" as const, path: "a.ts" }
+        },
+        {
+            id: "change",
+            name: "Edit",
+            source: { kind: "native" as const },
+            input: { file_path: "a.ts", old_string: "a", new_string: "b" },
+            common: { name: "file.change" as const, paths: ["a.ts"] }
+        },
+        {
+            id: "shell",
+            name: "Bash",
+            source: { kind: "native" as const },
+            input: { command: "pnpm test", timeout: 1000 },
+            common: { name: "shell.execute" as const, command: "pnpm test" }
+        },
+        {
+            id: "file-search",
+            name: "Grep",
+            source: { kind: "native" as const },
+            input: { pattern: "needle", path: "src", glob: "*.ts" },
+            common: { name: "file.search" as const, pattern: "needle", path: "src" }
+        },
+        {
+            id: "web-search",
+            name: "WebSearch",
+            source: { kind: "provider" as const },
+            input: { query: "loopy", allowed_domains: ["example.com"] },
+            common: { name: "web.search" as const, query: "loopy" }
+        },
+        {
+            id: "custom",
+            name: "lookup",
+            source: { kind: "mcp" as const, server: "docs" },
+            input: { key: "sessions" }
+        }
+    ]
+
+    // when the calls are recorded and loaded
+    for (const call of calls) recorder.addToolCall(call)
+    recorder.succeed()
+    const recorded = (await loopy.sessions.get(recorder.id)).messages.map((message) => {
+        if (message.type !== "tool_call") throw new Error(`Expected tool call, received ${message.type}`)
+        return message.toolCall
+    })
+
+    // then normalized arguments and complete raw inputs are preserved without adding common data to the custom call
+    expect(recorded).toEqual(calls)
 })
 
 test("get returns ordered session messages and stream yields them in order", async () => {
@@ -129,9 +215,8 @@ test("get returns ordered session messages and stream yields them in order", asy
         id: "call-1",
         name: "Read",
         source: { kind: "native" },
-        commonName: "file.read",
         input: { file_path: "a.ts" },
-        files: ["a.ts"]
+        common: { name: "file.read", path: "a.ts" }
     })
     recorder.addToolResult({ toolCallId: "call-1", status: "succeeded", output: "contents" })
     recorder.addMessage("assistant", "hello")
@@ -157,9 +242,8 @@ test("get returns ordered session messages and stream yields them in order", asy
             id: "call-1",
             name: "Read",
             source: { kind: "native" },
-            commonName: "file.read",
             input: { file_path: "a.ts" },
-            files: ["a.ts"]
+            common: { name: "file.read", path: "a.ts" }
         }
     })
     expect(session.messages[4]).toMatchObject({

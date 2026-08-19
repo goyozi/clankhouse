@@ -65,9 +65,8 @@ export class FakeCodingAgent extends BaseCodingAgent {
                 id: toolCallId,
                 name: "text" in change ? "write" : "oldText" in change ? "edit" : "delete",
                 source: { kind: "native" },
-                commonName: "file.change",
                 input: change,
-                files: [change.file]
+                common: { name: "file.change", paths: [change.file] }
             })
             try {
                 await applyChange(change, worktree.path)
