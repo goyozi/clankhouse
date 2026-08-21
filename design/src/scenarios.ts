@@ -76,29 +76,38 @@ const contextSessionMessages = [
 const reviewSessionMessages = [
     "user: Review the proposed CLI output changes for correctness.",
     "assistant: I’ll inspect the CLI formatter and its tests.",
-    'tool: {"id":"call_01","tool":"read","input":{"path":"cli/src/cmd/runs.ts"}}',
+    "tool: read cli/src/cmd/runs.ts",
+    "tool: notion.read_notion_page (mcp)",
+    "assistant: No blocking issues found."
+]
+const reviewSessionToolIoMessages = [
+    "user: Review the proposed CLI output changes for correctness.",
+    "assistant: I’ll inspect the CLI formatter and its tests.",
+    "tool: read cli/src/cmd/runs.ts",
+    'input: {"id":"call_01","tool":"read","input":{"path":"cli/src/cmd/runs.ts"}}',
     'tool_result: {"toolUseId":"call_01","status":"succeeded","content":{"lines":512}}',
+    "tool: notion.read_notion_page (mcp)",
+    'input: {"id":"call_02","tool":"notion.read_notion_page","input":{"page_id":"cli-output"}}',
+    'tool_result: {"toolUseId":"call_02","status":"succeeded","content":{"title":"CLI output"}}',
     "assistant: No blocking issues found."
 ]
 const verdictSessionMessages = ["user: Return the final verdict for the pull request review.", "assistant: approve"]
 const failedReviewSessionMessages = [
     "user: Draft release notes after checking the repository.",
     "assistant: I’ll check the repository before drafting the notes.",
-    'tool: {"id":"call_01","tool":"shell","input":{"command":"git diff --check"}}',
-    'tool_result: {"toolUseId":"call_01","status":"failed","content":null,"error":"README.md:18: trailing whitespace"}'
+    "tool: shell git diff --check",
+    "tool_result: failed: README.md:18: trailing whitespace"
 ]
 const parallelReviewSessionMessages = [
     "user: Review the runs output changes for correctness and API regressions.",
     "assistant: I’ll trace the watch paths and their edge cases.\nI’ll start with the event model.",
-    'tool: {"id":"call_01","tool":"read","input":{"path":"cli/src/cmd/runs"}}',
-    'tool_result: {"toolUseId":"call_01","status":"succeeded","content":{"files":2}}',
+    "tool: read cli/src/cmd/runs",
     "assistant: The API flow looks sound; no blocking issues."
 ]
 const testSessionMessages = [
     "user: Validate the change with the focused CLI tests.",
     "assistant: I’ll run the run-output and CLI suites.",
-    'tool: {"id":"call_02","tool":"shell","input":{"command":"pnpm --filter @loopy/cli test"}}',
-    'tool_result: {"toolUseId":"call_02","status":"succeeded","content":{"passed":38}}',
+    "tool: shell pnpm --filter @loopy/cli test",
     "assistant: All focused tests pass."
 ]
 const summarySessionMessages = ["user: Combine the code and test reviews into a final verdict.", "assistant: approve"]
@@ -206,7 +215,7 @@ function standaloneSessionMessageLines(message: string): TerminalLine[] {
     return alignedSessionMessageLines(message).map((text) => line(text, 1))
 }
 
-function completedRunLines(includeSessions: boolean): TerminalLine[] {
+function completedRunLines(includeSessions: boolean, includeToolIo = false): TerminalLine[] {
     return [
         ...runLines(runId, "review-pull-request", "pr-482", 1, "succeeded", startedAt, endedAt),
         blank(),
@@ -222,7 +231,15 @@ function completedRunLines(includeSessions: boolean): TerminalLine[] {
         ...stepLines(2, "review-changes", "coding-agent", "2026-08-13T09:00:01.200Z", "2026-08-13T09:00:42.000Z", {
             ...(includeSessions ? {} : { session: sessionId })
         }),
-        ...(includeSessions ? sessionLines(sessionId, "codex", "openai", "gpt-5.4-codex", reviewSessionMessages) : []),
+        ...(includeSessions
+            ? sessionLines(
+                  sessionId,
+                  "codex",
+                  "openai",
+                  "gpt-5.4-codex",
+                  includeToolIo ? reviewSessionToolIoMessages : reviewSessionMessages
+              )
+            : []),
         ...stepOutputLines(reviewOutput),
         blank(),
         ...stepLines(3, "synthesize-verdict", "llm", "2026-08-13T09:00:42.000Z", verdictEndedAt, {
@@ -390,21 +407,21 @@ const parallelActivityChunks = [
     ]),
     activityLines("13:20:11", "2. review-source", [
         "Session (continued)",
-        ...parallelReviewSessionMessages.slice(2, 4).flatMap(activityMessageLines)
+        ...parallelReviewSessionMessages.slice(2, 3).flatMap(activityMessageLines)
     ]),
     activityLines("13:20:18", "3. validate-tests", [
         "Session (continued)",
-        ...testSessionMessages.slice(2, 4).flatMap(activityMessageLines)
+        ...testSessionMessages.slice(2, 3).flatMap(activityMessageLines)
     ]),
     activityLines("13:20:42", "2. review-source", [
         "Session (continued)",
-        ...activityMessageLines(parallelReviewSessionMessages[4]!),
+        ...activityMessageLines(parallelReviewSessionMessages[3]!),
         "coding-agent · succeeded · 40.8s",
         `Output ${JSON.stringify(codeReviewOutput)}`
     ]),
     activityLines("13:20:47", "3. validate-tests", [
         "Session (continued)",
-        ...activityMessageLines(testSessionMessages[4]!),
+        ...activityMessageLines(testSessionMessages[3]!),
         "coding-agent · succeeded · 46.3s",
         `Output ${JSON.stringify(testReviewOutput)}`
     ]),
@@ -433,8 +450,8 @@ const parallelWatchChunks = [
 ]
 const getWatchInitialLines = runFrameLines(runningParallelRunLines(2), [
     prepareStep("succeeded"),
-    codeReviewStep("running", 4),
-    testReviewStep("running", 4)
+    codeReviewStep("running", 3),
+    testReviewStep("running", 3)
 ])
 const getWatchUpdateChunks = parallelActivityChunks.slice(6)
 const getWatchChunks = [
@@ -468,6 +485,12 @@ const sessionGetLines = [
     blank(),
     line("Messages"),
     ...reviewSessionMessages.flatMap(standaloneSessionMessageLines)
+]
+const sessionGetToolIoLines = [
+    ...sessionHeaderLines(sessionId, "coding-agent", "codex", "openai", "gpt-5.4-codex", "succeeded · 40.8s"),
+    blank(),
+    line("Messages"),
+    ...reviewSessionToolIoMessages.flatMap(standaloneSessionMessageLines)
 ]
 const sessionWatchChunks = [
     [
@@ -587,10 +610,21 @@ export const scenarios: Scenario[] = [
         label: "Completed run including sessions",
         command: `loopy runs get ${runId} --include sessions`,
         summary: "Included session snapshots are nested beneath the steps that reference them.",
-        note: "Included sessions nest client, provider, model, and aligned message roles beneath their owning step.",
+        note: "Tool calls use compact semantic summaries; successful results stay hidden unless tool I/O is requested.",
         delivery: "instant",
         startAtTop: true,
         lines: completedRunLines(true)
+    },
+    {
+        id: "run-details-verbose",
+        group: "Snapshots",
+        label: "Verbose completed run",
+        command: `loopy runs get ${runId} --verbose`,
+        summary: "Verbose output includes related sessions and their complete tool inputs and results.",
+        note: "Each tool keeps its compact summary and gains aligned input and result envelopes beneath it.",
+        delivery: "instant",
+        startAtTop: true,
+        lines: completedRunLines(true, true)
     },
     {
         id: "string-output",
@@ -650,10 +684,21 @@ export const scenarios: Scenario[] = [
         command: `loopy sessions get ${sessionId}`,
         summary:
             "A session snapshot groups its identity, client and model metadata, terminal state, and message history.",
-        note: "The compact header mirrors a run snapshot; message roles are aligned and tool_result is shortened to result.",
+        note: "Common tools use semantic summaries, MCP tools show their source kind, and successful results are omitted.",
         delivery: "instant",
         startAtTop: true,
         lines: sessionGetLines
+    },
+    {
+        id: "sessions-get-tool-io",
+        group: "Sessions",
+        label: "Get session with tool I/O",
+        command: `loopy sessions get ${sessionId} --include tool-io`,
+        summary: "Tool I/O adds complete raw inputs and results without replacing compact summaries.",
+        note: "The explicit include and global verbose flag produce the same session detail level.",
+        delivery: "instant",
+        startAtTop: true,
+        lines: sessionGetToolIoLines
     },
     {
         id: "sessions-watch",
@@ -661,7 +706,7 @@ export const scenarios: Scenario[] = [
         label: "Watch session",
         command: `loopy sessions watch ${sessionId}`,
         summary: "Session watch emits an append-only stream of aligned messages.",
-        note: "Existing history and live arrivals share the snapshot's message format; the stream ends without a status update.",
+        note: "Existing history and live arrivals share compact tool formatting; hidden results create no empty stream chunks.",
         delivery: "streaming",
         lines: sessionWatchChunks.flat(),
         chunks: sessionWatchChunks

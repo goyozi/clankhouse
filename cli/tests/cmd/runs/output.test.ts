@@ -126,7 +126,8 @@ test("runs get command output matches designs", async () => {
                         id: "call-1",
                         name: "read",
                         source: { kind: "native" },
-                        input: { path: "README.md" }
+                        input: { path: "README.md" },
+                        common: { name: "file.read", path: "README.md" }
                     })
                     session.addToolResult({ toolCallId: "call-1", status: "succeeded", output: { lines: 2 } })
                     session.addMessage("assistant", "approve")
@@ -193,8 +194,15 @@ test("runs get command output matches designs", async () => {
     const failedStep = failedRun.steps[0]!
     const env = serverEnv(await testServer(loopy))
 
-    // when the runs are requested in human-readable form
+    // when the runs are requested in compact and expanded human-readable forms
     const detailed = await runCliCommand(["runs", "get", detailedRunId, "--include", "sessions"], env)
+    const expanded = await runCliCommand(
+        ["runs", "get", detailedRunId, "--include", "sessions", "--include", "tool-io"],
+        env
+    )
+    const implied = await runCliCommand(["runs", "get", detailedRunId, "--include", "tool-io"], env)
+    const all = await runCliCommand(["runs", "get", detailedRunId, "--include", "all"], env)
+    const verbose = await runCliCommand(["runs", "get", detailedRunId, "--verbose"], env)
     const empty = await runCliCommand(["runs", "get", emptyRunId], env)
     const failed = await runCliCommand(["runs", "get", failedRunId], env)
 
@@ -214,8 +222,7 @@ Steps
          user       Review this
 
                     carefully
-         tool       {"id":"call-1","tool":"read","input":{"path":"README.md"}}
-         result     {"toolUseId":"call-1","status":"succeeded","content":{"lines":2}}
+         tool       read README.md
          assistant  approve
 
      Snapshot refs/loopy/review
@@ -266,6 +273,14 @@ Output
     "artifactId": "${artifact.id}"
   }
 `)
+
+    // and tool I/O implies sessions while all expanded spellings produce the same complete details
+    expect(expanded).toContain("         tool       read README.md")
+    expect(expanded).toContain('         input      {"id":"call-1","tool":"read","input":{"path":"README.md"}}')
+    expect(expanded).toContain('         result     {"toolUseId":"call-1","status":"succeeded","content":{"lines":2}}')
+    expect(implied).toBe(expanded)
+    expect(all).toBe(expanded)
+    expect(verbose).toBe(expanded)
 
     // and empty collections, string output, and failures retain explicit compact representations
     expect(empty).toBe(`Run ${emptyRunId}
@@ -396,9 +411,11 @@ test("runs watch command output matches scoped activity designs", async () => {
     await sessionsReady.released
     const env = serverEnv(await testServer(loopy))
 
-    // when messages and completions interleave while the human watch is running
+    // when messages and completions interleave while compact and verbose human watches are running
     const watch = startCliCommand(["runs", "watch", runId, "--include", "sessions"], env)
+    const verboseWatch = startCliCommand(["runs", "watch", runId, "--verbose"], env)
     await waitForOutput(watch.stdout, "test-review\n     coding-agent · running")
+    await waitForOutput(verboseWatch.stdout, "test-review\n     coding-agent · running")
     firstSession!.addMessage("user", "Review this\n\ncarefully")
     await waitForOutput(watch.stdout, "Review this")
     firstSession!.addMessage("assistant", "The API is sound.\nNo blockers.")
@@ -410,7 +427,8 @@ test("runs watch command output matches scoped activity designs", async () => {
         id: "call-1",
         name: "read",
         source: { kind: "native" },
-        input: { path: "README.md" }
+        input: { path: "README.md" },
+        common: { name: "file.read", path: "README.md" }
     })
     firstSession!.addToolResult({ toolCallId: "call-1", status: "succeeded", output: { lines: 2 } })
     firstSession!.addMessage("assistant", "approve")
@@ -421,6 +439,7 @@ test("runs watch command output matches scoped activity designs", async () => {
     await waitForOutput(watch.stdout, "All focused tests pass.")
     secondDone.release()
     const code = await watch.done
+    const verboseCode = await verboseWatch.done
     const run = await loopy.runs.get(runId)
     const firstStep = run.steps.find((step) => step.key === "code-review")!
     const secondStep = run.steps.find((step) => step.key === "test-review")!
@@ -456,8 +475,7 @@ Activity
 
   ${clock(storedFirst.messages[2]!.createdAt)}  ${firstStep.seq + 1}. code-review
      Session (continued)
-       tool       {"id":"call-1","tool":"read","input":{"path":"README.md"}}
-       result     {"toolUseId":"call-1","status":"succeeded","content":{"lines":2}}
+       tool       read README.md
        assistant  approve
      coding-agent · succeeded · ${duration(firstStep.startedAt, firstStep.endedAt)}
      Output {"verdict":"approve"}
@@ -472,6 +490,17 @@ Activity
      succeeded · ${duration(run.startedAt, run.endedAt)}
      Output {"verdict":"approve"}
 `)
+
+    // and verbose implicitly follows sessions and includes their complete tool I/O
+    expect(verboseCode).toBe(0)
+    expect(verboseWatch.stderr()).toBe("")
+    expect(verboseWatch.stdout()).toContain("       tool       read README.md")
+    expect(verboseWatch.stdout()).toContain(
+        '       input      {"id":"call-1","tool":"read","input":{"path":"README.md"}}'
+    )
+    expect(verboseWatch.stdout()).toContain(
+        '       result     {"toolUseId":"call-1","status":"succeeded","content":{"lines":2}}'
+    )
 })
 
 test("runs watch command output scopes step and run failures", async () => {

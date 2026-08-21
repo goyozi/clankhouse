@@ -1,7 +1,13 @@
 import { GetSessionResponseSchema, WatchSessionResponseSchema } from "@loopy/server/proto"
 import type { Command } from "commander"
+import { collectIncludes, includes, type IncludeOptions } from "../../includes"
 import type { Runtime } from "../../runtime"
 import { formatSession, formatSessionMessageLines, formatSessionWatchHeader } from "./output"
+
+type SessionInclude = "tool-io" | "all"
+type SessionOptions = IncludeOptions<SessionInclude>
+
+const sessionIncludes = ["tool-io", "all"] as const
 
 export function registerSessions(program: Command, runtime: Runtime): void {
     const sessions = program.command("sessions").description("Inspect AI sessions")
@@ -9,25 +15,33 @@ export function registerSessions(program: Command, runtime: Runtime): void {
         .command("get")
         .description("Get an AI session")
         .argument("<session-id>")
-        .action(async (sessionId: string, _options: unknown, command: Command) => {
+        .option("--include <resource>", "include additional session details", collectIncludes(sessionIncludes), [])
+        .action(async (sessionId: string, options: SessionOptions, command: Command) => {
             const client = await runtime.client(command)
             const response = await client.getSession({ sessionId }, { signal: runtime.signal })
-            await runtime.emit(command, GetSessionResponseSchema, response, () => formatSession(response))
+            const formatOptions = { includeToolIo: includes(options, command, "tool-io") }
+            await runtime.emit(command, GetSessionResponseSchema, response, () =>
+                formatSession(response, formatOptions)
+            )
         })
     sessions
         .command("watch")
         .description("Watch AI session messages")
         .argument("<session-id>")
-        .action(async (sessionId: string, _options: unknown, command: Command) => {
+        .option("--include <resource>", "include additional session details", collectIncludes(sessionIncludes), [])
+        .action(async (sessionId: string, options: SessionOptions, command: Command) => {
             const client = await runtime.client(command)
             const output = runtime.output(command)
+            const formatOptions = { includeToolIo: includes(options, command, "tool-io") }
             if (!output.json) {
                 const response = await client.getSession({ sessionId }, { signal: runtime.signal })
                 await output.write(formatSessionWatchHeader(response))
             }
             for await (const response of client.watchSession({ sessionId }, { signal: runtime.signal })) {
                 if (output.json) await output.proto(WatchSessionResponseSchema, response)
-                else if (response.message !== undefined) await output.write(formatSessionMessageLines(response.message))
+                else if (response.message !== undefined) {
+                    await output.write(formatSessionMessageLines(response.message, formatOptions))
+                }
             }
         })
 }

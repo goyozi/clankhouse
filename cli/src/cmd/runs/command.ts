@@ -22,6 +22,7 @@ import {
 import { InvalidArgumentError, type Command } from "commander"
 import type { LoopyClient } from "../../client"
 import { CliError } from "../../errors"
+import { collectIncludes, includes, type IncludeOptions } from "../../includes"
 import { readJsonInput } from "../../io"
 import type { Output } from "../../output"
 import type { Runtime } from "../../runtime"
@@ -35,10 +36,18 @@ import {
     RunActivityFormatter
 } from "./output"
 
-type RunGetOptions = {
-    include?: "sessions"
+type RunInclude = "sessions" | "tool-io" | "all"
+
+type RunGetOptions = IncludeOptions<RunInclude> & {
     watch?: boolean
 }
+
+type RunDetails = {
+    includeSessions: boolean
+    includeToolIo: boolean
+}
+
+const runIncludes = ["sessions", "tool-io", "all"] as const
 
 type RunWatchItem =
     | { kind: "run"; schema: typeof WatchRunResponseSchema; message: WatchRunResponse }
@@ -110,7 +119,7 @@ export function registerRuns(program: Command, runtime: Runtime): void {
     runs.command("get")
         .description("Get a workflow run")
         .argument("<run-id>")
-        .option("--include <resource>", "include related sessions", includeResource)
+        .option("--include <resource>", "include related run details", collectIncludes(runIncludes), [])
         .option("--watch", "watch later run updates")
         .action(async (runId: string, options: RunGetOptions, command: Command) => {
             await getRun(runtime, command, runId, options)
@@ -118,22 +127,25 @@ export function registerRuns(program: Command, runtime: Runtime): void {
     runs.command("watch")
         .description("Watch a workflow run")
         .argument("<run-id>")
-        .option("--include <resource>", "include related sessions", includeResource)
-        .action(async (runId: string, options: { include?: "sessions" }, command: Command) => {
+        .option("--include <resource>", "include related run details", collectIncludes(runIncludes), [])
+        .action(async (runId: string, options: IncludeOptions<RunInclude>, command: Command) => {
             const client = await runtime.client(command)
             const output = runtime.output(command)
+            const details = runDetails(options, command)
             let human: HumanRunWatch | undefined
             if (!output.json) {
                 const initial = await client.getRun({ runId }, { signal: runtime.signal })
                 await output.write(formatRunActivityHeader(initial))
                 human = {
-                    formatter: new RunActivityFormatter(initial.run?.steps ?? []),
+                    formatter: new RunActivityFormatter(initial.run?.steps ?? [], [], {
+                        includeToolIo: details.includeToolIo
+                    }),
                     sessions: new Map()
                 }
             }
             for await (const item of watchRun(client, {
                 runId,
-                includeSessions: options.include === "sessions",
+                includeSessions: details.includeSessions,
                 signal: runtime.signal
             })) {
                 await emitWatchItem(runtime, command, client, output, item, human)
@@ -213,9 +225,10 @@ function completedRunOutput(runId: string, run: WorkflowRun | undefined): string
 async function getRun(runtime: Runtime, command: Command, runId: string, options: RunGetOptions): Promise<void> {
     const client = await runtime.client(command)
     const output = runtime.output(command)
+    const details = runDetails(options, command)
     const initial = await client.getRun({ runId }, { signal: runtime.signal })
-    const initialSessions = options.include === "sessions" ? await getRunSessions(client, initial, runtime.signal) : []
-    await emitRunSnapshot(output, initial, initialSessions)
+    const initialSessions = details.includeSessions ? await getRunSessions(client, initial, runtime.signal) : []
+    await emitRunSnapshot(output, initial, initialSessions, details.includeToolIo)
 
     const status = initial.run?.metadata?.status
     if (options.watch !== true || status === undefined || terminalStatus(status)) {
@@ -238,7 +251,8 @@ async function getRun(runtime: Runtime, command: Command, runId: string, options
         : {
               formatter: new RunActivityFormatter(initial.run?.steps ?? [], sessions.values(), {
                   renderedSteps: true,
-                  introducedSessions: true
+                  introducedSessions: true,
+                  includeToolIo: details.includeToolIo
               }),
               sessions
           }
@@ -246,7 +260,7 @@ async function getRun(runtime: Runtime, command: Command, runId: string, options
     for await (const item of watchRun(client, {
         runId,
         ...(fromStepId !== undefined ? { fromStepId } : {}),
-        includeSessions: options.include === "sessions",
+        includeSessions: details.includeSessions,
         signal: runtime.signal,
         knownSteps,
         sessionCursors
@@ -256,7 +270,7 @@ async function getRun(runtime: Runtime, command: Command, runId: string, options
 
     if (output.json) {
         const final = await client.getRun({ runId }, { signal: runtime.signal })
-        await emitRunSnapshot(output, final, [])
+        await emitRunSnapshot(output, final, [], details.includeToolIo)
         if (final.run?.metadata !== undefined && failedStatus(final.run.metadata.status)) runtime.failResult()
     }
 }
@@ -279,7 +293,8 @@ async function getRunSessions(
 async function emitRunSnapshot(
     output: Output,
     response: GetRunResponse,
-    sessionResponses: GetSessionResponse[]
+    sessionResponses: GetSessionResponse[],
+    includeToolIo: boolean
 ): Promise<void> {
     if (output.json) {
         await output.proto(GetRunResponseSchema, response)
@@ -290,7 +305,7 @@ async function emitRunSnapshot(
     for (const response of sessionResponses) {
         if (response.session !== undefined) sessions.set(response.session.id, response.session)
     }
-    await output.write(formatRun(response, sessions))
+    await output.write(formatRun(response, sessions, { includeToolIo }))
 }
 
 function sessionMap(responses: readonly GetSessionResponse[]): Map<string, Session> {
@@ -505,7 +520,10 @@ function positiveInteger(value: string): number {
     return parsed
 }
 
-function includeResource(value: string): "sessions" {
-    if (value !== "sessions") throw new InvalidArgumentError("only sessions can be included")
-    return value
+function runDetails(options: IncludeOptions<RunInclude>, command: Command): RunDetails {
+    const includeToolIo = includes(options, command, "tool-io")
+    return {
+        includeToolIo,
+        includeSessions: includeToolIo || includes(options, command, "sessions")
+    }
 }

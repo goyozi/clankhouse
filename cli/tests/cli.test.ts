@@ -260,11 +260,14 @@ test("drives FakeLLM and FakeCodingAgent workflows through the complete CLI surf
     const snapshotResult = await runCliCommand(["runs", "get", started.runId, "--include", "sessions", "--json"], {
         env
     })
+    const verboseSnapshotResult = await runCliCommand(["runs", "get", started.runId, "--verbose", "--json"], { env })
     const snapshotLines = lines(snapshotResult.stdout)
+    const verboseSnapshotLines = lines(verboseSnapshotResult.stdout)
     const snapshot = fromJsonString(GetRunResponseSchema, snapshotLines[0]!)
     const sessionResponses = snapshotLines.slice(1).map((line) => fromJsonString(GetSessionResponseSchema, line))
     expect(snapshot.run?.steps.map((step) => step.sessionId).filter(Boolean)).toHaveLength(2)
     expect(sessionResponses).toHaveLength(2)
+    expect(verboseSnapshotLines).toHaveLength(snapshotLines.length)
     const session = sessionResponses[0]!.session!
     expect(session).toMatchObject({ client: "fake-llm", provider: "fake", model: "fake" })
     const sessionHuman = await runCliCommand(["sessions", "get", session.id], { env })
@@ -272,6 +275,13 @@ test("drives FakeLLM and FakeCodingAgent workflows through the complete CLI surf
     expect(sessionHumanOutput).toContain("llm · fake-llm · fake/fake")
     expect(sessionHumanOutput).toContain("user       cli")
     expect(sessionHumanOutput).toContain('assistant  {"summary":"summary:cli"}')
+    const agentSession = sessionResponses
+        .map((response) => response.session)
+        .find((value) => value?.client === "fake-agent")!
+    expect(agentSession.messages.find((message) => message.payload.case === "toolCall")?.payload.value).toMatchObject({
+        inputJson: expect.stringContaining("result.txt")
+    })
+    expect(agentSession.messages.some((message) => message.payload.case === "toolResult")).toBe(true)
     const sessionWatch = await runCliCommand(["sessions", "watch", session.id, "--json"], { env })
     expect(
         lines(sessionWatch.stdout).map((line) => fromJsonString(WatchSessionResponseSchema, line).message?.id)
@@ -1092,6 +1102,22 @@ test("flushes Commander help output before resolving even when the writer is bac
     // and the full help text reaches the stream with a clean exit
     expect(code).toBe(0)
     expect(stdout.output().toString("utf8")).toContain("Interact with a Loopy server")
+    expect(stdout.output().toString("utf8")).toContain("-v, --verbose")
+})
+
+test("rejects unsupported run and session include resources", async () => {
+    // given commands with command-specific include vocabularies
+    const options = { env: {} }
+
+    // when unsupported resources are parsed before either command connects
+    const run = await runCliCommand(["runs", "get", "run-id", "--include", "unknown"], options)
+    const session = await runCliCommand(["sessions", "get", "session-id", "--include", "sessions"], options)
+
+    // then each usage error lists only the resources accepted by that command
+    expect(run.code).toBe(2)
+    expect(run.stderr).toContain("allowed values are sessions, tool-io, and all")
+    expect(session.code).toBe(2)
+    expect(session.stderr).toContain("allowed values are tool-io and all")
 })
 
 test("resolves connection settings by flag, environment, and local credentials precedence", async () => {

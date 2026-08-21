@@ -77,6 +77,7 @@ function createProgram(runtime: Runtime): Command {
         .option("--server <url>", "Loopy server URL")
         .option("--api-key <key>", "Loopy server API key")
         .option("--json", "print protobuf responses as ProtoJSON")
+        .option("-v, --verbose", "include all details available to a command")
         .exitOverride()
         .showHelpAfterError()
         .configureOutput({

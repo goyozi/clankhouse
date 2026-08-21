@@ -12,7 +12,7 @@ import {
 } from "@loopy/server/proto"
 import { executionStatus, executionTiming, indent, prettyJson, table, timestamp } from "../../output"
 import { formatArtifactValue } from "../artifacts"
-import { formatAlignedSessionMessage, formatSessionMessage } from "../sessions/output"
+import { formatAlignedSessionMessage, formatSessionMessage, type SessionFormatOptions } from "../sessions/output"
 
 export function formatRunId(runId: string): string {
     return `${runId}\n`
@@ -38,9 +38,13 @@ export function formatRuns(response: ListRunsResponse): string {
     )
 }
 
-export function formatRun(response: GetRunResponse, sessions: ReadonlyMap<string, Session> = new Map()): string {
+export function formatRun(
+    response: GetRunResponse,
+    sessions: ReadonlyMap<string, Session> = new Map(),
+    options: SessionFormatOptions = {}
+): string {
     if (response.run === undefined) return "Run response is empty.\n"
-    return formatWorkflowRun(response.run, sessions)
+    return formatWorkflowRun(response.run, sessions, options)
 }
 
 export function formatRunActivityHeader(response: GetRunResponse): string {
@@ -53,7 +57,11 @@ export function formatSessionErrorPrefix(sessionId: string): string {
     return `session ${sessionId}: `
 }
 
-function formatWorkflowRun(run: WorkflowRun, sessions: ReadonlyMap<string, Session>): string {
+function formatWorkflowRun(
+    run: WorkflowRun,
+    sessions: ReadonlyMap<string, Session>,
+    options: SessionFormatOptions
+): string {
     const metadata = run.metadata
     const now = new Date()
     const lines =
@@ -68,7 +76,7 @@ function formatWorkflowRun(run: WorkflowRun, sessions: ReadonlyMap<string, Sessi
     } else {
         for (const [index, step] of run.steps.entries()) {
             if (index > 0) lines.push("")
-            lines.push(...formatStep(step, sessions, now))
+            lines.push(...formatStep(step, sessions, now, options))
         }
     }
     lines.push("", "Artifacts")
@@ -81,7 +89,12 @@ function formatWorkflowRun(run: WorkflowRun, sessions: ReadonlyMap<string, Sessi
     return `${lines.join("\n")}\n`
 }
 
-function formatStep(step: Step, sessions: ReadonlyMap<string, Session>, now: Date): string[] {
+function formatStep(
+    step: Step,
+    sessions: ReadonlyMap<string, Session>,
+    now: Date,
+    options: SessionFormatOptions
+): string[] {
     const lines = [
         indent(`${stepNumber(step)}. ${step.key}`),
         nestedLine(`${stepKind(step.kind)} · ${formatExecution(step.status, step.startedAt, step.endedAt, now)}`, 2)
@@ -90,7 +103,7 @@ function formatStep(step: Step, sessions: ReadonlyMap<string, Session>, now: Dat
         lines.push("")
         const session = sessions.get(step.sessionId)
         if (session === undefined) lines.push(nestedLine(`Session ${step.sessionId}`, 2))
-        else lines.push(...formatIncludedSession(session))
+        else lines.push(...formatIncludedSession(session, options))
     }
 
     const references = [
@@ -112,24 +125,21 @@ function formatStep(step: Step, sessions: ReadonlyMap<string, Session>, now: Dat
     return lines
 }
 
-function formatIncludedSession(session: Session): string[] {
+function formatIncludedSession(session: Session, options: SessionFormatOptions): string[] {
     const lines = [
         nestedLine(`Session ${session.id}`, 2),
         nestedLine(`${session.client} · ${session.provider}/${session.model}`, 3),
         "",
         nestedLine("Messages", 3)
     ]
-    if (session.messages.length === 0) lines.push(nestedLine("None", 4))
-    else {
-        for (const message of session.messages) {
-            lines.push(...formatIncludedSessionMessage(message).map((value) => nestedLine(value, 4)))
-        }
-    }
+    const messages = session.messages.flatMap((message) => formatIncludedSessionMessage(message, options))
+    if (messages.length === 0) lines.push(nestedLine("None", 4))
+    else lines.push(...messages.map((value) => nestedLine(value, 4)))
     return lines
 }
 
-function formatIncludedSessionMessage(message: Session["messages"][number]): string[] {
-    return formatAlignedSessionMessage(message)
+function formatIncludedSessionMessage(message: Session["messages"][number], options: SessionFormatOptions): string[] {
+    return formatAlignedSessionMessage(message, options)
 }
 
 function formatExecution(
@@ -162,12 +172,14 @@ export class RunActivityFormatter {
     private currentOwner: string | undefined
     private activityStarted = false
     private lastDetail: "session" | "other" = "other"
+    private readonly sessionFormatOptions: SessionFormatOptions
 
     constructor(
         steps: readonly Step[] = [],
         sessions: Iterable<Session> = [],
-        options: { renderedSteps?: boolean; introducedSessions?: boolean } = {}
+        options: { renderedSteps?: boolean; introducedSessions?: boolean; includeToolIo?: boolean } = {}
     ) {
+        this.sessionFormatOptions = { includeToolIo: options.includeToolIo }
         for (const step of steps) {
             this.registerStep(step)
             if (options.renderedSteps === true) this.renderedSteps.set(step.id, stepActivityFingerprint(step))
@@ -197,7 +209,10 @@ export class RunActivityFormatter {
 
     formatSessionMessage(message: SessionMessage): string {
         const step = this.stepsBySession.get(message.sessionId)
-        if (step === undefined) return formatSessionMessage(message)
+        if (step === undefined) return formatSessionMessage(message, this.sessionFormatOptions)
+
+        const messageLines = formatAlignedSessionMessage(message, this.sessionFormatOptions)
+        if (messageLines.length === 0) return ""
 
         const lines: string[] = []
         this.openOwner(lines, step.id, message.createdAt, `${stepNumber(step)}. ${step.key}`)
@@ -212,7 +227,7 @@ export class RunActivityFormatter {
         } else if (this.lastDetail !== "session") {
             lines.push(nestedLine("Session (continued)", 2))
         }
-        lines.push(...formatAlignedSessionMessage(message).map((line) => nestedLine(line, 3)))
+        lines.push(...messageLines.map((line) => nestedLine(line, 3)))
         this.lastDetail = "session"
         return `${lines.join("\n")}\n`
     }
