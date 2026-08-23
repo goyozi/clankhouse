@@ -61,3 +61,4 @@ design:
 - minimal updates to existing comments if necessary (i.e. comment would otherwise be untrue or misleading)
 - use `pnpm add` instead of modifying package.json directly
 - use `pnpm` for typechecking, formatting, and linting
+- run `zizmor --pedantic --strict-collection --no-ignores <file>` after all GH actions pipeline changes
