@@ -50,11 +50,14 @@ export class ClaudeAgent extends BaseCodingAgent {
     protected async invoke(invocation: CodingAgentInvocation): Promise<unknown> {
         return this.invokeWithInstructedOutput(invocation, async (prompt) => {
             let result: SDKResultMessage | undefined
+            const assistantMessages: string[] = []
             for await (const message of this.queryFn({
                 prompt,
                 options: this.buildOptions(invocation.worktree)
             })) {
                 record(invocation.session, message)
+                const text = assistantText(message)
+                if (text !== undefined) assistantMessages.push(text)
                 if (message.type === "result") result = message
             }
             if (result === undefined) throw new Error("Claude agent stream ended without a result")
@@ -62,7 +65,7 @@ export class ClaudeAgent extends BaseCodingAgent {
                 const details = result.errors.length > 0 ? `: ${result.errors.join("; ")}` : ""
                 throw new Error(`Claude agent failed with ${result.subtype}${details}`)
             }
-            return result.result
+            return assistantMessages
         })
     }
 
@@ -81,6 +84,12 @@ export class ClaudeAgent extends BaseCodingAgent {
         if (this.options.allowedTools !== undefined) options.allowedTools = this.options.allowedTools
         return options
     }
+}
+
+function assistantText(message: SDKMessage): string | undefined {
+    if (message.type !== "assistant") return undefined
+    const blocks = message.message.content.filter((block) => block.type === "text")
+    return blocks.length === 0 ? undefined : blocks.map((block) => block.text).join("")
 }
 
 function record(session: SessionRecorder, message: SDKMessage): void {

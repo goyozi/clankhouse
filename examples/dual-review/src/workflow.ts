@@ -5,7 +5,13 @@ import { GitRepository } from "@loopy/core/git"
 import * as z from "zod"
 
 const execFileAsync = promisify(execFile)
-const reviewPrompt = "Please review my uncommitted changes"
+
+const reviewPrompt = `Please review my uncommitted changes
+
+Note: Only the tagged answer is read — nothing else you produce is passed on. Even if you report
+findings through a tool (\`ReportFindings\` or anything similar), you must still write every
+one of them out in full in the provided answer tags. Do not replace them with a pointer to the tool
+output, a count, or a summary.`
 const synthesisPrompt = "Verify and de-duplicate the findings, and combine them into a final prioritized Act/Skip list"
 
 export type DualReviewAgents = {

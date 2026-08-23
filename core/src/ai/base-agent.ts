@@ -34,12 +34,12 @@ export abstract class BaseCodingAgent implements CodingAgent {
 
     protected async invokeWithInstructedOutput(
         invocation: CodingAgentInvocation,
-        run: (prompt: string) => Promise<string | undefined>
+        run: (prompt: string) => Promise<readonly string[]>
     ): Promise<unknown> {
         const prepared = prepareInstructedOutput(invocation.prompt, invocation.output, "coding-agent")
         invocation.session.addMessage("user", prepared.prompt)
-        const finalMessage = await run(prepared.prompt)
-        return prepared.collect(finalMessage)
+        const assistantMessages = await run(prepared.prompt)
+        return prepared.collect(assistantMessages)
     }
 
     async run<T extends z.ZodTypeAny>(stepName: string, options: CodingRunOptions<T>): Promise<z.infer<T>> {

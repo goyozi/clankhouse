@@ -385,13 +385,20 @@ test("PiAgent preserves an unknown tool and normalizes its failed result", async
     })
 })
 
-test("PiAgent joins final text blocks with Pi's standard newline behavior", async () => {
-    // given a fake Pi session returning multiple final text blocks
+test("PiAgent returns a grouped tagged string before an untagged monitor message", async () => {
+    // given a fake Pi session splitting a tagged answer across blocks before a final monitor notification
     const { loopy, dir } = tempLoopy()
     const repo = await tempGitRepo()
     const worktree = new Worktree(repo.path)
     const modelRuntime = await isolatedModelRuntime(dir)
-    const { createAgentSession } = fakePi(() => ({ finalTextBlocks: ["first", "second", "third"] }))
+    const monitorMessage = "The monitor resolved; there is nothing else to add."
+    const { createAgentSession, prompts } = fakePi((prompt) => {
+        const { opening, closing } = instructedTags(prompt)
+        return {
+            text: [`${opening}  first`, `second  ${closing}`],
+            finalResponse: monitorMessage
+        }
+    })
     const agent = new PiAgent({
         provider: "openai",
         model: "gpt-5.4",
@@ -404,12 +411,20 @@ test("PiAgent joins final text blocks with Pi's standard newline behavior", asyn
         agent.run("report", { prompt: "report naturally", output: z.string(), worktree })
     )
 
-    // then the exact blocks are joined with newlines and persisted as the durable output
-    expect(result).toBe("first\nsecond\nthird")
+    // then the semantic assistant blocks are joined and the earlier tagged answer is returned
+    expect(prompts[0]).toMatch(/^report naturally\n\nIMPORTANT — requested final answer:/)
+    expect(prompts[0]).not.toMatch(/JSON/i)
+    expect(result).toBe("  first\nsecond  ")
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
-    expect(step.outputJson).toBe(JSON.stringify("first\nsecond\nthird"))
+    expect(step.outputJson).toBe(JSON.stringify("  first\nsecond  "))
+    const messages = sessionTextMessages((await loopy.sessions.get(step.sessionId!)).messages)
+    expect(messages.slice(-3).map((message) => message.content)).toEqual([
+        expect.stringContaining("first"),
+        expect.stringContaining("second"),
+        monitorMessage
+    ])
 })
 
 test("PiAgent passes native defaults while locking Loopy-owned session options", async () => {
@@ -865,6 +880,8 @@ test.skipIf(!process.env.PI_AGENT_LIVE_TEST)(
                 prompt: `Create hello.txt with exactly these two lines:
 hello
 loopy
+
+The file must end with a newline.
 
 Report exactly two array entries in order: a file entry for hello.txt with lineCount 2, then a status entry with done true. Omit the optional note and warning fields.`,
                 output: liveOutputSchema,

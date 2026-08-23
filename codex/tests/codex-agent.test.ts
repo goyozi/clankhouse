@@ -12,6 +12,7 @@ import {
     runOutput,
     sessionTextMessages,
     taggedOutput,
+    taggedStringOutput,
     tempGitRepo,
     tempLoopy,
     testRun
@@ -152,13 +153,25 @@ test("CodexAgent runs a void-output step without instructed output framing", asy
     expect((await loopy.sessions.get(step.sessionId!)).status).toBe("succeeded")
 })
 
-test("CodexAgent returns its final message verbatim for a root string output", async () => {
-    // given a fake SDK returning a final message with significant whitespace and JSON-looking text
+test("CodexAgent returns an earlier tagged string after an untagged monitor message", async () => {
+    // given a fake SDK emitting a tagged answer before a final monitor notification
     const { loopy } = tempLoopy()
     const repo = await tempGitRepo()
     const worktree = new Worktree(repo.path)
-    const finalMessage = '  {"done":"naturally"}\nNo framing.  '
-    const { codexFactory, runCalls } = fakeCodex(() => ({ finalResponse: finalMessage }))
+    const answer = "  All 8 issues stand as written.  "
+    const monitorMessage = "The monitor resolved; there is nothing else to add."
+    const { codexFactory, runCalls } = fakeCodex((prompt) => ({
+        items: [
+            {
+                completed: {
+                    id: "agent_answer",
+                    type: "agent_message",
+                    text: taggedStringOutput(prompt, answer)
+                }
+            }
+        ],
+        finalResponse: monitorMessage
+    }))
     const agent = new CodexAgent({ model: "gpt-5.4", codexFactory })
 
     // when the agent runs with a checked and branded root string schema
@@ -170,15 +183,20 @@ test("CodexAgent returns its final message verbatim for a root string output", a
         })
     )
 
-    // then the SDK receives the bare prompt and the exact final message is returned
-    expect(runCalls[0].input).toBe("report naturally")
-    expect(result).toBe(finalMessage)
-    // and the raw message is recorded and durably persisted as a string
+    // then the SDK receives the dedicated string instruction and the tagged answer is returned
+    expect(runCalls[0].input).toMatch(/^report naturally\n\nIMPORTANT — requested final answer:/)
+    expect(runCalls[0].input).not.toMatch(/JSON/i)
+    expect(result).toBe(answer)
+    // and both assistant messages remain recorded while only the extracted answer is persisted
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
-    expect(step.outputJson).toBe(JSON.stringify(finalMessage))
-    expect(sessionTextMessages((await loopy.sessions.get(step.sessionId!)).messages).at(-1)!.content).toBe(finalMessage)
+    expect(step.outputJson).toBe(JSON.stringify(answer))
+    const messages = sessionTextMessages((await loopy.sessions.get(step.sessionId!)).messages)
+    expect(messages.slice(-2).map((message) => message.content)).toEqual([
+        taggedStringOutput(String(runCalls[0].input), answer),
+        monitorMessage
+    ])
 })
 
 test("CodexAgent records every supported SDK item type", async () => {

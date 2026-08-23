@@ -88,9 +88,9 @@ async function consumeEvents(
     events: RunStreamedResult["events"],
     session: SessionRecorder,
     model: string
-): Promise<string | undefined> {
+): Promise<string[]> {
     let completed = false
-    let finalMessage: string | undefined
+    const assistantMessages: string[] = []
     const recordedToolCalls = new Set<string>()
     for await (const event of events) {
         if (event.type === "thread.started") {
@@ -99,7 +99,7 @@ async function consumeEvents(
             if (isToolItem(event.item)) recordToolCall(session, event.item, recordedToolCalls)
         } else if (event.type === "item.completed") {
             recordItemCompleted(session, event.item, recordedToolCalls)
-            if (event.item.type === "agent_message") finalMessage = event.item.text
+            if (event.item.type === "agent_message") assistantMessages.push(event.item.text)
         } else if (event.type === "turn.completed") {
             completed = true
         } else if (event.type === "turn.failed") {
@@ -109,7 +109,7 @@ async function consumeEvents(
         }
     }
     if (!completed) throw new Error("Codex agent stream ended without completing the turn")
-    return finalMessage
+    return assistantMessages
 }
 
 function recordItemCompleted(session: SessionRecorder, item: ThreadItem, recordedToolCalls: Set<string>): void {

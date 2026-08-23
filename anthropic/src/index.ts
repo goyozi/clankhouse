@@ -40,7 +40,7 @@ export class AnthropicModel extends BaseLanguageModel {
                 .join("")
             recordContent(invocation.session, response.content)
             requireCompleted(response.stop_reason)
-            return finalMessage
+            return [finalMessage]
         })
     }
 

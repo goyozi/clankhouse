@@ -42,29 +42,55 @@ test("LLM instructed output requests only a nonce-tagged JSON answer", () => {
         "Your entire final reply should contain only the opening nonce tag, the JSON answer, and the closing nonce tag."
     )
     // and extra text outside the nonces is still ignored by the collector
-    expect(prepared.collect(`unrequested prefix\n${opening}\n{"done":true}\n${closing}\nunrequested suffix`)).toEqual({
-        done: true
-    })
+    expect(prepared.collect([`unrequested prefix\n${opening}\n{"done":true}\n${closing}\nunrequested suffix`])).toEqual(
+        { done: true }
+    )
 })
 
 test.each(["coding-agent", "llm"] as const)(
-    "z.string output in %s mode leaves the prompt untouched and collects the final message verbatim",
+    "z.string output in %s mode uses a simplified nonce prompt and collects raw text",
     (mode) => {
         // given a checked and branded root string schema in the selected AI mode
         const output = z.string().min(1).brand<"Answer">()
-        const finalMessage = '  {"answer":"raw"}\n```text\nunchanged\n```  '
+        const answer = '  "raw JSON-looking text"\n```text\nunchanged\n```  '
 
-        // when instructed output is prepared and the final message is collected
+        // when instructed output is prepared and tagged text is collected
         const prepared = prepareInstructedOutput("answer naturally", output, mode)
-        const collected = prepared.collect(finalMessage)
+        const { opening, closing } = instructedTags(prepared.prompt)
+        const collected = prepared.collect([
+            "An earlier untagged message.",
+            `${opening}${answer}${closing}`,
+            "A later untagged message."
+        ])
 
-        // then no output instruction is appended and the exact final message is returned
-        expect(prepared.prompt).toBe("answer naturally")
-        expect(collected).toBe(finalMessage)
-        // and an absent final message is passed through for the durable step to validate
-        expect(prepared.collect()).toBeUndefined()
+        // then the dedicated prompt requests only a nonce-tagged final answer
+        expect(prepared.prompt).toMatch(/^answer naturally\n\nIMPORTANT — requested final answer:/)
+        expect(prepared.prompt).toContain("between these exact nonce tags")
+        expect(prepared.prompt).toContain(`${opening}${closing}`)
+        expect(prepared.prompt).toContain("Do not add framing whitespace")
+        expect(prepared.prompt).toContain(
+            "Your entire final reply should contain only the opening nonce tag, your answer, and the closing nonce tag."
+        )
+        expect(prepared.prompt).not.toMatch(/JSON/i)
+        expect(prepared.prompt).not.toContain("final report")
+        // and the latest tagged answer is returned as text without JSON or code-fence processing
+        expect(collected).toBe(answer)
     }
 )
+
+test("z.string output preserves an empty tagged answer and rejects missing tags", () => {
+    // given a direct string instruction and its exact nonce tags
+    const prepared = prepareInstructedOutput("answer", z.string(), "llm")
+    const { opening, closing } = instructedTags(prepared.prompt)
+
+    // when an empty block or no complete block is collected
+    const empty = prepared.collect([`${opening}${closing}`])
+    const missing = () => prepared.collect(["plain answer", `${opening}unfinished`])
+
+    // then the empty string remains a valid collected value and missing framing is distinct
+    expect(empty).toBe("")
+    expect(missing).toThrow(expect.objectContaining({ code: "ai_output_missing" }))
+})
 
 test.each([
     ["readonly", z.string().readonly()],
@@ -78,7 +104,7 @@ test.each([
     // when its prompt and collected output are inspected
     // then the wrapper prevents the root-string fast path
     expect(prepared.prompt).toMatch(/^answer\n\nIMPORTANT — requested final answer:/)
-    expect(prepared.collect(`${opening}\n"value"\n${closing}`)).toBe("value")
+    expect(prepared.collect([`${opening}\n"value"\n${closing}`])).toBe("value")
 })
 
 test("instructed output for z.void leaves the prompt untouched and collects nothing", () => {
@@ -89,29 +115,27 @@ test("instructed output for z.void leaves the prompt untouched and collects noth
     // when their prompts and final messages are inspected
     // then no output framing is appended and nothing is collected
     expect(codingAgent.prompt).toBe("report")
-    expect(codingAgent.collect("any final message")).toBeUndefined()
-    expect(codingAgent.collect()).toBeUndefined()
+    expect(codingAgent.collect(["any final message"])).toBeUndefined()
+    expect(codingAgent.collect([])).toBeUndefined()
     // and rejecting a void LLM output is left to the durable step that owns the policy
     expect(llm.prompt).toBe("answer")
-    expect(llm.collect("any final message")).toBeUndefined()
+    expect(llm.collect(["any final message"])).toBeUndefined()
 })
 
-test("instructed output collects the last tagged JSON document amid prose", () => {
-    // given an instruction and a final message containing two tagged reports and surrounding prose
+test("instructed output collects the last complete nonce block across assistant messages", () => {
+    // given assistant messages containing two complete reports followed by an incomplete attempt
     const prepared = prepareInstructedOutput("report", outputSchema, "coding-agent")
     const { opening, closing } = instructedTags(prepared.prompt)
-    const finalMessage = `Here is an earlier attempt:
-${opening}
-{"done":false}
-${closing}
-The corrected result follows.
-${opening}
-{"done":true}
-${closing}
-Thanks.`
+    const assistantMessages = [
+        `Here is an earlier attempt:\n${opening}\n{"done":false}\n${closing}`,
+        "Working on a correction.",
+        `${opening}\n{"done":true}\n${closing}`,
+        "The monitor resolved without changing the report.",
+        `${opening}\nunfinished`
+    ]
 
-    // when the final message is collected
-    const output = prepared.collect(finalMessage)
+    // when all assistant messages are collected
+    const output = prepared.collect(assistantMessages)
 
     // then only the last complete matching report is parsed
     expect(output).toEqual({ done: true })
@@ -123,9 +147,9 @@ test("instructed output rejects missing or mismatched tags", () => {
     const { opening } = instructedTags(prepared.prompt)
 
     // when final messages omit part or all of the instructed framing
-    const collectMissingMessage = () => prepared.collect()
-    const collectMissingTags = () => prepared.collect('{"done":true}')
-    const collectMismatchedTags = () => prepared.collect(`${opening}{"done":true}</different_tag>`)
+    const collectMissingMessage = () => prepared.collect([])
+    const collectMissingTags = () => prepared.collect(['{"done":true}'])
+    const collectMismatchedTags = () => prepared.collect([`${opening}{"done":true}</different_tag>`])
 
     // then every framing failure is rejected distinctly from JSON parsing
     expect(collectMissingMessage).toThrow("did not return the instructed output tags")
@@ -136,20 +160,18 @@ test("instructed output rejects missing or mismatched tags", () => {
     expect(collectMismatchedTags).toThrow(expect.objectContaining({ code: "ai_output_missing" }))
 })
 
-test("instructed output rejects empty or non-JSON tag contents", () => {
-    // given a prepared output instruction and its exact nonce tags
+test.each(["", "not json"])("instructed output selects a final %s block before JSON parsing", (payload) => {
+    // given a valid JSON report followed by a complete nonce block containing the selected payload
     const prepared = prepareInstructedOutput("report", outputSchema, "coding-agent")
     const { opening, closing } = instructedTags(prepared.prompt)
+    const assistantMessages = [`${opening}\n{"done":true}\n${closing}`, `${opening}\n${payload}\n${closing}`]
 
-    // when the tag contents are empty or not raw JSON
-    const collectEmpty = () => prepared.collect(`${opening}\n\n${closing}`)
-    const collectInvalid = () => prepared.collect(`${opening}\nnot json\n${closing}`)
+    // when all assistant messages are collected
+    const collect = () => prepared.collect(assistantMessages)
 
-    // then each payload is rejected as invalid JSON
-    expect(collectEmpty).toThrow("returned invalid JSON between the instructed output tags")
-    expect(collectInvalid).toThrow("returned invalid JSON between the instructed output tags")
-    expect(collectEmpty).toThrow(expect.objectContaining({ code: "ai_output_invalid" }))
-    expect(collectInvalid).toThrow(expect.objectContaining({ code: "ai_output_invalid" }))
+    // then the last XML-like block wins without falling back to the earlier parseable block
+    expect(collect).toThrow("returned invalid JSON between the instructed output tags")
+    expect(collect).toThrow(expect.objectContaining({ code: "ai_output_invalid" }))
 })
 
 test("instructed output tolerates a markdown code fence around the tagged JSON", () => {
@@ -161,21 +183,8 @@ test("instructed output tolerates a markdown code fence around the tagged JSON",
 
     // when the fenced messages are collected
     // then the fence is stripped and the JSON inside is parsed
-    expect(prepared.collect(jsonFence)).toEqual({ done: true })
-    expect(prepared.collect(bareFence)).toEqual({ done: false })
-})
-
-test("instructed output ignores an echoed empty tag template after the answer", () => {
-    // given a final message whose real answer is followed by the empty tag template from the prompt
-    const prepared = prepareInstructedOutput("report", outputSchema, "coding-agent")
-    const { opening, closing } = instructedTags(prepared.prompt)
-    const finalMessage = `${opening}\n{"done":true}\n${closing}\n\nAs requested, used:\n${opening}\n${closing}`
-
-    // when the final message is collected
-    const output = prepared.collect(finalMessage)
-
-    // then the trailing empty template is skipped and the real answer is parsed
-    expect(output).toEqual({ done: true })
+    expect(prepared.collect([jsonFence])).toEqual({ done: true })
+    expect(prepared.collect([bareFence])).toEqual({ done: false })
 })
 
 test("LLM instructed output reports shared AI framing and JSON errors", () => {
@@ -184,8 +193,8 @@ test("LLM instructed output reports shared AI framing and JSON errors", () => {
     const { opening, closing } = instructedTags(prepared.prompt)
 
     // when the reply omits the nonce tags or contains invalid JSON
-    const missing = () => prepared.collect('{"done":true}')
-    const invalid = () => prepared.collect(`${opening}\nnot json\n${closing}`)
+    const missing = () => prepared.collect(['{"done":true}'])
+    const invalid = () => prepared.collect([`${opening}\nnot json\n${closing}`])
 
     // then the errors identify the AI output failure
     expect(missing).toThrow("AI did not return the instructed output tags")

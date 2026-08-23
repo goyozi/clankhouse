@@ -7,7 +7,7 @@ export type InstructedOutputMode = "coding-agent" | "llm"
 
 export type PreparedInstructedOutput = {
     prompt: string
-    collect(finalMessage?: string): unknown
+    collect(assistantMessages: readonly string[]): unknown
 }
 
 export function prepareInstructedOutput(
@@ -15,7 +15,13 @@ export function prepareInstructedOutput(
     output: z.ZodTypeAny,
     mode: InstructedOutputMode
 ): PreparedInstructedOutput {
-    if (output instanceof z.ZodString) return { prompt, collect: (finalMessage) => finalMessage }
+    if (output instanceof z.ZodString) {
+        const { openingTag, closingTag } = nonceTags()
+        return {
+            prompt: stringInstruction(prompt, openingTag, closingTag),
+            collect: (assistantMessages) => extractTaggedOutput(assistantMessages, openingTag, closingTag)
+        }
+    }
     const instructedSchema = jsonSchema({
         schema: output,
         io: "input",
@@ -23,17 +29,31 @@ export function prepareInstructedOutput(
         allowTopLevelVoid: true
     })
     if (instructedSchema === undefined) return { prompt, collect: () => undefined }
-    const tagName = `loopy_structured_output_${randomUUID().replaceAll("-", "_")}`
-    const openingTag = `<${tagName}>`
-    const closingTag = `</${tagName}>`
+    const { openingTag, closingTag } = nonceTags()
     const instruction = mode === "llm" ? languageModelInstruction : codingAgentInstruction
     return {
         prompt: instruction(prompt, openingTag, closingTag, instructedSchema),
-        collect(finalMessage) {
-            const text = extractTaggedOutput(finalMessage, openingTag, closingTag)
+        collect(assistantMessages) {
+            const text = extractTaggedOutput(assistantMessages, openingTag, closingTag).trim()
             return parseJson(stripCodeFence(text))
         }
     }
+}
+
+function nonceTags(): { openingTag: string; closingTag: string } {
+    const tagName = `loopy_structured_output_${randomUUID().replaceAll("-", "_")}`
+    return { openingTag: `<${tagName}>`, closingTag: `</${tagName}>` }
+}
+
+function stringInstruction(prompt: string, openingTag: string, closingTag: string): string {
+    return `${prompt}\n\nIMPORTANT — requested final answer:
+
+Put your answer between these exact nonce tags in your final reply:
+
+${openingTag}${closingTag}
+
+Do not add framing whitespace: put your answer immediately after the opening nonce tag and put the closing nonce tag immediately after your answer.
+Your entire final reply should contain only the opening nonce tag, your answer, and the closing nonce tag. Do not include any other text.`
 }
 
 function codingAgentInstruction(prompt: string, openingTag: string, closingTag: string, schema: unknown): string {
@@ -70,15 +90,15 @@ Write only raw JSON between the nonce tags — no markdown fences, no comments, 
 Your entire final reply should contain only the opening nonce tag, the JSON answer, and the closing nonce tag. Do not include any other text.`
 }
 
-function extractTaggedOutput(finalMessage: string | undefined, openingTag: string, closingTag: string): string {
-    if (finalMessage === undefined) {
-        throw new LoopyError("ai_output_missing", "AI did not return the instructed output tags in its final response")
-    }
-    const blocks = tagBlocks(finalMessage, openingTag, closingTag)
+function extractTaggedOutput(assistantMessages: readonly string[], openingTag: string, closingTag: string): string {
+    const blocks = assistantMessages.flatMap((message) => tagBlocks(message, openingTag, closingTag))
     if (blocks.length === 0) {
-        throw new LoopyError("ai_output_missing", "AI did not return the instructed output tags in its final response")
+        throw new LoopyError(
+            "ai_output_missing",
+            "AI did not return the instructed output tags in any assistant message"
+        )
     }
-    return blocks.findLast((block) => block !== "") ?? blocks[blocks.length - 1]
+    return blocks[blocks.length - 1]
 }
 
 function tagBlocks(finalMessage: string, openingTag: string, closingTag: string): string[] {
@@ -89,7 +109,7 @@ function tagBlocks(finalMessage: string, openingTag: string, closingTag: string)
         if (openingIndex === -1) break
         const closingIndex = finalMessage.indexOf(closingTag, openingIndex + openingTag.length)
         if (closingIndex === -1) break
-        blocks.push(finalMessage.slice(openingIndex + openingTag.length, closingIndex).trim())
+        blocks.push(finalMessage.slice(openingIndex + openingTag.length, closingIndex))
         from = closingIndex + closingTag.length
     }
     return blocks

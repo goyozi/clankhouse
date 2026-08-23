@@ -1,7 +1,7 @@
 import * as z from "zod"
 import { expect, test } from "vitest"
 import { AnthropicModel } from "@loopy/anthropic"
-import { sessionTextMessages, taggedOutput, tempLoopy, testRun } from "@loopy/test-utils"
+import { sessionTextMessages, taggedOutput, taggedStringOutput, tempLoopy, testRun } from "@loopy/test-utils"
 import { fakeAnthropic, redactedThinkingBlock, textBlock, thinkingBlock } from "./fake-anthropic"
 
 const outputSchema = z.object({ done: z.boolean() })
@@ -76,28 +76,40 @@ test("AnthropicModel uses the official streaming client and records thinking sep
     ])
 })
 
-test("AnthropicModel returns its combined final text verbatim for a root string output", async () => {
-    // given an official response whose final text is split around a thinking block
+test("AnthropicModel collects a tagged string split across assistant content blocks", async () => {
+    // given an official response whose tagged string is split around a thinking block
     const { loopy } = tempLoopy()
-    const first = '  {"answer":"natural"}\n'
-    const second = "No framing.  "
-    const fake = fakeAnthropic(() => [textBlock(first), thinkingBlock("Checked the answer."), textBlock(second)])
+    const answer = "  first line\nsecond line  "
+    const fake = fakeAnthropic((prompt) => {
+        const reply = taggedStringOutput(prompt, answer)
+        const splitAt = reply.indexOf("second line")
+        return [
+            textBlock(reply.slice(0, splitAt)),
+            thinkingBlock("Checked the answer."),
+            textBlock(reply.slice(splitAt))
+        ]
+    })
     const model = new AnthropicModel({ model: "claude-test", maxTokens: 256, clientOptions: fake.clientOptions })
 
     // when the model is called with a root string schema
     const result = await testRun(loopy, () => model.call("answer", { prompt: "Answer naturally.", output: z.string() }))
 
-    // then the official client receives the bare prompt and all final text is returned exactly
-    expect(fake.requests[0].messages[0].content).toBe("Answer naturally.")
-    expect(result).toBe(first + second)
-    // and the durable output stores the combined string while the session retains provider blocks
+    // then the dedicated string prompt is used and the joined tagged answer is extracted
+    const prompt = fake.requests[0].messages[0].content
+    if (typeof prompt !== "string") throw new Error("unreachable")
+    expect(prompt).toMatch(/^Answer naturally\.\n\nIMPORTANT — requested final answer:/)
+    expect(prompt).not.toMatch(/JSON/i)
+    expect(result).toBe(answer)
+    // and the durable output stores only the answer while the session retains provider blocks
     const run = await loopy.runs.get((await loopy.runs.list())[0].id)
     const step = run.steps[0]
     if (step.kind !== "llm") throw new Error("unreachable")
-    expect(step.outputJson).toBe(JSON.stringify(first + second))
+    expect(step.outputJson).toBe(JSON.stringify(answer))
+    const reply = taggedStringOutput(prompt, answer)
+    const splitAt = reply.indexOf("second line")
     expect(
         sessionTextMessages((await loopy.sessions.get(step.sessionId!)).messages).map((message) => message.content)
-    ).toEqual(["Answer naturally.", first, "Checked the answer.", second])
+    ).toEqual([prompt, reply.slice(0, splitAt), "Checked the answer.", reply.slice(splitAt)])
 })
 
 test("AnthropicModel records readable thinking but drops redacted thinking", async () => {

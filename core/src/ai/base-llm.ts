@@ -28,12 +28,12 @@ export abstract class BaseLanguageModel implements LanguageModel {
 
     protected async invokeWithInstructedOutput(
         invocation: LanguageModelInvocation,
-        run: (prompt: string) => Promise<string | undefined>
+        run: (prompt: string) => Promise<readonly string[]>
     ): Promise<unknown> {
         const prepared = prepareInstructedOutput(invocation.prompt, invocation.output, "llm")
         invocation.session.addMessage("user", prepared.prompt)
-        const finalMessage = await run(prepared.prompt)
-        return prepared.collect(finalMessage)
+        const assistantMessages = await run(prepared.prompt)
+        return prepared.collect(assistantMessages)
     }
 
     async call<T extends z.ZodTypeAny>(stepName: string, options: ModelCallOptions<T>): Promise<z.infer<T>> {

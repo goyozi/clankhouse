@@ -95,8 +95,9 @@ async function runSession(
     recorder: SessionRecorder,
     model: PiModel,
     prompt: string
-): Promise<string | undefined> {
+): Promise<string[]> {
     let lastAssistant: PiAssistantMessage | undefined
+    const assistantMessages: string[] = []
     let unsubscribe: (() => void) | undefined
     let succeeded = false
     try {
@@ -107,12 +108,16 @@ async function runSession(
         unsubscribe = session.subscribe((event) => {
             if (event.type !== "message_end") return
             recordMessage(recorder, event.message)
-            if (event.message.role === "assistant") lastAssistant = event.message
+            if (event.message.role === "assistant") {
+                lastAssistant = event.message
+                const text = assistantText(event.message)
+                if (text !== undefined) assistantMessages.push(text)
+            }
         })
         await session.prompt(prompt, { source: "rpc" })
-        const finalMessage = collectFinalMessage(lastAssistant)
+        requireStopped(lastAssistant)
         succeeded = true
-        return finalMessage
+        return assistantMessages
     } finally {
         cleanupSession(session, unsubscribe, !succeeded)
     }
@@ -218,12 +223,15 @@ function inputString(input: unknown, key: string): string | undefined {
     return typeof value === "string" && value.length > 0 ? value : undefined
 }
 
-function collectFinalMessage(message: PiAssistantMessage | undefined): string | undefined {
-    if (message === undefined) return undefined
+function requireStopped(message: PiAssistantMessage | undefined): void {
+    if (message === undefined) return
     if (message.stopReason !== "stop") {
         const details = message.errorMessage === undefined ? "" : `: ${message.errorMessage}`
         throw new Error(`Pi agent stopped with ${message.stopReason}${details}`)
     }
+}
+
+function assistantText(message: PiAssistantMessage): string | undefined {
     const text = message.content.filter((block) => block.type === "text").map((block) => block.text)
     return text.length === 0 ? undefined : text.join("\n")
 }

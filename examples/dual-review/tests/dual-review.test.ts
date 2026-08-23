@@ -38,17 +38,27 @@ test("reviews captured uncommitted changes and synthesizes both findings without
 
     // then the final agent output is the workflow output
     expect(output).toBe("Act: fix it\nSkip: none")
-    // and both reviewers receive the simple review prompt before synthesis receives both findings
+    // and both reviewers receive the full review prompt before synthesis receives both findings
     expect(invocations).toEqual([
         {
             agent: "reviewer1",
             stepName: "review-with-reviewer1",
-            prompt: "Please review my uncommitted changes"
+            prompt: `Please review my uncommitted changes
+
+Note: Only the tagged answer is read — nothing else you produce is passed on. Even if you report
+findings through a tool (\`ReportFindings\` or anything similar), you must still write every
+one of them out in full in the provided answer tags. Do not replace them with a pointer to the tool
+output, a count, or a summary.`
         },
         {
             agent: "reviewer2",
             stepName: "review-with-reviewer2",
-            prompt: "Please review my uncommitted changes"
+            prompt: `Please review my uncommitted changes
+
+Note: Only the tagged answer is read — nothing else you produce is passed on. Even if you report
+findings through a tool (\`ReportFindings\` or anything similar), you must still write every
+one of them out in full in the provided answer tags. Do not replace them with a pointer to the tool
+output, a count, or a summary.`
         },
         {
             agent: "synthesizer",

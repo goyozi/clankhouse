@@ -135,6 +135,11 @@ export function taggedOutput(prompt: string, outputText: string): string {
     return `${opening}\n${outputText}\n${closing}`
 }
 
+export function taggedStringOutput(prompt: string, outputText: string): string {
+    const { opening, closing } = instructedTags(prompt)
+    return `${opening}${outputText}${closing}`
+}
+
 export function sessionTextMessages(
     messages: AISessionMessage[]
 ): Array<Extract<AISessionMessage, { type: "message" }>> {

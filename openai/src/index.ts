@@ -40,10 +40,10 @@ export class OpenAIModel extends BaseLanguageModel {
                     `OpenAI refused to produce a response: ${output.refusals.join("\n")}`
                 )
             }
-            if (output.text === undefined) {
+            if (output.assistantMessages.length === 0) {
                 throw new LoopyError("llm_response_invalid", "OpenAI response did not contain text output")
             }
-            return output.text
+            return output.assistantMessages
         })
     }
 
@@ -52,23 +52,28 @@ export class OpenAIModel extends BaseLanguageModel {
     }
 }
 
-function recordOutput(session: SessionRecorder, response: Response): { text: string | undefined; refusals: string[] } {
+function recordOutput(
+    session: SessionRecorder,
+    response: Response
+): { assistantMessages: string[]; refusals: string[] } {
     const refusals: string[] = []
-    let hasText = false
+    const assistantMessages: string[] = []
     for (const output of response.output) {
         if (output.type === "reasoning") {
             const reasoning = reasoningText(output)
             if (reasoning !== "") session.addMessage("reasoning", reasoning)
         } else if (output.type === "message") {
+            const text: string[] = []
             for (const content of output.content) {
                 if (content.type === "output_text") {
-                    hasText = true
+                    text.push(content.text)
                     session.addMessage("assistant", content.text)
                 } else {
                     refusals.push(content.refusal)
                     session.addMessage("assistant", content.refusal)
                 }
             }
+            if (text.length > 0) assistantMessages.push(text.join(""))
         } else {
             throw new LoopyError(
                 "llm_response_invalid",
@@ -76,7 +81,7 @@ function recordOutput(session: SessionRecorder, response: Response): { text: str
             )
         }
     }
-    return { text: hasText ? response.output_text : undefined, refusals }
+    return { assistantMessages, refusals }
 }
 
 function reasoningText(output: Extract<ResponseOutputItem, { type: "reasoning" }>): string {
