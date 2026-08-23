@@ -12,7 +12,7 @@ import * as z from "zod"
 const execFileAsync = promisify(execFile)
 
 export function tempDir(prefix: string): string {
-    const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)))
+    const dir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), prefix)))
     onTestFinished(() => fs.rmSync(dir, { recursive: true, force: true }))
     return dir
 }
