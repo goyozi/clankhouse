@@ -1,3 +1,4 @@
+import * as path from "node:path"
 import { execGit, execGitRaw, mustGit, mustGitRaw, type ProcessOutput } from "./exec"
 
 const PATH_CHUNK_SIZE = 256
@@ -96,23 +97,23 @@ export async function tryRevParse(cwd: string, revision: string): Promise<GitObj
 export async function tryShowTopLevel(cwd: string): Promise<string | undefined> {
     const output = await execGit(cwd, ["rev-parse", "--show-toplevel"])
     if (output.exitCode !== 0) return undefined
-    return parseRequiredText("rev-parse --show-toplevel", output.stdout)
+    return path.normalize(parseRequiredText("rev-parse --show-toplevel", output.stdout))
 }
 
 export async function commonDirectory(cwd: string): Promise<string> {
     const output = await mustGit(cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"])
-    return parseRequiredText("rev-parse --git-common-dir", output.stdout)
+    return path.normalize(parseRequiredText("rev-parse --git-common-dir", output.stdout))
 }
 
 export async function resolveGitPath(cwd: string, name: string): Promise<string> {
     const output = await mustGit(cwd, ["rev-parse", "--path-format=absolute", "--git-path", name])
-    return parseRequiredText("rev-parse --git-path", output.stdout)
+    return path.normalize(parseRequiredText("rev-parse --git-path", output.stdout))
 }
 
 export async function sharedIndexPath(cwd: string): Promise<string | undefined> {
     const output = await mustGit(cwd, ["rev-parse", "--path-format=absolute", "--shared-index-path"])
     const value = output.stdout.trim()
-    return value.length === 0 ? undefined : value
+    return value.length === 0 ? undefined : path.normalize(value)
 }
 
 export async function getBooleanConfig(cwd: string, key: string): Promise<boolean | undefined> {
@@ -164,7 +165,7 @@ export async function listWorktreePaths(cwd: string): Promise<string[]> {
         if (!field.startsWith("worktree ")) continue
         const worktreePath = field.slice("worktree ".length)
         if (worktreePath.length === 0) throw invalidOutput("worktree list", "received an empty worktree path")
-        paths.push(worktreePath)
+        paths.push(path.normalize(worktreePath))
     }
     return paths
 }

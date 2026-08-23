@@ -32,11 +32,10 @@ test("typed revision, configuration, ref and worktree operations", async () => {
 })
 
 test("typed index and tree operations preserve NUL-delimited paths", async () => {
-    // given staged files whose names contain spaces and newlines
+    // given staged files whose names require delimiter-safe parsing on the current filesystem
     const repo = await tempGitRepo()
-    const files = ["line\nbreak.txt", "space name.txt"]
-    repo.write(files[0], "line")
-    repo.write(files[1], "space")
+    const files = process.platform === "win32" ? ["space name.txt"] : ["line\nbreak.txt", "space name.txt"]
+    files.forEach((file) => repo.write(file, file))
     await git.add(repo.path, files)
     const sourceIndex = await git.resolveGitPath(repo.path, "index")
     const copiedIndex = path.join(tempDir("loopy-client-index-"), "index")

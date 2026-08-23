@@ -259,7 +259,7 @@ Steps
          "id": "${artifact.id}",
          "runId": "${detailedRunId}",
          "name": "summary",
-         "file": "${artifact.file}",
+         "file": ${JSON.stringify(artifact.file)},
          "kind": "text",
          "mimeType": "text/plain"
        }

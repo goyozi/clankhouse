@@ -422,9 +422,9 @@ test("persists a private credential and authenticates unary and streaming RPCs",
     expect(server.port).toBeGreaterThan(0)
     expect(server.url).toBe(`http://127.0.0.1:${server.port}`)
     expect(Object.keys(server)).not.toContain("apiKey")
-    // and its credential is persisted with owner-only permissions
+    // and on POSIX its credential is persisted with owner-only permissions
     expect(credentials).toEqual({ version: 1, apiKey: server.apiKey })
-    expect(fs.statSync(server.credentialsFile).mode & 0o777).toBe(0o600)
+    if (process.platform !== "win32") expect(fs.statSync(server.credentialsFile).mode & 0o777).toBe(0o600)
 
     // when unary and streaming RPCs omit or misuse the credential
     const missing = rpcClient(server, "")
@@ -478,38 +478,41 @@ test("serve owns process signal handling and the Loopy lifecycle", async () => {
     expect(process.listeners("SIGTERM")).toEqual(existingSigterm)
 })
 
-test("a served process shuts down and terminates on SIGINT while work keeps it alive", async () => {
-    // given a real server process with an active run stream and a pending timer holding its event loop open
-    const dir = tempDir("loopy-signal-")
-    const child = spawn(process.execPath, ["--import", "tsx", path.join(fixtures, "serve-signal.ts")], {
-        env: { ...process.env, LOOPY_DIR: dir },
-        stdio: ["ignore", "pipe", "pipe"]
-    })
-    onTestFinished(() => {
-        child.kill("SIGKILL")
-    })
-    const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) =>
-        child.once("exit", (code, signal) => resolve({ code, signal }))
-    )
-    const started = z
-        .object({ url: z.string(), apiKey: z.string(), runId: z.string() })
-        .parse(JSON.parse(await firstLine(child.stdout!)))
-    const client = createClient(
-        LoopyService,
-        createConnectTransport({ httpVersion: "1.1", baseUrl: started.url, interceptors: [bearer(started.apiKey)] })
-    )
-    const runStream = client.watchRun({ runId: started.runId })[Symbol.asyncIterator]()
-    await nextRunningStep(runStream, "wait:never")
-    const pending = runStream.next().catch((error: unknown) => error)
+test.skipIf(process.platform === "win32")(
+    "a served process shuts down and terminates on SIGINT while work keeps it alive",
+    async () => {
+        // given a real server process with an active run stream and a pending timer holding its event loop open
+        const dir = tempDir("loopy-signal-")
+        const child = spawn(process.execPath, ["--import", "tsx", path.join(fixtures, "serve-signal.ts")], {
+            env: { ...process.env, LOOPY_DIR: dir },
+            stdio: ["ignore", "pipe", "pipe"]
+        })
+        onTestFinished(() => {
+            child.kill("SIGKILL")
+        })
+        const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) =>
+            child.once("exit", (code, signal) => resolve({ code, signal }))
+        )
+        const started = z
+            .object({ url: z.string(), apiKey: z.string(), runId: z.string() })
+            .parse(JSON.parse(await firstLine(child.stdout!)))
+        const client = createClient(
+            LoopyService,
+            createConnectTransport({ httpVersion: "1.1", baseUrl: started.url, interceptors: [bearer(started.apiKey)] })
+        )
+        const runStream = client.watchRun({ runId: started.runId })[Symbol.asyncIterator]()
+        await nextRunningStep(runStream, "wait:never")
+        const pending = runStream.next().catch((error: unknown) => error)
 
-    // when the process is interrupted
-    child.kill("SIGINT")
+        // when the process is interrupted
+        child.kill("SIGINT")
 
-    // then the active stream reports shutdown rather than a dropped connection
-    expect(await pending).toMatchObject({ code: Code.Unavailable })
-    // and the process terminates from the signal instead of outliving its closed database
-    expect(await exited).toMatchObject({ signal: "SIGINT" })
-})
+        // then the active stream reports shutdown rather than a dropped connection
+        expect(await pending).toMatchObject({ code: Code.Unavailable })
+        // and the process terminates from the signal instead of outliving its closed database
+        expect(await exited).toMatchObject({ signal: "SIGINT" })
+    }
+)
 
 test("close returns without waiting out the keep-alive timeout of an abandoned stream", async () => {
     // given a run watched through a stream the client stops consuming without cancelling
@@ -552,8 +555,8 @@ test("rejects malformed credential files without replacing them", async () => {
     // then startup fails without replacing the file contents
     await expect(listen(loopy, { port: 0 })).rejects.toThrow(/malformed/)
     expect(fs.readFileSync(credentialsFile, "utf8")).toBe("not-json")
-    // and the credential file is still restricted to its owner
-    expect(fs.statSync(credentialsFile).mode & 0o777).toBe(0o600)
+    // and on POSIX the credential file is still restricted to its owner
+    if (process.platform !== "win32") expect(fs.statSync(credentialsFile).mode & 0o777).toBe(0o600)
 })
 
 test("resumes an interrupted run through a restarted server", async () => {

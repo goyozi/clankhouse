@@ -31,6 +31,7 @@ async function createRepository(): Promise<string> {
     const directory = await mkdtemp(path.join(os.tmpdir(), "loopy-hello-world-"))
     try {
         await runGit(directory, ["init", "-b", "main"])
+        await runGit(directory, ["config", "core.autocrlf", "false"])
         await runGit(directory, ["config", "user.email", "hello-world@loopy.local"])
         await runGit(directory, ["config", "user.name", "Loopy Hello World"])
         await runGit(directory, ["commit", "--allow-empty", "-m", "Initial commit"])

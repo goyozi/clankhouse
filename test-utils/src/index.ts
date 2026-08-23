@@ -12,7 +12,7 @@ import * as z from "zod"
 const execFileAsync = promisify(execFile)
 
 export function tempDir(prefix: string): string {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix))
+    const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)))
     onTestFinished(() => fs.rmSync(dir, { recursive: true, force: true }))
     return dir
 }
@@ -53,6 +53,7 @@ export type TempGitRepo = {
 export async function tempGitRepo(): Promise<TempGitRepo> {
     const dir = tempDir("loopy-git-")
     await runGit(dir, ["init", "-b", "main"])
+    await runGit(dir, ["config", "core.autocrlf", "false"])
     await runGit(dir, ["config", "user.email", "test@loopy.dev"])
     await runGit(dir, ["config", "user.name", "Loopy Test"])
     const repo: TempGitRepo = {

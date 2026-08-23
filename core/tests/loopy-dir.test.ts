@@ -18,7 +18,7 @@ test("uses explicitly provided directory and creates the database", () => {
     loopy.close()
 })
 
-test("creates new loopy directories with owner-only permissions", () => {
+test.skipIf(process.platform === "win32")("creates new loopy directories with owner-only permissions", () => {
     // given a nested loopy directory that does not exist
     const dir = path.join(tempDir("loopy-dir-"), "private")
 
@@ -30,7 +30,7 @@ test("creates new loopy directories with owner-only permissions", () => {
     loopy.close()
 })
 
-test("does not change permissions on an existing loopy directory", () => {
+test.skipIf(process.platform === "win32")("does not change permissions on an existing loopy directory", () => {
     // given an existing loopy directory with broader permissions
     const dir = tempDir("loopy-existing-")
     fs.chmodSync(dir, 0o755)
@@ -64,12 +64,13 @@ test("falls back to $LOOPY_DIR", () => {
 })
 
 test("defaults to ~/.loopy", () => {
-    // given no LOOPY_DIR and a temp HOME directory
+    // given no LOOPY_DIR and a temporary home directory
     const home = tempDir("loopy-home-")
-    const previousHome = process.env.HOME
+    const homeVariable = process.platform === "win32" ? "USERPROFILE" : "HOME"
+    const previousHome = process.env[homeVariable]
     const previousLoopyDir = process.env.LOOPY_DIR
     delete process.env.LOOPY_DIR
-    process.env.HOME = home
+    process.env[homeVariable] = home
     try {
         // when a Loopy instance is created without an explicit directory
         const loopy = new Loopy()
@@ -80,7 +81,8 @@ test("defaults to ~/.loopy", () => {
         expect(fs.existsSync(path.join(home, ".loopy", "loopy.db"))).toBe(true)
         loopy.close()
     } finally {
-        process.env.HOME = previousHome
+        if (previousHome === undefined) delete process.env[homeVariable]
+        else process.env[homeVariable] = previousHome
         if (previousLoopyDir !== undefined) process.env.LOOPY_DIR = previousLoopyDir
     }
 })

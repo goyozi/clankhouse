@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process"
+import * as path from "node:path"
 import { promisify } from "node:util"
 import type { CodingAgent } from "@loopy/core/ai/coding-agent"
 import { GitRepository } from "@loopy/core/git"
@@ -69,7 +70,7 @@ ${reviewer2Findings}
 
 async function repositoryRoot(directory: string): Promise<string> {
     const { stdout } = await execFileAsync("git", ["rev-parse", "--show-toplevel"], { cwd: directory })
-    return stdout.trim()
+    return path.normalize(stdout.trim())
 }
 
 async function allSucceeded<T>(promises: Iterable<T | PromiseLike<T>>): Promise<Awaited<T>[]> {

@@ -44,7 +44,8 @@ test("applyChanges transfers the complete effective worktree state as uncommitte
     expect(fs.readFileSync(path.join(repo.path, "binary.bin"))).toEqual(Buffer.from([0, 1, 2, 255]))
     expect(repo.exists("delete-me.txt")).toBe(false)
     expect(fs.readlinkSync(path.join(repo.path, "readme-link"))).toBe("README.md")
-    expect(fs.statSync(path.join(repo.path, "executable.sh")).mode & 0o111).not.toBe(0)
+    if (process.platform !== "win32")
+        expect(fs.statSync(path.join(repo.path, "executable.sh")).mode & 0o111).not.toBe(0)
     // and the target branch, HEAD and index are unchanged so every transferred change is uncommitted
     expect(await runGit(repo.path, ["symbolic-ref", "HEAD"])).toBe(targetBranchBefore)
     expect(await runGit(repo.path, ["rev-parse", "HEAD"])).toBe(targetHeadBefore)

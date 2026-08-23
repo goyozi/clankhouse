@@ -227,7 +227,9 @@ test("gc does not prune unrelated missing worktrees from the repository", async 
 
     // then the unrelated missing worktree remains registered
     expect(result.worktrees).toEqual({ removed: 1, paths: [loopyWorktree.path] })
-    expect(await runGit(repo.path, ["worktree", "list", "--porcelain"])).toContain(externalPath)
+    expect(await runGit(repo.path, ["worktree", "list", "--porcelain"])).toContain(
+        externalPath.split(path.sep).join("/")
+    )
 })
 
 test("gc protects reachable IDs without trusting their candidate manifest", async () => {
