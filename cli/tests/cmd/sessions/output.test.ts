@@ -1,26 +1,26 @@
 import { PassThrough, Readable } from "node:stream"
 import { create } from "@bufbuild/protobuf"
 import { timestampFromDate } from "@bufbuild/protobuf/wkt"
-import type { Loopy } from "@loopy/core/loopy"
-import { listen, type LoopyServer } from "@loopy/server"
-import { SessionMessageSchema, ToolResultStatus } from "@loopy/server/proto"
-import { tempLoopy } from "@loopy/test-utils"
+import type { ClankHouse } from "@clankhouse/core/clankhouse"
+import { listen, type ClankHouseServer } from "@clankhouse/server"
+import { SessionMessageSchema, ToolResultStatus } from "@clankhouse/server/proto"
+import { tempClankHouse } from "@clankhouse/test-utils"
 import { expect, onTestFinished, test } from "vitest"
 import { runCli } from "../../../src"
 import { formatSessionMessage } from "../../../src/cmd/sessions/output"
 import { executionTiming } from "../../../src/output"
 
-async function testServer(loopy: Loopy): Promise<LoopyServer> {
-    const server = await listen(loopy, { port: 0 })
+async function testServer(clankhouse: ClankHouse): Promise<ClankHouseServer> {
+    const server = await listen(clankhouse, { port: 0 })
     onTestFinished(() => server.close())
     return server
 }
 
-function serverEnv(server: LoopyServer): NodeJS.ProcessEnv {
+function serverEnv(server: ClankHouseServer): NodeJS.ProcessEnv {
     return {
         ...process.env,
-        LOOPY_SERVER_URL: server.url,
-        LOOPY_API_KEY: server.apiKey
+        CLANK_SERVER_URL: server.url,
+        CLANK_API_KEY: server.apiKey
     }
 }
 
@@ -100,8 +100,8 @@ function twoDigits(value: number): string {
 
 test("sessions get command output matches designs", async () => {
     // given completed detailed and empty sessions
-    const { loopy } = tempLoopy()
-    const detailedRecorder = loopy.sessions.create({
+    const { clankhouse } = tempClankHouse()
+    const detailedRecorder = clankhouse.sessions.create({
         kind: "coding-agent",
         client: "fixture-agent",
         provider: "fixture-provider",
@@ -127,14 +127,14 @@ test("sessions get command output matches designs", async () => {
     detailedRecorder.addToolResult({ toolCallId: "call-2", status: "failed", error: "unavailable" })
     detailedRecorder.addMessage("reasoning", "The evidence is sufficient.")
     detailedRecorder.succeed()
-    const emptyRecorder = loopy.sessions.create({
+    const emptyRecorder = clankhouse.sessions.create({
         kind: "llm",
         client: "fixture-llm",
         provider: "fixture-provider",
         model: "fixture-model"
     })
     emptyRecorder.succeed()
-    const hiddenRecorder = loopy.sessions.create({
+    const hiddenRecorder = clankhouse.sessions.create({
         kind: "llm",
         client: "fixture-llm",
         provider: "fixture-provider",
@@ -142,10 +142,10 @@ test("sessions get command output matches designs", async () => {
     })
     hiddenRecorder.addToolResult({ toolCallId: "orphan", status: "succeeded", output: "hidden" })
     hiddenRecorder.succeed()
-    const detailedSession = await loopy.sessions.get(detailedRecorder.id)
-    const emptySession = await loopy.sessions.get(emptyRecorder.id)
-    const hiddenSession = await loopy.sessions.get(hiddenRecorder.id)
-    const env = serverEnv(await testServer(loopy))
+    const detailedSession = await clankhouse.sessions.get(detailedRecorder.id)
+    const emptySession = await clankhouse.sessions.get(emptyRecorder.id)
+    const hiddenSession = await clankhouse.sessions.get(hiddenRecorder.id)
+    const env = serverEnv(await testServer(clankhouse))
 
     // when both sessions are requested in compact and expanded human-readable forms
     const detailed = await runCliCommand(["sessions", "get", detailedRecorder.id], env)
@@ -231,8 +231,8 @@ Messages
 
 test("sessions watch command output matches streaming designs", async () => {
     // given a running session with existing history
-    const { loopy } = tempLoopy()
-    const recorder = loopy.sessions.create({
+    const { clankhouse } = tempClankHouse()
+    const recorder = clankhouse.sessions.create({
         kind: "coding-agent",
         client: "fixture-agent",
         provider: "fixture-provider",
@@ -243,8 +243,8 @@ test("sessions watch command output matches streaming designs", async () => {
         if (!completed) recorder.fail()
     })
     recorder.addMessage("user", "Existing context.")
-    const runningSession = await loopy.sessions.get(recorder.id)
-    const env = serverEnv(await testServer(loopy))
+    const runningSession = await clankhouse.sessions.get(recorder.id)
+    const env = serverEnv(await testServer(clankhouse))
     const watch = startCliCommand(["sessions", "watch", recorder.id], env)
     const expandedWatch = startCliCommand(["sessions", "watch", recorder.id, "--include", "all"], env)
     await waitForOutput(watch.stdout, "user       Existing context.")
@@ -302,8 +302,8 @@ Messages
 
 test("session tool summaries cover common tools, source fallbacks, escaping, and truncation", async () => {
     // given a completed session containing every common tool kind and fallback source
-    const { loopy } = tempLoopy()
-    const recorder = loopy.sessions.create({
+    const { clankhouse } = tempClankHouse()
+    const recorder = clankhouse.sessions.create({
         kind: "coding-agent",
         client: "fixture-agent",
         provider: "fixture-provider",
@@ -362,7 +362,7 @@ test("session tool summaries cover common tools, source fallbacks, escaping, and
     })
     recorder.addToolResult({ toolCallId: "mcp", status: "succeeded", error: "inconsistent result" })
     recorder.succeed()
-    const env = serverEnv(await testServer(loopy))
+    const env = serverEnv(await testServer(clankhouse))
 
     // when the session is requested in compact form
     const result = await runCliCommand(["sessions", "get", recorder.id], env)
@@ -405,10 +405,10 @@ test("compact tool results preserve unspecified status", () => {
 
 test("session include validation reports command-specific resources", async () => {
     // given a completed session
-    const { loopy } = tempLoopy()
-    const recorder = loopy.sessions.create({ kind: "llm", client: "fixture", provider: "fixture", model: "model" })
+    const { clankhouse } = tempClankHouse()
+    const recorder = clankhouse.sessions.create({ kind: "llm", client: "fixture", provider: "fixture", model: "model" })
     recorder.succeed()
-    const env = serverEnv(await testServer(loopy))
+    const env = serverEnv(await testServer(clankhouse))
 
     // when an unsupported session include is requested
     const result = await runCliCommand(["sessions", "get", recorder.id, "--include", "sessions"], env)

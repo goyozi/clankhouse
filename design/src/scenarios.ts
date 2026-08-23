@@ -31,7 +31,7 @@ const completedOutput = {
     verdict: "approve",
     summary: "Both reviewers agree the change is ready."
 }
-const prepareOutput = "Review pull request 482 in acme/loopy."
+const prepareOutput = "Review pull request 482 in acme/clankhouse."
 const reviewOutput = "No blocking issues found."
 const verdictOutput = "approve"
 const artifactOutput = {
@@ -70,8 +70,8 @@ const workflowOutputSchema = {
 }
 
 const contextSessionMessages = [
-    "user: Prepare a concise review brief for pull request 482 in acme/loopy.",
-    "assistant: Review pull request 482 in acme/loopy."
+    "user: Prepare a concise review brief for pull request 482 in acme/clankhouse.",
+    "assistant: Review pull request 482 in acme/clankhouse."
 ]
 const reviewSessionMessages = [
     "user: Review the proposed CLI output changes for correctness.",
@@ -107,7 +107,7 @@ const parallelReviewSessionMessages = [
 const testSessionMessages = [
     "user: Validate the change with the focused CLI tests.",
     "assistant: I’ll run the run-output and CLI suites.",
-    "tool: shell pnpm --filter @loopy/cli test",
+    "tool: shell pnpm --filter @clankhouse/cli test",
     "assistant: All focused tests pass."
 ]
 const summarySessionMessages = ["user: Combine the code and test reviews into a final verdict.", "assistant: approve"]
@@ -506,7 +506,7 @@ export const scenarios: Scenario[] = [
         id: "workflows-list",
         group: "Workflows",
         label: "List workflows",
-        command: "loopy workflows list",
+        command: "clank workflows list",
         summary: "The CLI prints one registered workflow name per line.",
         note: "There is no heading or table in the current human-readable output.",
         delivery: "instant",
@@ -516,7 +516,7 @@ export const scenarios: Scenario[] = [
         id: "workflows-get",
         group: "Workflows",
         label: "Get workflow",
-        command: "loopy workflows get dual-review",
+        command: "clank workflows get dual-review",
         summary: "A workflow definition groups its name and input and output schemas into a compact snapshot.",
         note: "The entity header mirrors run and session snapshots; schemas sit beneath short semantic headings.",
         delivery: "instant",
@@ -534,7 +534,7 @@ export const scenarios: Scenario[] = [
         id: "watch-success",
         group: "Live runs",
         label: "Watch concurrent agents",
-        command: `loopy runs watch ${parallelRunId} --include sessions`,
+        command: `clank runs watch ${parallelRunId} --include sessions`,
         summary: "Watch emits the same append-only, scoped activity blocks to TTY and redirected output.",
         note: "Concurrent messages stay nested beneath their owning step. Contiguous updates append to the current owner block; after another owner interleaves, the session resumes in a new timestamped block.",
         delivery: "streaming",
@@ -545,7 +545,7 @@ export const scenarios: Scenario[] = [
         id: "watch-failure",
         group: "Live runs",
         label: "Run fails",
-        command: `loopy runs watch ${failedRunId} --include sessions`,
+        command: `clank runs watch ${failedRunId} --include sessions`,
         summary: "A failed step is appended with its scoped error before the terminal run failure.",
         note: "Both output targets repeat the failed step scope before the terminal run failure and still exit non-zero.",
         delivery: "streaming",
@@ -556,7 +556,7 @@ export const scenarios: Scenario[] = [
         id: "get-watch-success",
         group: "Live runs",
         label: "Get and watch run",
-        command: `loopy runs get ${parallelRunId} --include sessions --watch`,
+        command: `clank runs get ${parallelRunId} --include sessions --watch`,
         summary: "Get with watch prints its initial snapshot, then owner-scoped updates on both output targets.",
         note: "The completed update carries the final output without repeating the full snapshot.",
         delivery: "streaming",
@@ -567,7 +567,7 @@ export const scenarios: Scenario[] = [
         id: "runs-start",
         group: "Run control",
         label: "Start run",
-        command: "loopy runs start review-pull-request --input input.json",
+        command: "clank runs start review-pull-request --input input.json",
         summary: "Starting a run prints its identifier.",
         note: "The current human-readable response contains only the run ID.",
         delivery: "instant",
@@ -577,7 +577,7 @@ export const scenarios: Scenario[] = [
         id: "runs-resume",
         group: "Run control",
         label: "Resume run",
-        command: `loopy runs resume ${runId}`,
+        command: `clank runs resume ${runId}`,
         summary: "Resuming a run prints its identifier.",
         note: "The current human-readable response contains only the run ID.",
         delivery: "instant",
@@ -587,7 +587,7 @@ export const scenarios: Scenario[] = [
         id: "runs-rerun",
         group: "Run control",
         label: "Rerun from step",
-        command: `loopy runs rerun ${runId} --from review-changes`,
+        command: `clank runs rerun ${runId} --from review-changes`,
         summary: "Rerunning from a step prints the new run identifier.",
         note: "The source run and step boundary appear in the command, not the response.",
         delivery: "instant",
@@ -597,7 +597,7 @@ export const scenarios: Scenario[] = [
         id: "run-details",
         group: "Snapshots",
         label: "Completed run",
-        command: `loopy runs get ${runId}`,
+        command: `clank runs get ${runId}`,
         summary: "A run snapshot prints metadata, detailed steps, artifacts, and its final output in that order.",
         note: "Run and step metadata is grouped beneath semantic headings using indentation and spacing.",
         delivery: "instant",
@@ -608,7 +608,7 @@ export const scenarios: Scenario[] = [
         id: "run-details-sessions",
         group: "Snapshots",
         label: "Completed run including sessions",
-        command: `loopy runs get ${runId} --include sessions`,
+        command: `clank runs get ${runId} --include sessions`,
         summary: "Included session snapshots are nested beneath the steps that reference them.",
         note: "Tool calls use compact semantic summaries; successful results stay hidden unless tool I/O is requested.",
         delivery: "instant",
@@ -619,7 +619,7 @@ export const scenarios: Scenario[] = [
         id: "run-details-verbose",
         group: "Snapshots",
         label: "Verbose completed run",
-        command: `loopy runs get ${runId} --verbose`,
+        command: `clank runs get ${runId} --verbose`,
         summary: "Verbose output includes related sessions and their complete tool inputs and results.",
         note: "Each tool keeps its compact summary and gains aligned input and result envelopes beneath it.",
         delivery: "instant",
@@ -630,7 +630,7 @@ export const scenarios: Scenario[] = [
         id: "string-output",
         group: "Snapshots",
         label: "String output",
-        command: `loopy runs get ${stringRunId}`,
+        command: `clank runs get ${stringRunId}`,
         summary: "A JSON string output remains quoted in a run snapshot.",
         note: "The Output section uses the same JSON pretty-printer for strings and structured values.",
         delivery: "instant",
@@ -664,7 +664,7 @@ export const scenarios: Scenario[] = [
         id: "runs-list",
         group: "Snapshots",
         label: "Recent runs",
-        command: "loopy runs list --limit 3",
+        command: "clank runs list --limit 3",
         summary: "Recent runs are printed in a seven-column table.",
         note: "Started and ended values use full ISO timestamps; a missing end time is shown as a dash.",
         delivery: "instant",
@@ -681,7 +681,7 @@ export const scenarios: Scenario[] = [
         id: "sessions-get",
         group: "Sessions",
         label: "Get session",
-        command: `loopy sessions get ${sessionId}`,
+        command: `clank sessions get ${sessionId}`,
         summary:
             "A session snapshot groups its identity, client and model metadata, terminal state, and message history.",
         note: "Common tools use semantic summaries, MCP tools show their source kind, and successful results are omitted.",
@@ -693,7 +693,7 @@ export const scenarios: Scenario[] = [
         id: "sessions-get-tool-io",
         group: "Sessions",
         label: "Get session with tool I/O",
-        command: `loopy sessions get ${sessionId} --include tool-io`,
+        command: `clank sessions get ${sessionId} --include tool-io`,
         summary: "Tool I/O adds complete raw inputs and results without replacing compact summaries.",
         note: "The explicit include and global verbose flag produce the same session detail level.",
         delivery: "instant",
@@ -704,7 +704,7 @@ export const scenarios: Scenario[] = [
         id: "sessions-watch",
         group: "Sessions",
         label: "Watch session",
-        command: `loopy sessions watch ${sessionId}`,
+        command: `clank sessions watch ${sessionId}`,
         summary: "Session watch emits an append-only stream of aligned messages.",
         note: "Existing history and live arrivals share compact tool formatting; hidden results create no empty stream chunks.",
         delivery: "streaming",
@@ -715,7 +715,7 @@ export const scenarios: Scenario[] = [
         id: "artifacts-get",
         group: "Artifacts",
         label: "Get artifact metadata",
-        command: `loopy artifacts get ${artifactId}`,
+        command: `clank artifacts get ${artifactId}`,
         summary: "Artifact metadata groups identity, format, ownership, and storage location into a compact snapshot.",
         note: "Name, kind, and media type share one summary line; the owning run and file remain explicit references.",
         delivery: "instant",
@@ -730,7 +730,7 @@ export const scenarios: Scenario[] = [
         id: "artifacts-read",
         group: "Artifacts",
         label: "Read artifact",
-        command: `loopy artifacts read ${artifactId}`,
+        command: `clank artifacts read ${artifactId}`,
         summary: "Artifact bytes are written directly to standard output.",
         note: "There is no presentation wrapper around the payload.",
         delivery: "streaming",
@@ -746,7 +746,7 @@ export const scenarios: Scenario[] = [
         id: "artifacts-copy",
         group: "Artifacts",
         label: "Copy artifact",
-        command: `loopy artifacts copy ${artifactId} ./review-summary.md`,
+        command: `clank artifacts copy ${artifactId} ./review-summary.md`,
         summary: "Copy confirms the artifact ID and resolved destination.",
         note: "The simulated command runs from /workspace, so the destination is absolute in the response.",
         delivery: "instant",
@@ -756,7 +756,7 @@ export const scenarios: Scenario[] = [
         id: "events-emit",
         group: "Events",
         label: "Emit event",
-        command: `printf '{"ok":true}' | loopy events emit approval:release-0.1 --input -`,
+        command: `printf '{"ok":true}' | clank events emit approval:release-0.1 --input -`,
         summary: "A successful event emission prints the event key.",
         note: "The current confirmation is prefixed with Event emitted.",
         delivery: "instant",
@@ -766,10 +766,10 @@ export const scenarios: Scenario[] = [
         id: "run-workflow",
         group: "Run control",
         label: "Run workflow",
-        command: "loopy run hello-world",
+        command: "clank run hello-world",
         summary: "The attached run command prints the workflow's raw output JSON after completion.",
         note: "TTY and redirected sessions currently receive the same bare output.",
         delivery: "instant",
-        lines: [line('"/tmp/loopy-hello-world-AbCdEf"')]
+        lines: [line('"/tmp/clankhouse-hello-world-AbCdEf"')]
     }
 ]

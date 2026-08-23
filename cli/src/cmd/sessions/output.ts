@@ -7,7 +7,7 @@ import {
     type Session,
     type SessionMessage,
     type SessionToolCall
-} from "@loopy/server/proto"
+} from "@clankhouse/server/proto"
 import { executionStatus, executionTiming, indent } from "../../output"
 
 export type SessionFormatOptions = {

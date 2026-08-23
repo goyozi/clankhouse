@@ -2,15 +2,15 @@ import { randomBytes } from "node:crypto"
 import { constants } from "node:fs"
 import { chmod, link, lstat, open, readFile, unlink } from "node:fs/promises"
 import * as path from "node:path"
-import { isNodeError } from "@loopy/core/util"
+import { isNodeError } from "@clankhouse/core/util"
 
 type Credentials = {
     version: 1
     apiKey: string
 }
 
-export async function resolveCredentials(loopyDir: string): Promise<{ apiKey: string; file: string }> {
-    const file = path.join(loopyDir, "credentials.json")
+export async function resolveCredentials(clankhouseDir: string): Promise<{ apiKey: string; file: string }> {
+    const file = path.join(clankhouseDir, "credentials.json")
     try {
         const credentials = await readCredentials(file)
         return { apiKey: credentials.apiKey, file }
@@ -19,7 +19,7 @@ export async function resolveCredentials(loopyDir: string): Promise<{ apiKey: st
     }
 
     const credentials: Credentials = { version: 1, apiKey: randomBytes(32).toString("base64url") }
-    const temporary = path.join(loopyDir, `.credentials-${process.pid}-${randomBytes(8).toString("hex")}.tmp`)
+    const temporary = path.join(clankhouseDir, `.credentials-${process.pid}-${randomBytes(8).toString("hex")}.tmp`)
     const handle = await open(temporary, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600)
     try {
         await handle.writeFile(`${JSON.stringify(credentials, null, 2)}\n`)
@@ -42,15 +42,15 @@ export async function resolveCredentials(loopyDir: string): Promise<{ apiKey: st
 
 async function readCredentials(file: string): Promise<Credentials> {
     const stat = await lstat(file)
-    if (!stat.isFile()) throw new Error("Loopy credentials must be a regular file")
+    if (!stat.isFile()) throw new Error("ClankHouse credentials must be a regular file")
     await chmod(file, 0o600)
     let parsed: unknown
     try {
         parsed = JSON.parse(await readFile(file, "utf8"))
     } catch {
-        throw new Error("Loopy credentials file is malformed")
+        throw new Error("ClankHouse credentials file is malformed")
     }
-    if (!isCredentials(parsed)) throw new Error("Loopy credentials file is malformed")
+    if (!isCredentials(parsed)) throw new Error("ClankHouse credentials file is malformed")
     return parsed
 }
 

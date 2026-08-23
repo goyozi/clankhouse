@@ -1,18 +1,18 @@
 import { Code, ConnectError } from "@connectrpc/connect"
-import type { Loopy } from "@loopy/core/loopy"
+import type { ClankHouse } from "@clankhouse/core/clankhouse"
 import { parseJson, required, toConnectError } from "./errors"
-import type { LoopyServiceImplementation } from "./types"
+import type { ClankHouseServiceImplementation } from "./types"
 
-type EventHandlers = Pick<LoopyServiceImplementation, "emitEvent">
+type EventHandlers = Pick<ClankHouseServiceImplementation, "emitEvent">
 
-export function eventHandlers(loopy: Loopy): EventHandlers {
+export function eventHandlers(clankhouse: ClankHouse): EventHandlers {
     return {
         async emitEvent(request) {
             required(request.key, "key")
             const payload = parseJson(request.inputJson, "input_json")
             if (payload === undefined) throw new ConnectError("input_json is required", Code.InvalidArgument)
             try {
-                await loopy.emit(request.key, payload)
+                await clankhouse.emit(request.key, payload)
                 return {}
             } catch (error) {
                 throw toConnectError(error)

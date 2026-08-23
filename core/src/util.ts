@@ -4,8 +4,8 @@ import * as os from "node:os"
 import * as path from "node:path"
 import { customAlphabet } from "nanoid"
 
-export function resolveLoopyDir(dir?: string): string {
-    return dir ?? process.env.LOOPY_DIR ?? path.join(os.homedir(), ".loopy")
+export function resolveClankHouseDir(dir?: string): string {
+    return dir ?? process.env.CLANKHOUSE_DIR ?? path.join(os.homedir(), ".clankhouse")
 }
 
 export async function exists(target: string): Promise<boolean> {

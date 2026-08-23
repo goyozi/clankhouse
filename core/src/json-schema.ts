@@ -1,5 +1,5 @@
 import * as z from "zod"
-import { LoopyError } from "./errors"
+import { ClankHouseError } from "./errors"
 import { errorMessage } from "./util"
 
 export type SchemaIo = "input" | "output"
@@ -89,9 +89,9 @@ function inspect(schema: z.ZodTypeAny, io: SchemaIo, allowTopLevelVoid: boolean)
     }
 }
 
-function schemaError(role: string, issue: Issue): LoopyError {
+function schemaError(role: string, issue: Issue): ClankHouseError {
     const location = issue.path.length === 0 ? "<root>" : issue.path
-    return new LoopyError("schema_not_json_compatible", `${role}: ${location} ${issue.message}`, {
+    return new ClankHouseError("schema_not_json_compatible", `${role}: ${location} ${issue.message}`, {
         ...(issue.cause !== undefined ? { cause: issue.cause } : {})
     })
 }

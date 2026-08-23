@@ -2,13 +2,13 @@ import * as http from "node:http"
 import * as https from "node:https"
 import { Code, ConnectError } from "@connectrpc/connect"
 import { connectNodeAdapter } from "@connectrpc/connect-node"
-import { loopy as defaultLoopy } from "@loopy/core"
-import type { Loopy } from "@loopy/core/loopy"
+import { clankhouse as defaultClankHouse } from "@clankhouse/core"
+import type { ClankHouse } from "@clankhouse/core/clankhouse"
 import { bearerAuth } from "./auth"
 import { resolveCredentials } from "./credentials"
-import { LoopyService } from "./gen/loopy/server/v1/server_pb"
+import { ClankHouseService } from "./gen/clankhouse/server/v1/server_pb"
 import { listen as bindServer } from "./listen"
-import { loopyService } from "./service"
+import { clankhouseService } from "./service"
 
 const IDLE_SWEEP_MS = 10
 const CLOSE_GRACE_MS = 1000
@@ -20,7 +20,7 @@ export type ServeOptions = {
     onError?: (error: Error) => void
 }
 
-export type LoopyServer = {
+export type ClankHouseServer = {
     host: string
     port: number
     url: string
@@ -30,19 +30,22 @@ export type LoopyServer = {
 }
 
 /**
- * Starts a Loopy server and takes full ownership of the loopy instance:
+ * Starts a ClankHouse server and takes full ownership of the clankhouse instance:
  * - handles SIGINT and SIGTERM
- * - closes Loopy on shutdown and on startup failure
+ * - closes ClankHouse on shutdown and on startup failure
  * - terminates the process with the received signal after cleanup
  *
  * @see listen
  */
-export async function serve(loopy: Loopy = defaultLoopy(), options: ServeOptions = {}): Promise<LoopyServer> {
-    let server: LoopyServer
+export async function serve(
+    clankhouse: ClankHouse = defaultClankHouse(),
+    options: ServeOptions = {}
+): Promise<ClankHouseServer> {
+    let server: ClankHouseServer
     try {
-        server = await listen(loopy, options)
+        server = await listen(clankhouse, options)
     } catch (error) {
-        loopy.close()
+        clankhouse.close()
         throw error
     }
 
@@ -59,7 +62,7 @@ export async function serve(loopy: Loopy = defaultLoopy(), options: ServeOptions
                 await closeListener()
             } finally {
                 removeSignalHandlers()
-                loopy.close()
+                clankhouse.close()
             }
         })()
         return closePromise
@@ -80,22 +83,25 @@ export async function serve(loopy: Loopy = defaultLoopy(), options: ServeOptions
 }
 
 /**
- * Binds a Loopy server and returns a handle with no auto-cleanup or signal handling.
+ * Binds a ClankHouse server and returns a handle with no auto-cleanup or signal handling.
  *
  * @see serve
  */
-export async function listen(loopy: Loopy = defaultLoopy(), options: ServeOptions = {}): Promise<LoopyServer> {
+export async function listen(
+    clankhouse: ClankHouse = defaultClankHouse(),
+    options: ServeOptions = {}
+): Promise<ClankHouseServer> {
     const { host = "127.0.0.1", port = 7331, tls, onError = reportServerError } = options
 
     validateAddress(host, port, tls)
 
-    const credentials = await resolveCredentials(loopy.loopyDir)
+    const credentials = await resolveCredentials(clankhouse.clankhouseDir)
     const shutdown = new AbortController()
     const handler = connectNodeAdapter({
         shutdownSignal: shutdown.signal,
         interceptors: [bearerAuth(credentials.apiKey)],
         routes(router) {
-            router.service(LoopyService, loopyService(loopy))
+            router.service(ClankHouseService, clankhouseService(clankhouse))
         }
     })
 
@@ -111,11 +117,11 @@ function createServerHandle(
     host: string,
     protocol: "http" | "https",
     credentials: { apiKey: string; file: string }
-): LoopyServer {
+): ClankHouseServer {
     const address = server.address()
     if (address === null || typeof address === "string") {
         server.close()
-        throw new Error("Loopy server did not bind to a TCP address")
+        throw new Error("ClankHouse server did not bind to a TCP address")
     }
 
     let closePromise: Promise<void> | undefined
@@ -135,7 +141,7 @@ function createServerHandle(
         get: () => credentials.apiKey
     })
 
-    return result as LoopyServer
+    return result as ClankHouseServer
 }
 
 function validateAddress(host: string, port: number, tls: https.ServerOptions | undefined): void {
@@ -143,7 +149,7 @@ function validateAddress(host: string, port: number, tls: https.ServerOptions | 
     if (!Number.isInteger(port) || port < 0 || port > 65_535)
         throw new TypeError("port must be an integer from 0 to 65535")
     if (!isLoopback(host) && tls === undefined) {
-        throw new TypeError("TLS is required when binding Loopy to a non-loopback host")
+        throw new TypeError("TLS is required when binding ClankHouse to a non-loopback host")
     }
     if (tls !== undefined && !(hasKeyAndCertificate(tls) || tls.pfx !== undefined)) {
         throw new TypeError("TLS requires key and cert, or pfx")
@@ -165,7 +171,7 @@ function urlHost(host: string): string {
 }
 
 function reportServerError(error: Error): void {
-    console.error("Loopy server error", error)
+    console.error("ClankHouse server error", error)
 }
 
 function closeHttpServer(server: http.Server | https.Server, shutdown: AbortController): Promise<void> {
@@ -185,4 +191,4 @@ function closeHttpServer(server: http.Server | https.Server, shutdown: AbortCont
     })
 }
 
-export { LoopyService } from "./gen/loopy/server/v1/server_pb"
+export { ClankHouseService } from "./gen/clankhouse/server/v1/server_pb"

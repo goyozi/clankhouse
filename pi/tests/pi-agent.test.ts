@@ -1,9 +1,9 @@
 import * as fs from "node:fs"
 import * as path from "node:path"
 import { ModelRuntime } from "@earendil-works/pi-coding-agent"
-import { PiAgent } from "@loopy/pi"
-import { GitRepository, Worktree } from "@loopy/core/git"
-import { uniqueName } from "@loopy/core/util"
+import { PiAgent } from "@clankhouse/pi"
+import { GitRepository, Worktree } from "@clankhouse/core/git"
+import { uniqueName } from "@clankhouse/core/util"
 import {
     instructedTags,
     runGit,
@@ -13,9 +13,9 @@ import {
     taggedOutput,
     tempDir,
     tempGitRepo,
-    tempLoopy,
+    tempClankHouse,
     testRun
-} from "@loopy/test-utils"
+} from "@clankhouse/test-utils"
 import * as z from "zod"
 import { expect, test } from "vitest"
 import { fakePi, isolatedModelRuntime } from "./fake-pi-sdk"
@@ -36,7 +36,7 @@ const liveOutputSchema = z.array(
 
 test("PiAgent maps the SDK conversation to the session and snapshots the worktree", async () => {
     // given a fake Pi session scripted with reasoning, text, a file-writing tool call and structured output
-    const { loopy, dir } = tempLoopy()
+    const { clankhouse, dir } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const modelRuntime = await isolatedModelRuntime(dir)
@@ -63,7 +63,7 @@ test("PiAgent maps the SDK conversation to the session and snapshots the worktre
     let worktree!: Worktree
 
     // when the agent runs inside a durable step
-    const result = await testRun(loopy, async () => {
+    const result = await testRun(clankhouse, async () => {
         worktree = await repository.worktree({ base: "main" })
         return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
     })
@@ -72,16 +72,16 @@ test("PiAgent maps the SDK conversation to the session and snapshots the worktre
     expect(result).toEqual({ done: true })
     expect(fs.readFileSync(path.join(worktree.path, "src/hello.ts"), "utf8")).toBe("export const hi = 1\n")
     // and the durable step stores a valid worktree snapshot
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     expect(step.kind).toBe("agent")
     if (step.kind !== "agent") throw new Error("unreachable")
     expect(step.snapshotRef).toBe(
-        `refs/loopy/agent/${uniqueName("test-workflow/test-key")}/1/${uniqueName("implement")}`
+        `refs/clankhouse/agent/${uniqueName("test-workflow/test-key")}/1/${uniqueName("implement")}`
     )
     expect((await worktree.git(["rev-parse", step.snapshotRef!])).exitCode).toBe(0)
     // and the session records Pi metadata and every supported finalized message in order
-    const session = await loopy.sessions.get(step.sessionId!)
+    const session = await clankhouse.sessions.get(step.sessionId!)
     expect(session.client).toBe("pi")
     expect(session.provider).toBe("openai")
     expect(session.model).toBe("gpt-5.4")
@@ -132,7 +132,7 @@ test("PiAgent maps the SDK conversation to the session and snapshots the worktre
 
 test("PiAgent normalizes every built-in common tool", async () => {
     // given a Pi session containing every built-in common tool
-    const { loopy, dir } = tempLoopy()
+    const { clankhouse, dir } = tempClankHouse()
     const repo = await tempGitRepo()
     const worktree = new Worktree(repo.path)
     const modelRuntime = await isolatedModelRuntime(dir)
@@ -167,13 +167,13 @@ test("PiAgent normalizes every built-in common tool", async () => {
     })
 
     // when the agent runs the tools
-    await testRun(loopy, () => agent.run("inspect", { prompt: "inspect files", output: outputSchema, worktree }))
+    await testRun(clankhouse, () => agent.run("inspect", { prompt: "inspect files", output: outputSchema, worktree }))
 
     // then valid calls keep normalized essentials while malformed searches keep only their raw inputs
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
-    const calls = sessionToolCallMessages((await loopy.sessions.get(step.sessionId!)).messages)
+    const calls = sessionToolCallMessages((await clankhouse.sessions.get(step.sessionId!)).messages)
     expect(calls.map((item) => item.toolCall)).toEqual([
         {
             id: "tool_read_1",
@@ -248,7 +248,7 @@ test("PiAgent normalizes every built-in common tool", async () => {
 
 test("PiAgent records extension custom messages as user messages", async () => {
     // given a fake Pi extension message with display metadata and structured details
-    const { loopy, dir } = tempLoopy()
+    const { clankhouse, dir } = tempClankHouse()
     const repo = await tempGitRepo()
     const worktree = new Worktree(repo.path)
     const modelRuntime = await isolatedModelRuntime(dir)
@@ -271,15 +271,15 @@ test("PiAgent records extension custom messages as user messages", async () => {
     })
 
     // when the agent runs with the extension message in its conversation
-    await testRun(loopy, () => agent.run("review", { prompt: "review", output: z.void(), worktree }), {
+    await testRun(clankhouse, () => agent.run("review", { prompt: "review", output: z.void(), worktree }), {
         output: z.void()
     })
 
-    // then Loopy records the extension message as a user message without losing its metadata
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    // then ClankHouse records the extension message as a user message without losing its metadata
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
-    const session = await loopy.sessions.get(step.sessionId!)
+    const session = await clankhouse.sessions.get(step.sessionId!)
     const messages = sessionTextMessages(session.messages)
     expect(messages.map((item) => item.role)).toEqual(["user", "system", "user", "assistant"])
     expect(JSON.parse(messages[2].content)).toEqual({
@@ -292,7 +292,7 @@ test("PiAgent records extension custom messages as user messages", async () => {
 
 test("PiAgent runs a void-output step without instructed output framing", async () => {
     // given a fake Pi session that writes a file and returns ordinary text
-    const { loopy, dir } = tempLoopy()
+    const { clankhouse, dir } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const modelRuntime = await isolatedModelRuntime(dir)
@@ -316,7 +316,7 @@ test("PiAgent runs a void-output step without instructed output framing", async 
 
     // when the agent runs with a void output schema
     const result = await testRun(
-        loopy,
+        clankhouse,
         async () => {
             worktree = await repository.worktree({ base: "main" })
             return agent.run("implement", { prompt: "do it", output: z.void(), worktree })
@@ -329,7 +329,7 @@ test("PiAgent runs a void-output step without instructed output framing", async 
     expect(prompts).toEqual(["do it"])
     // and the coding change is applied and snapshotted
     expect(fs.readFileSync(path.join(worktree.path, "src/hello.ts"), "utf8")).toBe("export const hi = 1\n")
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
     expect((await worktree.git(["rev-parse", step.snapshotRef!])).exitCode).toBe(0)
@@ -337,7 +337,7 @@ test("PiAgent runs a void-output step without instructed output framing", async 
 
 test("PiAgent preserves an unknown tool and normalizes its failed result", async () => {
     // given an unknown Pi extension tool that returns an error
-    const { loopy, dir } = tempLoopy()
+    const { clankhouse, dir } = tempClankHouse()
     const repo = await tempGitRepo()
     const worktree = new Worktree(repo.path)
     const modelRuntime = await isolatedModelRuntime(dir)
@@ -361,13 +361,13 @@ test("PiAgent preserves an unknown tool and normalizes its failed result", async
     })
 
     // when the agent runs successfully after handling the tool failure
-    await testRun(loopy, () => agent.run("implement", { prompt: "do it", output: outputSchema, worktree }))
+    await testRun(clankhouse, () => agent.run("implement", { prompt: "do it", output: outputSchema, worktree }))
 
     // then the raw tool remains available without a guessed common classification
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
-    const session = await loopy.sessions.get(step.sessionId!)
+    const session = await clankhouse.sessions.get(step.sessionId!)
     expect(session.messages.find((item) => item.type === "tool_call")).toMatchObject({
         toolCall: {
             id: "tool_custom_1",
@@ -387,7 +387,7 @@ test("PiAgent preserves an unknown tool and normalizes its failed result", async
 
 test("PiAgent returns a grouped tagged string before an untagged monitor message", async () => {
     // given a fake Pi session splitting a tagged answer across blocks before a final monitor notification
-    const { loopy, dir } = tempLoopy()
+    const { clankhouse, dir } = tempClankHouse()
     const repo = await tempGitRepo()
     const worktree = new Worktree(repo.path)
     const modelRuntime = await isolatedModelRuntime(dir)
@@ -407,7 +407,7 @@ test("PiAgent returns a grouped tagged string before an untagged monitor message
     })
 
     // when it runs with a root string output
-    const result = await testRun(loopy, () =>
+    const result = await testRun(clankhouse, () =>
         agent.run("report", { prompt: "report naturally", output: z.string(), worktree })
     )
 
@@ -415,11 +415,11 @@ test("PiAgent returns a grouped tagged string before an untagged monitor message
     expect(prompts[0]).toMatch(/^report naturally\n\nIMPORTANT — requested final answer:/)
     expect(prompts[0]).not.toMatch(/JSON/i)
     expect(result).toBe("  first\nsecond  ")
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
     expect(step.outputJson).toBe(JSON.stringify("  first\nsecond  "))
-    const messages = sessionTextMessages((await loopy.sessions.get(step.sessionId!)).messages)
+    const messages = sessionTextMessages((await clankhouse.sessions.get(step.sessionId!)).messages)
     expect(messages.slice(-3).map((message) => message.content)).toEqual([
         expect.stringContaining("first"),
         expect.stringContaining("second"),
@@ -427,9 +427,9 @@ test("PiAgent returns a grouped tagged string before an untagged monitor message
     ])
 })
 
-test("PiAgent passes native defaults while locking Loopy-owned session options", async () => {
+test("PiAgent passes native defaults while locking ClankHouse-owned session options", async () => {
     // given a Pi agent configured with only its model, runtime and fake session factory
-    const { loopy, dir } = tempLoopy()
+    const { clankhouse, dir } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const modelRuntime = await isolatedModelRuntime(dir)
@@ -443,16 +443,16 @@ test("PiAgent passes native defaults while locking Loopy-owned session options",
     let worktree!: Worktree
 
     // when the agent runs
-    await testRun(loopy, async () => {
+    await testRun(clankhouse, async () => {
         worktree = await repository.worktree({ base: "main" })
         return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
     })
 
-    // then the rendered prompt uses Loopy's instructed output instead of Pi-native output handling
+    // then the rendered prompt uses ClankHouse's instructed output instead of Pi-native output handling
     expect(prompts[0]).toMatch(/^do it\n\nIMPORTANT — requested final report:/)
     expect(promptOptions).toEqual([{ source: "rpc" }])
     expect(calls).toHaveLength(1)
-    // and Loopy locks the model, runtime, worktree and non-persistent session manager
+    // and ClankHouse locks the model, runtime, worktree and non-persistent session manager
     expect(calls[0].cwd).toBe(worktree.path)
     expect(calls[0].model).toMatchObject({ provider: "openai", id: "gpt-5.4" })
     expect(calls[0].modelRuntime).toBe(modelRuntime)
@@ -467,8 +467,8 @@ test("PiAgent passes native defaults while locking Loopy-owned session options",
 })
 
 test("PiAgent forwards raw session options and merges the interactive tool guard", async () => {
-    // given raw Pi options including duplicate exclusions and caller-owned values Loopy must replace
-    const { loopy, dir } = tempLoopy()
+    // given raw Pi options including duplicate exclusions and caller-owned values ClankHouse must replace
+    const { clankhouse, dir } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const modelRuntime = await isolatedModelRuntime(dir)
@@ -488,12 +488,12 @@ test("PiAgent forwards raw session options and merges the interactive tool guard
     let worktree!: Worktree
 
     // when the agent runs against a real worktree
-    await testRun(loopy, async () => {
+    await testRun(clankhouse, async () => {
         worktree = await repository.worktree({ base: "main" })
         return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
     })
 
-    // then native configuration is forwarded verbatim where Loopy does not own it
+    // then native configuration is forwarded verbatim where ClankHouse does not own it
     expect(calls[0].thinkingLevel).toBe("high")
     expect(calls[0].noTools).toBe("builtin")
     expect(calls[0].tools).toEqual(["read", "grep"])
@@ -506,13 +506,13 @@ test("PiAgent forwards raw session options and merges the interactive tool guard
 
 test("PiAgent resolves custom models from a custom agentDir", async () => {
     // given a custom Pi agent directory containing a local model catalog
-    const { loopy } = tempLoopy()
-    const agentDir = tempDir("loopy-pi-agent-")
+    const { clankhouse } = tempClankHouse()
+    const agentDir = tempDir("clankhouse-pi-agent-")
     fs.writeFileSync(
         path.join(agentDir, "models.json"),
         JSON.stringify({
             providers: {
-                "loopy-test": {
+                "clankhouse-test": {
                     baseUrl: "http://localhost:11434/v1",
                     api: "openai-completions",
                     apiKey: "test-key",
@@ -525,14 +525,14 @@ test("PiAgent resolves custom models from a custom agentDir", async () => {
     const repository = new GitRepository(repo.path)
     const { createAgentSession, calls } = fakePi(() => ({ output: { done: true } }))
     const agent = new PiAgent({
-        provider: "loopy-test",
+        provider: "clankhouse-test",
         model: "fixture-model",
         sessionOptions: { agentDir },
         createAgentSession
     })
 
     // when the agent runs without an explicitly supplied ModelRuntime
-    const result = await testRun(loopy, async () => {
+    const result = await testRun(clankhouse, async () => {
         const worktree = await repository.worktree({ base: "main" })
         return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
     })
@@ -540,13 +540,13 @@ test("PiAgent resolves custom models from a custom agentDir", async () => {
     // then the model is resolved from that directory and forwarded to the session factory
     expect(result).toEqual({ done: true })
     expect(calls[0].agentDir).toBe(agentDir)
-    expect(calls[0].model).toMatchObject({ provider: "loopy-test", id: "fixture-model" })
+    expect(calls[0].model).toMatchObject({ provider: "clankhouse-test", id: "fixture-model" })
     expect(calls[0].modelRuntime).toBeInstanceOf(ModelRuntime)
 })
 
 test("an unknown Pi model fails before creating an SDK session", async () => {
     // given a Pi agent configured with a model absent from its isolated catalog
-    const { loopy, dir } = tempLoopy()
+    const { clankhouse, dir } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const modelRuntime = await isolatedModelRuntime(dir)
@@ -559,7 +559,7 @@ test("an unknown Pi model fails before creating an SDK session", async () => {
     })
 
     // when the agent runs
-    const result = testRun(loopy, async () => {
+    const result = testRun(clankhouse, async () => {
         const worktree = await repository.worktree({ base: "main" })
         return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
     })
@@ -573,7 +573,7 @@ test.each(["error", "aborted", "length", "toolUse", "deferred", "pending"] as co
     "PiAgent rejects terminal %s stop reasons",
     async (stopReason) => {
         // given a fake Pi session ending with a non-success stop reason
-        const { loopy, dir } = tempLoopy()
+        const { clankhouse, dir } = tempClankHouse()
         const repo = await tempGitRepo()
         const repository = new GitRepository(repo.path)
         const modelRuntime = await isolatedModelRuntime(dir)
@@ -590,7 +590,7 @@ test.each(["error", "aborted", "length", "toolUse", "deferred", "pending"] as co
         })
 
         // when the agent runs
-        const result = testRun(loopy, async () => {
+        const result = testRun(clankhouse, async () => {
             const worktree = await repository.worktree({ base: "main" })
             return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
         })
@@ -602,7 +602,7 @@ test.each(["error", "aborted", "length", "toolUse", "deferred", "pending"] as co
 
 test("a prompt failure is preserved when Pi cleanup also fails", async () => {
     // given a fake Pi session that emits reasoning, fails, and throws from both cleanup operations
-    const { loopy, dir } = tempLoopy()
+    const { clankhouse, dir } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const modelRuntime = await isolatedModelRuntime(dir)
@@ -620,7 +620,7 @@ test("a prompt failure is preserved when Pi cleanup also fails", async () => {
     })
 
     // when the agent runs
-    const result = testRun(loopy, async () => {
+    const result = testRun(clankhouse, async () => {
         const worktree = await repository.worktree({ base: "main" })
         return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
     })
@@ -629,16 +629,16 @@ test("a prompt failure is preserved when Pi cleanup also fails", async () => {
     await expect(result).rejects.toThrow("provider connection failed")
     // and both cleanup operations still run and earlier session messages remain available
     expect(sessions).toEqual([{ disposed: true, unsubscribed: true }])
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
-    const session = await loopy.sessions.get(step.sessionId!)
+    const session = await clankhouse.sessions.get(step.sessionId!)
     expect(sessionTextMessages(session.messages).map((item) => item.role)).toEqual(["user", "system", "reasoning"])
 })
 
 test("a Pi cleanup failure fails an otherwise successful step", async () => {
     // given a fake Pi session whose prompt succeeds but disposal fails
-    const { loopy, dir } = tempLoopy()
+    const { clankhouse, dir } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const modelRuntime = await isolatedModelRuntime(dir)
@@ -654,7 +654,7 @@ test("a Pi cleanup failure fails an otherwise successful step", async () => {
     })
 
     // when the agent runs
-    const result = testRun(loopy, async () => {
+    const result = testRun(clankhouse, async () => {
         const worktree = await repository.worktree({ base: "main" })
         return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
     })
@@ -667,7 +667,7 @@ test("a Pi cleanup failure fails an otherwise successful step", async () => {
 
 test("Pi output fails when the session has no final assistant message", async () => {
     // given a fake Pi session that completes without a final assistant message
-    const { loopy, dir } = tempLoopy()
+    const { clankhouse, dir } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const modelRuntime = await isolatedModelRuntime(dir)
@@ -680,7 +680,7 @@ test("Pi output fails when the session has no final assistant message", async ()
     })
 
     // when the agent runs with structured output
-    const result = testRun(loopy, async () => {
+    const result = testRun(clankhouse, async () => {
         const worktree = await repository.worktree({ base: "main" })
         return agent.run("report", { prompt: "report", output: outputSchema, worktree })
     })
@@ -691,8 +691,8 @@ test("Pi output fails when the session has no final assistant message", async ()
 })
 
 test("an untagged Pi response fails instructed-output collection", async () => {
-    // given a fake Pi session returning plain JSON without Loopy's nonce tags
-    const { loopy, dir } = tempLoopy()
+    // given a fake Pi session returning plain JSON without ClankHouse's nonce tags
+    const { clankhouse, dir } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const modelRuntime = await isolatedModelRuntime(dir)
@@ -705,7 +705,7 @@ test("an untagged Pi response fails instructed-output collection", async () => {
     })
 
     // when the agent runs
-    const result = testRun(loopy, async () => {
+    const result = testRun(clankhouse, async () => {
         const worktree = await repository.worktree({ base: "main" })
         return agent.run("report", { prompt: "report", output: outputSchema, worktree })
     })
@@ -716,7 +716,7 @@ test("an untagged Pi response fails instructed-output collection", async () => {
 
 test("invalid JSON inside Pi's instructed tags fails the step", async () => {
     // given a fake Pi session returning non-JSON inside the requested tags
-    const { loopy, dir } = tempLoopy()
+    const { clankhouse, dir } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const modelRuntime = await isolatedModelRuntime(dir)
@@ -732,7 +732,7 @@ test("invalid JSON inside Pi's instructed tags fails the step", async () => {
     })
 
     // when the agent runs
-    const result = testRun(loopy, async () => {
+    const result = testRun(clankhouse, async () => {
         const worktree = await repository.worktree({ base: "main" })
         return agent.run("report", { prompt: "report", output: outputSchema, worktree })
     })
@@ -743,7 +743,7 @@ test("invalid JSON inside Pi's instructed tags fails the step", async () => {
 
 test("Pi structured output violating the Zod schema fails the step and session", async () => {
     // given a fake Pi session returning valid tagged JSON with the wrong field type
-    const { loopy, dir } = tempLoopy()
+    const { clankhouse, dir } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const modelRuntime = await isolatedModelRuntime(dir)
@@ -756,23 +756,23 @@ test("Pi structured output violating the Zod schema fails the step and session",
     })
 
     // when the agent runs
-    const result = testRun(loopy, async () => {
+    const result = testRun(clankhouse, async () => {
         const worktree = await repository.worktree({ base: "main" })
         return agent.run("report", { prompt: "report", output: outputSchema, worktree })
     })
 
     // then final validation rejects the output and marks the persisted session failed
     await expect(result).rejects.toThrow()
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     expect(step.status).toBe("failed")
     if (step.kind !== "agent") throw new Error("unreachable")
-    expect((await loopy.sessions.get(step.sessionId!)).status).toBe("failed")
+    expect((await clankhouse.sessions.get(step.sessionId!)).status).toBe("failed")
 })
 
 test("a non-JSON-representable output schema fails before creating a Pi session", async () => {
     // given a Pi agent and an output schema containing a Date
-    const { loopy, dir } = tempLoopy()
+    const { clankhouse, dir } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const modelRuntime = await isolatedModelRuntime(dir)
@@ -785,7 +785,7 @@ test("a non-JSON-representable output schema fails before creating a Pi session"
     })
 
     // when the agent runs with the unsupported schema
-    const result = testRun(loopy, async () => {
+    const result = testRun(clankhouse, async () => {
         const worktree = await repository.worktree({ base: "main" })
         return agent.run("report", { prompt: "report", output: z.object({ when: z.date() }), worktree })
     })
@@ -797,7 +797,7 @@ test("a non-JSON-representable output schema fails before creating a Pi session"
 
 test("Pi agent step replay restores the worktree without re-invoking the SDK", async () => {
     // given a Pi agent backed by a fake session and a later failing durable step
-    const { loopy, dir } = tempLoopy()
+    const { clankhouse, dir } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const modelRuntime = await isolatedModelRuntime(dir)
@@ -824,26 +824,26 @@ test("Pi agent step replay restores the worktree without re-invoking the SDK", a
     const body = async () => {
         worktree = await repository.worktree({ base: "main" })
         await agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
-        return loopy.step("publish", z.string(), async () => publishImpl())
+        return clankhouse.step("publish", z.string(), async () => publishImpl())
     }
-    loopy.registerWorkflow("test-workflow", workflowOptions, body)
+    clankhouse.registerWorkflow("test-workflow", workflowOptions, body)
 
     // when the workflow fails after the agent and its worktree changes are discarded
-    const firstId = loopy.start("test-workflow", null)
-    await expect(runOutput(loopy, firstId)).rejects.toThrow("boom")
+    const firstId = clankhouse.start("test-workflow", null)
+    await expect(runOutput(clankhouse, firstId)).rejects.toThrow("boom")
     await runGit(worktree.path, ["reset", "--hard"])
     await runGit(worktree.path, ["clean", "-fd"])
     // and the workflow reruns from the later step
     publishImpl = () => "published"
-    const secondId = loopy.rerun(firstId, { from: "publish" })
-    expect(await runOutput(loopy, secondId)).toBe("published")
+    const secondId = clankhouse.rerun(firstId, { from: "publish" })
+    expect(await runOutput(clankhouse, secondId)).toBe("published")
 
-    // then Pi was prompted once and Loopy restored the stored worktree snapshot
+    // then Pi was prompted once and ClankHouse restored the stored worktree snapshot
     expect(prompts).toHaveLength(1)
     expect(fs.readFileSync(path.join(worktree.path, "src/hello.ts"), "utf8")).toBe("export const hi = 1\n")
 })
 
-test("PiAgent public session options exclude Loopy-owned fields", async () => {
+test("PiAgent public session options exclude ClankHouse-owned fields", async () => {
     // given the public raw session option type
     type SessionOptions = ConstructorParameters<typeof PiAgent>[0]["sessionOptions"]
 
@@ -852,7 +852,7 @@ test("PiAgent public session options exclude Loopy-owned fields", async () => {
     type HasModel = "model" extends keyof NonNullable<SessionOptions> ? true : false
     type HasSessionManager = "sessionManager" extends keyof NonNullable<SessionOptions> ? true : false
 
-    // then Loopy-owned fields are unavailable while Pi-native fields remain exposed
+    // then ClankHouse-owned fields are unavailable while Pi-native fields remain exposed
     expect(false satisfies HasCwd).toBe(false)
     expect(false satisfies HasModel).toBe(false)
     expect(false satisfies HasSessionManager).toBe(false)
@@ -864,7 +864,7 @@ test.skipIf(!process.env.PI_AGENT_LIVE_TEST)(
     { timeout: 180_000 },
     async () => {
         // given a real pi agent and a real worktree
-        const { loopy } = tempLoopy()
+        const { clankhouse } = tempClankHouse()
         const repo = await tempGitRepo()
         const repository = new GitRepository(repo.path)
         const agent = new PiAgent({
@@ -874,12 +874,12 @@ test.skipIf(!process.env.PI_AGENT_LIVE_TEST)(
         let worktree!: Worktree
 
         // when it creates a two-line file and reports an array-root discriminated union
-        const result = await testRun(loopy, async () => {
+        const result = await testRun(clankhouse, async () => {
             worktree = await repository.worktree({ base: "main" })
             return agent.run("implement", {
                 prompt: `Create hello.txt with exactly these two lines:
 hello
-loopy
+clankhouse
 
 The file must end with a newline.
 
@@ -894,12 +894,12 @@ Report exactly two array entries in order: a file entry for hello.txt with lineC
             { kind: "file", path: "hello.txt", lineCount: 2 },
             { kind: "status", done: true }
         ])
-        expect(fs.readFileSync(path.join(worktree.path, "hello.txt"), "utf8")).toBe("hello\nloopy\n")
+        expect(fs.readFileSync(path.join(worktree.path, "hello.txt"), "utf8")).toBe("hello\nclankhouse\n")
         // and the session succeeds with a valid worktree snapshot
-        const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+        const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
         const step = run.steps.find((candidate) => candidate.kind === "agent")!
         if (step.kind !== "agent") throw new Error("unreachable")
-        const session = await loopy.sessions.get(step.sessionId!)
+        const session = await clankhouse.sessions.get(step.sessionId!)
         expect(session.status).toBe("succeeded")
         expect(session.messages.length).toBeGreaterThan(2)
         expect((await worktree.git(["rev-parse", step.snapshotRef!])).exitCode).toBe(0)

@@ -2,7 +2,7 @@ import * as z from "zod"
 import { mkdirSync } from "node:fs"
 import * as path from "node:path"
 import { openDatabase, type Db } from "./db"
-import { resolveLoopyDir } from "./util"
+import { resolveClankHouseDir } from "./util"
 import { WorkflowRuns } from "./runs"
 import { Artifacts } from "./artifacts"
 import { AISessions } from "./ai/sessions"
@@ -13,8 +13,8 @@ import { Notifier } from "./watch"
 import { Workflows, type RerunOptions, type WorkflowOptions } from "./workflows"
 import { gcWorktrees, type WorktreeGcResult } from "./git"
 
-export class Loopy {
-    readonly loopyDir: string
+export class ClankHouse {
+    readonly clankhouseDir: string
     readonly runs: WorkflowRuns
     readonly artifacts: Artifacts
     readonly sessions: AISessions
@@ -25,19 +25,19 @@ export class Loopy {
     private isClosed = false
 
     /**
-     * @param loopyDir path in which all Loopy-managed files are stored. Defaults to $LOOPY_DIR, if present, or ~/.loopy otherwise
-     * Note: Loopy assumes full ownership of provided path and may delete files inside.
+     * @param clankhouseDir path in which all ClankHouse-managed files are stored. Defaults to $CLANKHOUSE_DIR, if present, or ~/.clankhouse otherwise
+     * Note: ClankHouse assumes full ownership of provided path and may delete files inside.
      *
      * @see gc
      */
-    constructor(loopyDir?: string) {
-        this.loopyDir = resolveLoopyDir(loopyDir)
-        mkdirSync(this.loopyDir, { recursive: true, mode: 0o700 })
-        this.db = openDatabase(path.join(this.loopyDir, "loopy.db"))
+    constructor(clankhouseDir?: string) {
+        this.clankhouseDir = resolveClankHouseDir(clankhouseDir)
+        mkdirSync(this.clankhouseDir, { recursive: true, mode: 0o700 })
+        this.db = openDatabase(path.join(this.clankhouseDir, "clankhouse.db"))
         const notifier = new Notifier()
         const active: ActiveSets = { runs: new Map(), steps: new Set(), sessions: new Set() }
         this.engine = new Engine(this.db, active, notifier)
-        this.artifacts = new Artifacts(this.loopyDir, this.db, this.engine)
+        this.artifacts = new Artifacts(this.clankhouseDir, this.db, this.engine)
         this.workflows = new Workflows(this, this.db, this.engine, active, this.artifacts)
         this.events = new Events(this.db, this.engine)
         this.runs = new WorkflowRuns(this.db, active, notifier)
@@ -111,8 +111,8 @@ export class Loopy {
      * Emits provided event resolving or rejecting all waits for a given key.
      * Inside a workflow run, emit is a durable step and is not repeated on replay.
      *
-     * @see Loopy.waitFor
-     * @see Loopy.waitForAny
+     * @see ClankHouse.waitFor
+     * @see ClankHouse.waitForAny
      */
     async emit(key: string, event: any): Promise<void> {
         return this.events.emit(key, event)
@@ -146,7 +146,7 @@ export class Loopy {
      * - Unexpected Git metadata inconsistencies require manual repair.
      */
     async gc(): Promise<{ worktrees: WorktreeGcResult }> {
-        return { worktrees: await gcWorktrees(this.loopyDir, this.db) }
+        return { worktrees: await gcWorktrees(this.clankhouseDir, this.db) }
     }
 }
 

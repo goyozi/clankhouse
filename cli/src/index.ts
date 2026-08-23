@@ -72,10 +72,10 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
 
 function createProgram(runtime: Runtime): Command {
     const program = new Command()
-        .name("loopy")
-        .description("Interact with a Loopy server")
-        .option("--server <url>", "Loopy server URL")
-        .option("--api-key <key>", "Loopy server API key")
+        .name("clank")
+        .description("Interact with a ClankHouse server")
+        .option("--server <url>", "ClankHouse server URL")
+        .option("--api-key <key>", "ClankHouse server API key")
         .option("--json", "print protobuf responses as ProtoJSON")
         .option("-v, --verbose", "include all details available to a command")
         .exitOverride()

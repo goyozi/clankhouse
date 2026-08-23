@@ -1,4 +1,4 @@
-We are working on Loopy, a local-first durable AI workflow framework.
+We are working on ClankHouse, a local-first durable AI workflow framework.
 
 Note: since we're pre-0.1 without any real world users, there's no need to maintain backwards compatibility and do database migrations.
 
@@ -37,11 +37,11 @@ anthropic / openai
 
 test-utils:
 
-- shared utils for testing Loopy workflows
+- shared utils for testing ClankHouse workflows
 
 examples:
 
-- hello-world - basic Loopy workflow example
+- hello-world - basic ClankHouse workflow example
 - dual-review - code review by Claude & Codex
 
 design:

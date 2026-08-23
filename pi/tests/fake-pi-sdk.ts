@@ -6,9 +6,9 @@ import {
     type CreateAgentSessionOptions,
     type PromptOptions
 } from "@earendil-works/pi-coding-agent"
-import type { PiAgentSessionFactory } from "@loopy/pi"
-import { applyChange, type FakeChange } from "@loopy/core/ai/fake-agent"
-import { taggedOutput } from "@loopy/test-utils"
+import type { PiAgentSessionFactory } from "@clankhouse/pi"
+import { applyChange, type FakeChange } from "@clankhouse/core/ai/fake-agent"
+import { taggedOutput } from "@clankhouse/test-utils"
 
 type PiMessage = Extract<AgentSessionEvent, { type: "message_end" }>["message"]
 type PiAssistantMessage = Extract<PiMessage, { role: "assistant" }>

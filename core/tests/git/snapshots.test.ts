@@ -1,8 +1,8 @@
 import * as fs from "node:fs"
 import * as path from "node:path"
 import { expect, test } from "vitest"
-import { GitRepository } from "@loopy/core/git"
-import { runGit, tempDir, tempGitRepo } from "@loopy/test-utils"
+import { GitRepository } from "@clankhouse/core/git"
+import { runGit, tempDir, tempGitRepo } from "@clankhouse/test-utils"
 import { createWorktree, userSnapshotRef, writeTree } from "./helpers"
 
 test("snapshot and restore round-trip covering edits, adds and deletes", async () => {
@@ -44,7 +44,7 @@ test("snapshot and restore round-trip covering edits, adds and deletes", async (
     // and the restored changes remain uncommitted
     expect(await runGit(worktree.path, ["status", "--porcelain"])).not.toBe("")
     // and the temporary rescue ref was removed
-    expect(await runGit(worktree.path, ["for-each-ref", "--format=%(refname)", "refs/loopy/restore"])).toBe("")
+    expect(await runGit(worktree.path, ["for-each-ref", "--format=%(refname)", "refs/clankhouse/restore"])).toBe("")
 })
 
 test("restore returns to the same commit when the worktree was fully committed", async () => {
@@ -193,7 +193,7 @@ test("snapshot preserves raw working bytes when a clean filter changes repositor
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const worktree = await createWorktree(repository, { base: "main" })
-    const filterDirectory = tempDir("loopy-clean-filter-")
+    const filterDirectory = tempDir("clankhouse-clean-filter-")
     const filterScript = path.join(filterDirectory, "uppercase.mjs")
     fs.writeFileSync(
         filterScript,
@@ -235,7 +235,7 @@ test("snapshot stores a v1 envelope with its working parent, raw index and pinne
 
     // then the ref points at the expected versioned envelope and parent chain
     const ref = userSnapshotRef(worktree, "envelope")
-    expect(await runGit(worktree.path, ["show", `${ref}:format`])).toBe("loopy-snapshot-v1")
+    expect(await runGit(worktree.path, ["show", `${ref}:format`])).toBe("clankhouse-snapshot-v1")
     expect(await runGit(worktree.path, ["cat-file", "-t", `${ref}:index`])).toBe("blob")
     expect(await runGit(worktree.path, ["rev-parse", `${ref}^^`])).toBe(originalHead)
     expect(await runGit(worktree.path, ["show", `${ref}^:staged-only.txt`])).toBe("working")
@@ -370,7 +370,7 @@ test("restore rejects an unsupported snapshot before modifying the checkout", as
     expect(await runGit(worktree.path, ["rev-parse", "HEAD"])).toBe(headBefore)
     expect(fs.readFileSync(path.join(worktree.path, "keep.txt"), "utf8")).toBe("keep")
     // and validation did not publish a rescue ref
-    expect(await runGit(worktree.path, ["for-each-ref", "--format=%(refname)", "refs/loopy/restore"])).toBe("")
+    expect(await runGit(worktree.path, ["for-each-ref", "--format=%(refname)", "refs/clankhouse/restore"])).toBe("")
 })
 
 test("restore rolls back the prior state when target materialization fails", async () => {
@@ -381,7 +381,7 @@ test("restore rolls back the prior state when target materialization fails", asy
     await runGit(worktree.path, ["config", "core.symlinks", "true"])
     await worktree.snapshot("broken")
     const ref = userSnapshotRef(worktree, "broken")
-    const invalidTarget = path.join(tempDir("loopy-invalid-symlink-"), "target")
+    const invalidTarget = path.join(tempDir("clankhouse-invalid-symlink-"), "target")
     fs.writeFileSync(invalidTarget, Buffer.from([0]))
     const invalidTargetOid = await runGit(worktree.path, ["hash-object", "-w", invalidTarget])
     const rawTree = await writeTree(worktree, [{ mode: "120000", oid: invalidTargetOid, path: "bad-link" }])
@@ -420,5 +420,5 @@ test("restore rolls back the prior state when target materialization fails", asy
     expect(await runGit(worktree.path, ["diff", "--binary"])).toBe(unstagedBefore)
     expect(fs.readFileSync(path.join(worktree.path, "current.txt"), "utf8")).toBe("current")
     // and no rescue ref remains
-    expect(await runGit(worktree.path, ["for-each-ref", "--format=%(refname)", "refs/loopy/restore"])).toBe("")
+    expect(await runGit(worktree.path, ["for-each-ref", "--format=%(refname)", "refs/clankhouse/restore"])).toBe("")
 })

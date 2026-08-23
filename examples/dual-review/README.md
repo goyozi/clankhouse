@@ -7,24 +7,24 @@ pass `settingSources: []`.
 
 ## Try It
 
-If you don't have `loopy` installed or want to use the source version:
+If you don't have `clank` installed or want to use the source version:
 
 ```sh
-export LOOPY_SOURCE=/absolute/path/to/loopy
-alias loopy='pnpm --dir "$LOOPY_SOURCE" --filter @loopy/cli exec node bin/loopy.js'
+export CLANKHOUSE_SOURCE=/absolute/path/to/clankhouse
+alias clank='pnpm --dir "$CLANKHOUSE_SOURCE" --filter @clankhouse/cli exec node bin/clank.js'
 ```
 
 Start the server:
 
 ```sh
-pnpm --dir "$LOOPY_SOURCE" --filter @loopy/example-dual-review start
+pnpm --dir "$CLANKHOUSE_SOURCE" --filter @clankhouse/example-dual-review start
 ```
 
 Trigger a review:
 
 ```sh
 jq -n --arg repositoryPath "$PWD" '{ repositoryPath: $repositoryPath }' |
-    loopy run dual-review --input - |
+    clank run dual-review --input - |
     jq -r .
 ```
 
@@ -35,7 +35,7 @@ dualreview() {
     (
         set -o pipefail
         jq -n --arg repositoryPath "$PWD" '{ repositoryPath: $repositoryPath }' |
-            loopy run dual-review --input - |
+            clank run dual-review --input - |
             jq -r .
     )
 }

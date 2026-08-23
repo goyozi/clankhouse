@@ -3,7 +3,7 @@ import {
     ListWorkflowsResponseSchema,
     type GetWorkflowResponse,
     type ListWorkflowsResponse
-} from "@loopy/server/proto"
+} from "@clankhouse/server/proto"
 import type { Command } from "commander"
 import { indent, prettyJson } from "../output"
 import type { Runtime } from "../runtime"

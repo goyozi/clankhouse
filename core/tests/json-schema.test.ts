@@ -1,7 +1,7 @@
 import fc from "fast-check"
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { LoopyError } from "../src/errors"
+import { ClankHouseError } from "../src/errors"
 import { jsonSchema, type SchemaIo } from "../src/json-schema"
 
 test("accepts representative JSON schemas in their supported directions", () => {
@@ -142,7 +142,7 @@ test("rejects unsupported schemas fail-closed with actionable paths", () => {
         }
 
         // then it fails under the shared code with its role, path, and remediation
-        expect(error, testCase.name).toBeInstanceOf(LoopyError)
+        expect(error, testCase.name).toBeInstanceOf(ClankHouseError)
         expect(error, testCase.name).toMatchObject({ code: "schema_not_json_compatible" })
         expect((error as Error).message, testCase.name).toMatch(testCase.match)
         expect((error as Error).message, testCase.name).toContain(`Case ${testCase.name}`)

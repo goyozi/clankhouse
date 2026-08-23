@@ -1,4 +1,4 @@
-import { EmitEventResponseSchema } from "@loopy/server/proto"
+import { EmitEventResponseSchema } from "@clankhouse/server/proto"
 import type { Command } from "commander"
 import { readJsonInput } from "../io"
 import type { Runtime } from "../runtime"

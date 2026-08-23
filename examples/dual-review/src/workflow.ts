@@ -1,8 +1,8 @@
 import { execFile } from "node:child_process"
 import * as path from "node:path"
 import { promisify } from "node:util"
-import type { CodingAgent } from "@loopy/core/ai/coding-agent"
-import { GitRepository } from "@loopy/core/git"
+import type { CodingAgent } from "@clankhouse/core/ai/coding-agent"
+import { GitRepository } from "@clankhouse/core/git"
 import * as z from "zod"
 
 const execFileAsync = promisify(execFile)

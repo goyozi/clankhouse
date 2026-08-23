@@ -1,15 +1,15 @@
 import * as path from "node:path"
 import { realpath } from "node:fs/promises"
 import { expect, test } from "vitest"
-import { runGit, tempDir, tempGitRepo } from "@loopy/test-utils"
+import { runGit, tempDir, tempGitRepo } from "@clankhouse/test-utils"
 import * as git from "../../src/git/client"
 
 test("typed revision, configuration, ref and worktree operations", async () => {
     // given a repository, a ref target and an available checkout path
     const repo = await tempGitRepo()
     const head = await runGit(repo.path, ["rev-parse", "HEAD"])
-    const ref = "refs/loopy/client/test"
-    const checkout = path.join(tempDir("loopy-client-worktree-"), "checkout")
+    const ref = "refs/clankhouse/client/test"
+    const checkout = path.join(tempDir("clankhouse-client-worktree-"), "checkout")
 
     // when the client publishes the ref and adds the detached worktree
     await git.updateRef(repo.path, ref, head, "")
@@ -19,16 +19,16 @@ test("typed revision, configuration, ref and worktree operations", async () => {
     expect(await git.revParse(repo.path, "HEAD^{commit}")).toBe(head)
     expect(await git.tryShowTopLevel(checkout)).toBe(await realpath(checkout))
     expect(typeof (await git.getBooleanConfig(repo.path, "core.filemode"))).toBe("boolean")
-    expect(await git.listRefs(repo.path, "refs/loopy/client/")).toEqual([{ name: ref, oid: head }])
+    expect(await git.listRefs(repo.path, "refs/clankhouse/client/")).toEqual([{ name: ref, oid: head }])
     expect(
         await Promise.all((await git.listWorktreePaths(repo.path)).map((worktreePath) => realpath(worktreePath)))
     ).toEqual(expect.arrayContaining([await realpath(repo.path), await realpath(checkout)]))
 
     // and missing probes return undefined while compare-and-swap deletion removes the ref
-    expect(await git.tryRevParse(repo.path, "refs/loopy/client/missing^{commit}")).toBeUndefined()
-    expect(await git.getBooleanConfig(repo.path, "loopy.missing")).toBeUndefined()
+    expect(await git.tryRevParse(repo.path, "refs/clankhouse/client/missing^{commit}")).toBeUndefined()
+    expect(await git.getBooleanConfig(repo.path, "clankhouse.missing")).toBeUndefined()
     await git.deleteRef(repo.path, ref, head)
-    expect(await git.listRefs(repo.path, "refs/loopy/client/")).toEqual([])
+    expect(await git.listRefs(repo.path, "refs/clankhouse/client/")).toEqual([])
 })
 
 test("typed index and tree operations preserve NUL-delimited paths", async () => {
@@ -38,7 +38,7 @@ test("typed index and tree operations preserve NUL-delimited paths", async () =>
     files.forEach((file) => repo.write(file, file))
     await git.add(repo.path, files)
     const sourceIndex = await git.resolveGitPath(repo.path, "index")
-    const copiedIndex = path.join(tempDir("loopy-client-index-"), "index")
+    const copiedIndex = path.join(tempDir("clankhouse-client-index-"), "index")
 
     // when the client copies and reads the index and writes its tree
     await git.copyIndexEntries(repo.path, sourceIndex, copiedIndex)

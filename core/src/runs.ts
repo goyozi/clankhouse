@@ -1,7 +1,7 @@
 import { toArtifact, type Artifact } from "./artifacts"
 import * as sql from "./db"
-import { LoopyError } from "./errors"
-import type { LoopyErrorCode } from "./errors"
+import { ClankHouseError } from "./errors"
+import type { ClankHouseErrorCode } from "./errors"
 import { observableStatus, type ActiveSets } from "./runtime"
 import type { Db, ListRunsFilter, RunRow, StepRow } from "./db"
 import type { WorktreeReference } from "./git"
@@ -49,7 +49,7 @@ export class WorkflowRuns {
 
     async get(id: string): Promise<WorkflowRun> {
         const row = sql.findRunById(this.db, id)
-        if (!row) throw new LoopyError("workflow_run_not_found", `Workflow run not found: ${id}`)
+        if (!row) throw new ClankHouseError("workflow_run_not_found", `Workflow run not found: ${id}`)
         const stepRows = sql.findStepsByRun(this.db, id)
         const artifactRows = sql.findArtifactsByRun(this.db, id)
         return {
@@ -77,7 +77,7 @@ export class WorkflowRuns {
         options?: { fromStepId?: string; signal?: AbortSignal }
     ): AsyncGenerator<RunStreamItem, void, void> {
         if (!sql.findRunById(this.db, runId)) {
-            throw new LoopyError("workflow_run_not_found", `Workflow run not found: ${runId}`)
+            throw new ClankHouseError("workflow_run_not_found", `Workflow run not found: ${runId}`)
         }
         const seen = new Map<string, string>()
         let watermark = this.resolveWatermark(runId, options?.fromStepId)
@@ -128,7 +128,7 @@ export class WorkflowRuns {
         if (fromStepId === undefined) return 0
         const row = sql.findStepById(this.db, fromStepId)
         if (!row || row.run_id !== runId) {
-            throw new LoopyError("workflow_step_not_found", `Step not found in run ${runId}: ${fromStepId}`)
+            throw new ClankHouseError("workflow_step_not_found", `Step not found in run ${runId}: ${fromStepId}`)
         }
         return row.seq
     }
@@ -232,7 +232,7 @@ type StepBase = {
     endedAt?: Date
     status: ObservableStepStatus
     error?: string
-    errorCode?: LoopyErrorCode
+    errorCode?: ClankHouseErrorCode
     outputJson?: string
 }
 
@@ -276,7 +276,7 @@ export type WorkflowRun = {
     output?: unknown
     outputJson?: string
     error?: string
-    errorCode?: LoopyErrorCode
+    errorCode?: ClankHouseErrorCode
     steps: Step[]
     artifacts: Artifact[]
 }

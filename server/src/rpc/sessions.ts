@@ -1,17 +1,17 @@
 import { Code, ConnectError } from "@connectrpc/connect"
-import type { Loopy } from "@loopy/core/loopy"
+import type { ClankHouse } from "@clankhouse/core/clankhouse"
 import { toSession, toSessionMessage } from "../mappers"
 import { notFound, required, throwIfAborted, toConnectError } from "./errors"
-import type { LoopyServiceImplementation } from "./types"
+import type { ClankHouseServiceImplementation } from "./types"
 
-type SessionHandlers = Pick<LoopyServiceImplementation, "getSession" | "watchSession">
+type SessionHandlers = Pick<ClankHouseServiceImplementation, "getSession" | "watchSession">
 
-export function sessionHandlers(loopy: Loopy): SessionHandlers {
+export function sessionHandlers(clankhouse: ClankHouse): SessionHandlers {
     return {
         async getSession(request) {
             required(request.sessionId, "session_id")
             try {
-                return { session: toSession(await loopy.sessions.get(request.sessionId)) }
+                return { session: toSession(await clankhouse.sessions.get(request.sessionId)) }
             } catch (error) {
                 throw toConnectError(error, {
                     ai_session_not_found: () => notFound("AI session", request.sessionId)
@@ -21,7 +21,7 @@ export function sessionHandlers(loopy: Loopy): SessionHandlers {
         async *watchSession(request, context) {
             required(request.sessionId, "session_id")
             try {
-                for await (const message of loopy.sessions.stream(request.sessionId, {
+                for await (const message of clankhouse.sessions.stream(request.sessionId, {
                     ...(request.afterMessageId !== undefined ? { afterMessageId: request.afterMessageId } : {}),
                     signal: context.signal
                 })) {

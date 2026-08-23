@@ -2,7 +2,7 @@ import { mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises"
 import * as path from "node:path"
 import * as z from "zod"
 import { requireContext } from "../context"
-import { LoopyError } from "../errors"
+import { ClankHouseError } from "../errors"
 import { exists, isNodeError, newId } from "../util"
 import * as git from "./client"
 import { captureState, restoreCapturedState, Worktree } from "./worktree"
@@ -42,7 +42,7 @@ export class GitRepository {
     }
 
     /**
-     * Durable workflow step creating an isolated worktree in the Loopy directory.
+     * Durable workflow step creating an isolated worktree in the ClankHouse directory.
      *
      * Use exactly one of `base`, resolved and pinned on first execution, or `includeUncommitted: true`,
      * which captures the source HEAD, semantic index, tracked files, and non-ignored untracked files without
@@ -58,16 +58,16 @@ export class GitRepository {
         const ctx = requireContext()
         const repositoryPath = await realpath(this.path)
         const stepName = options.key === undefined ? "worktree" : `worktree:${options.key}`
-        return ctx.loopy.engine.executeStep({
+        return ctx.clankhouse.engine.executeStep({
             kind: "worktree",
             name: stepName,
-            schema: worktreeOutputSchema(ctx.loopy.loopyDir),
+            schema: worktreeOutputSchema(ctx.clankhouse.clankhouseDir),
             schemaIo: "input",
-            execute: () => createWorktree(ctx.loopy.loopyDir, repositoryPath, options),
+            execute: () => createWorktree(ctx.clankhouse.clankhouseDir, repositoryPath, options),
             onReplay: async (row) => {
                 if (row.output === null) throw unavailable("Worktree step has no recorded checkout")
                 const reference = parseWorktreeReference(JSON.parse(row.output))
-                await restoreRecordedWorktree(ctx.loopy.loopyDir, repositoryPath, reference)
+                await restoreRecordedWorktree(ctx.clankhouse.clankhouseDir, repositoryPath, reference)
             }
         })
     }
@@ -85,14 +85,14 @@ export class GitRepository {
         try {
             await applyChanges(this.path, worktree.path)
         } catch (error) {
-            if (error instanceof LoopyError && error.code === "git_apply_changes_failed") throw error
+            if (error instanceof ClankHouseError && error.code === "git_apply_changes_failed") throw error
             throw applyFailure("Could not apply source changes", error)
         }
     }
 }
 
 async function createWorktree(
-    loopyDir: string,
+    clankhouseDir: string,
     repositoryPath: string,
     options: WorktreeOptions
 ): Promise<WorktreeReference> {
@@ -100,13 +100,13 @@ async function createWorktree(
     const seedOid =
         seedMode === "base"
             ? await git.revParse(repositoryPath, `${options.base}^{commit}`)
-            : (await captureState(repositoryPath, "loopy worktree seed")).envelopeCommit
+            : (await captureState(repositoryPath, "clankhouse worktree seed")).envelopeCommit
     const manifest: CandidateManifest = {
         repositoryPath,
         seedMode,
         seedOid
     }
-    const candidate = resolveCandidate(loopyDir, newId(), manifest)
+    const candidate = resolveCandidate(clankhouseDir, newId(), manifest)
     await mkdir(candidate.root, { recursive: true })
     const pendingManifest = `${candidateManifestFile(candidate.root)}.tmp`
     await writeFile(pendingManifest, JSON.stringify(manifest))
@@ -117,15 +117,15 @@ async function createWorktree(
 }
 
 async function restoreRecordedWorktree(
-    loopyDir: string,
+    clankhouseDir: string,
     repositoryPath: string,
     reference: WorktreeReference
 ): Promise<void> {
-    const candidatePath = candidateCheckoutPath(loopyDir, reference.id)
+    const candidatePath = candidateCheckoutPath(clankhouseDir, reference.id)
     try {
-        const manifest = await loadCandidateManifest(candidateRoot(loopyDir, reference.id))
+        const manifest = await loadCandidateManifest(candidateRoot(clankhouseDir, reference.id))
         if (manifest.repositoryPath !== repositoryPath) throw new Error("repository path changed")
-        const candidate = resolveCandidate(loopyDir, reference.id, manifest)
+        const candidate = resolveCandidate(clankhouseDir, reference.id, manifest)
         await validateSeed(candidate)
         if (await exists(candidate.path)) {
             await restoreCandidate(candidate)
@@ -164,8 +164,8 @@ async function materializeCandidate(candidate: ManagedCandidate): Promise<void> 
     }
 }
 
-function worktreeOutputSchema(loopyDir: string) {
-    return WorktreeReferenceSchema.transform(({ id }) => new Worktree(candidateCheckoutPath(loopyDir, id)))
+function worktreeOutputSchema(clankhouseDir: string) {
+    return WorktreeReferenceSchema.transform(({ id }) => new Worktree(candidateCheckoutPath(clankhouseDir, id)))
 }
 
 export function parseWorktreeReference(value: unknown): WorktreeReference {
@@ -184,26 +184,26 @@ async function loadCandidateManifest(candidateRootPath: string): Promise<Candida
     return CandidateManifestSchema.parse(JSON.parse(await readFile(candidateManifestFile(candidateRootPath), "utf8")))
 }
 
-export function resolveCandidate(loopyDir: string, id: string, manifest: CandidateManifest): ManagedCandidate {
+export function resolveCandidate(clankhouseDir: string, id: string, manifest: CandidateManifest): ManagedCandidate {
     return {
         ...manifest,
         id,
-        root: candidateRoot(loopyDir, id),
-        path: candidateCheckoutPath(loopyDir, id),
+        root: candidateRoot(clankhouseDir, id),
+        path: candidateCheckoutPath(clankhouseDir, id),
         seedRef: candidateSeedRef(id)
     }
 }
 
-function candidateRoot(loopyDir: string, id: string): string {
-    return path.join(loopyDir, "worktrees", id)
+function candidateRoot(clankhouseDir: string, id: string): string {
+    return path.join(clankhouseDir, "worktrees", id)
 }
 
-export function candidateCheckoutPath(loopyDir: string, id: string): string {
-    return path.join(candidateRoot(loopyDir, id), "checkout")
+export function candidateCheckoutPath(clankhouseDir: string, id: string): string {
+    return path.join(candidateRoot(clankhouseDir, id), "checkout")
 }
 
 function candidateSeedRef(id: string): string {
-    return `refs/loopy/worktrees/${id}/seed`
+    return `refs/clankhouse/worktrees/${id}/seed`
 }
 
 export async function isWorktreeRegistered(repositoryPath: string, checkoutPath: string): Promise<boolean> {
@@ -234,8 +234,8 @@ function candidateManifestFile(candidateRootPath: string): string {
     return path.join(candidateRootPath, "candidate.json")
 }
 
-function unavailable(message: string, cause?: unknown): LoopyError {
-    return new LoopyError("git_worktree_unavailable", message, cause === undefined ? undefined : { cause })
+function unavailable(message: string, cause?: unknown): ClankHouseError {
+    return new ClankHouseError("git_worktree_unavailable", message, cause === undefined ? undefined : { cause })
 }
 
 export type WorktreeOptions = { key?: string } & (
@@ -285,7 +285,7 @@ async function validateApplyChanges(targetPath: string, sourcePath: string): Pro
 async function mergeSourceChanges({ target, source, targetHead }: ApplyChangesContext): Promise<string> {
     let sourceState: Awaited<ReturnType<typeof captureState>>
     try {
-        sourceState = await captureState(source, "loopy apply changes")
+        sourceState = await captureState(source, "clankhouse apply changes")
     } catch (error) {
         throw applyFailure("Could not capture source changes", error)
     }
@@ -387,6 +387,6 @@ async function requireUnchangedTarget(cwd: string, expectedHead: string): Promis
     }
 }
 
-function applyFailure(message: string, cause?: unknown): LoopyError {
-    return new LoopyError("git_apply_changes_failed", message, cause === undefined ? undefined : { cause })
+function applyFailure(message: string, cause?: unknown): ClankHouseError {
+    return new ClankHouseError("git_apply_changes_failed", message, cause === undefined ? undefined : { cause })
 }

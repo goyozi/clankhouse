@@ -1,6 +1,6 @@
 import type * as z from "zod"
 
-export type LoopyErrorCode =
+export type ClankHouseErrorCode =
     | "workflow_already_registered"
     | "workflow_not_registered"
     | "workflow_input_incompatible"
@@ -35,12 +35,12 @@ export type LoopyErrorCode =
     | "git_worktree_unavailable"
     | "git_worktree_gc_failed"
 
-export class LoopyError extends Error {
-    readonly code: LoopyErrorCode
+export class ClankHouseError extends Error {
+    readonly code: ClankHouseErrorCode
 
-    constructor(code: LoopyErrorCode, message: string, options?: ErrorOptions) {
+    constructor(code: ClankHouseErrorCode, message: string, options?: ErrorOptions) {
         super(message, options)
-        this.name = "LoopyError"
+        this.name = "ClankHouseError"
         this.code = code
     }
 }

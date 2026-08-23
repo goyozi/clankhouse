@@ -1,7 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import * as path from "node:path"
 import { BaseCodingAgent, type CodingAgentInvocation } from "./base-agent"
-import { LoopyError } from "../errors"
+import { ClankHouseError } from "../errors"
 import { errorMessage, newId } from "../util"
 
 export type FakeWrite = {
@@ -34,7 +34,7 @@ export async function applyChange(change: FakeChange, baseDir: string): Promise<
     } else if ("oldText" in change) {
         const content = await readFile(target, "utf8")
         if (!content.includes(change.oldText)) {
-            throw new LoopyError("fake_agent_edit_text_not_found", `oldText not found in ${change.file}`)
+            throw new ClankHouseError("fake_agent_edit_text_not_found", `oldText not found in ${change.file}`)
         }
         await writeFile(
             target,

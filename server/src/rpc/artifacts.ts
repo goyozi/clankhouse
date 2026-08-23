@@ -1,16 +1,16 @@
-import type { Loopy } from "@loopy/core/loopy"
+import type { ClankHouse } from "@clankhouse/core/clankhouse"
 import { toArtifact } from "../mappers"
 import { notFound, required, throwIfAborted, toConnectError } from "./errors"
-import type { LoopyServiceImplementation } from "./types"
+import type { ClankHouseServiceImplementation } from "./types"
 
-type ArtifactHandlers = Pick<LoopyServiceImplementation, "getArtifact" | "readArtifact">
+type ArtifactHandlers = Pick<ClankHouseServiceImplementation, "getArtifact" | "readArtifact">
 
-export function artifactHandlers(loopy: Loopy): ArtifactHandlers {
+export function artifactHandlers(clankhouse: ClankHouse): ArtifactHandlers {
     return {
         async getArtifact(request) {
             required(request.artifactId, "artifact_id")
             try {
-                return { artifact: toArtifact(await loopy.artifacts.get(request.artifactId)) }
+                return { artifact: toArtifact(await clankhouse.artifacts.get(request.artifactId)) }
             } catch (error) {
                 throw toConnectError(error, {
                     artifact_not_found: () => notFound("Artifact", request.artifactId)
@@ -25,7 +25,7 @@ export function artifactHandlers(loopy: Loopy): ArtifactHandlers {
             }
             context.signal.addEventListener("abort", abort, { once: true })
             try {
-                const content = await loopy.artifacts.read(request.artifactId)
+                const content = await clankhouse.artifacts.read(request.artifactId)
                 reader = content.stream.getReader()
                 throwIfAborted(context.signal)
                 while (true) {

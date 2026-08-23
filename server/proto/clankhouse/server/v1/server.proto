@@ -1,10 +1,10 @@
 syntax = "proto3";
 
-package loopy.server.v1;
+package clankhouse.server.v1;
 
 import "google/protobuf/timestamp.proto";
 
-service LoopyService {
+service ClankHouseService {
   rpc ListWorkflows(ListWorkflowsRequest) returns (ListWorkflowsResponse);
   rpc GetWorkflow(GetWorkflowRequest) returns (GetWorkflowResponse);
   rpc StartRun(StartRunRequest) returns (StartRunResponse);

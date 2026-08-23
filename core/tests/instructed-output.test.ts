@@ -1,7 +1,7 @@
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { prepareInstructedOutput } from "@loopy/core/ai/instructed-output"
-import { instructedSchema, instructedTags } from "@loopy/test-utils"
+import { prepareInstructedOutput } from "@clankhouse/core/ai/instructed-output"
+import { instructedSchema, instructedTags } from "@clankhouse/test-utils"
 
 const outputSchema = z.object({ done: z.boolean() })
 

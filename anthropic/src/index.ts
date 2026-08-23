@@ -1,8 +1,8 @@
 import Anthropic, { type ClientOptions } from "@anthropic-ai/sdk"
 import type { ContentBlock, Message, StopReason } from "@anthropic-ai/sdk/resources/messages"
-import { BaseLanguageModel, type LanguageModelInvocation } from "@loopy/core/ai/base-llm"
-import type { SessionRecorder } from "@loopy/core/ai/sessions"
-import { LoopyError } from "@loopy/core/errors"
+import { BaseLanguageModel, type LanguageModelInvocation } from "@clankhouse/core/ai/base-llm"
+import type { SessionRecorder } from "@clankhouse/core/ai/sessions"
+import { ClankHouseError } from "@clankhouse/core/errors"
 
 export type AnthropicModelOptions = {
     model: string
@@ -57,7 +57,7 @@ function recordContent(session: SessionRecorder, content: Message["content"]): v
         } else if (block.type === "thinking") {
             session.addMessage("reasoning", block.thinking)
         } else {
-            throw new LoopyError(
+            throw new ClankHouseError(
                 "llm_response_invalid",
                 `Anthropic returned unexpected content block for a tool-free request: ${block.type}`
             )
@@ -68,15 +68,18 @@ function recordContent(session: SessionRecorder, content: Message["content"]): v
 function requireCompleted(stopReason: StopReason | null): void {
     if (stopReason === "end_turn" || stopReason === "stop_sequence") return
     if (stopReason === "max_tokens" || stopReason === "model_context_window_exceeded" || stopReason === "pause_turn") {
-        throw new LoopyError("llm_response_incomplete", `Anthropic response stopped before completion: ${stopReason}`)
+        throw new ClankHouseError(
+            "llm_response_incomplete",
+            `Anthropic response stopped before completion: ${stopReason}`
+        )
     }
     if (stopReason === "refusal") {
-        throw new LoopyError("llm_response_failed", "Anthropic refused to produce a response")
+        throw new ClankHouseError("llm_response_failed", "Anthropic refused to produce a response")
     }
     if (stopReason === "tool_use") {
-        throw new LoopyError("llm_response_invalid", "Anthropic stopped for tool use despite receiving no tools")
+        throw new ClankHouseError("llm_response_invalid", "Anthropic stopped for tool use despite receiving no tools")
     }
     if (stopReason === null) {
-        throw new LoopyError("llm_response_invalid", "Anthropic response did not include a stop reason")
+        throw new ClankHouseError("llm_response_invalid", "Anthropic response did not include a stop reason")
     }
 }

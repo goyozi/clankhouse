@@ -1,8 +1,8 @@
 import { Code, ConnectError } from "@connectrpc/connect"
-import { LoopyError, type LoopyErrorCode } from "@loopy/core/errors"
+import { ClankHouseError, type ClankHouseErrorCode } from "@clankhouse/core/errors"
 
-type ErrorMapping = Code | ((error: LoopyError) => ConnectError)
-type ErrorMappings = Partial<Record<LoopyErrorCode, ErrorMapping>>
+type ErrorMapping = Code | ((error: ClankHouseError) => ConnectError)
+type ErrorMappings = Partial<Record<ClankHouseErrorCode, ErrorMapping>>
 
 export function required(value: string, field: string): void {
     if (value.length === 0) throw new ConnectError(`${field} is required`, Code.InvalidArgument)
@@ -32,7 +32,7 @@ export function toConnectError(error: unknown, mappings: ErrorMappings = {}): Co
     if (error instanceof DOMException && error.name === "AbortError") {
         return new ConnectError("Request canceled", Code.Canceled)
     }
-    if (error instanceof LoopyError) {
+    if (error instanceof ClankHouseError) {
         const mapping = mappings[error.code]
         if (typeof mapping === "function") return mapping(error)
         if (mapping !== undefined) return new ConnectError(error.message, mapping)

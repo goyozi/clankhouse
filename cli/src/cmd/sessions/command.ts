@@ -1,4 +1,4 @@
-import { GetSessionResponseSchema, WatchSessionResponseSchema } from "@loopy/server/proto"
+import { GetSessionResponseSchema, WatchSessionResponseSchema } from "@clankhouse/server/proto"
 import type { Command } from "commander"
 import { collectIncludes, includes, type IncludeOptions } from "../../includes"
 import type { Runtime } from "../../runtime"

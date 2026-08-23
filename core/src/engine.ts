@@ -1,11 +1,11 @@
 import * as z from "zod"
-import type { Loopy } from "./loopy"
+import type { ClankHouse } from "./clankhouse"
 import { requireContext, runContext, type RunContext } from "./context"
 import * as sql from "./db"
 import type { Db, RunRow, StepColumn, StepKind, StepRow } from "./db"
 import type { ActiveSets } from "./runtime"
 import type { Notifier } from "./watch"
-import { LoopyError } from "./errors"
+import { ClankHouseError } from "./errors"
 import { errorMessage, newId, nowIso } from "./util"
 import { jsonSchema, type SchemaIo } from "./json-schema"
 
@@ -43,7 +43,7 @@ export class Engine {
     }
 
     executeRun<T extends z.ZodTypeAny>(
-        loopy: Loopy,
+        clankhouse: ClankHouse,
         runRow: RunRow,
         output: T,
         fn: () => Promise<z.infer<T>>
@@ -57,7 +57,7 @@ export class Engine {
         const db = this.db
         const maxSeq = sql.findMaxStepSeq(db, runRow.id)
         const ctx: RunContext = {
-            loopy,
+            clankhouse,
             runId: runRow.id,
             runKey: runRow.key,
             workflowName: runRow.workflow_name,
@@ -100,7 +100,7 @@ export class Engine {
     private claimStepKey(ctx: RunContext, name: string): string {
         const key = [...ctx.prefixes, name].join("/")
         if (ctx.seenStepKeys.has(key)) {
-            throw new LoopyError("workflow_step_duplicate", `Duplicate step "${key}" in run "${ctx.runKey}"`)
+            throw new ClankHouseError("workflow_step_duplicate", `Duplicate step "${key}" in run "${ctx.runKey}"`)
         }
         ctx.seenStepKeys.add(key)
         return key
@@ -220,5 +220,5 @@ function parseStepOutput<T extends z.ZodTypeAny>(options: ExecuteStepOptions<T>,
 }
 
 function errorCode(error: unknown) {
-    return error instanceof LoopyError ? error.code : null
+    return error instanceof ClankHouseError ? error.code : null
 }

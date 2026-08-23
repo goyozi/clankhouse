@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto"
-import { ClaudeAgent } from "@loopy/claude"
-import { CodexAgent } from "@loopy/codex"
-import { registerWorkflow } from "@loopy/core"
-import { serve } from "@loopy/server"
+import { ClaudeAgent } from "@clankhouse/claude"
+import { CodexAgent } from "@clankhouse/codex"
+import { registerWorkflow } from "@clankhouse/core"
+import { serve } from "@clankhouse/server"
 import * as z from "zod"
 import { createDualReviewWorkflow } from "./workflow"
 
@@ -24,4 +24,4 @@ registerWorkflow(
 )
 
 const server = await serve()
-console.log(`Loopy dual-review server listening at ${server.url}`)
+console.log(`ClankHouse dual-review server listening at ${server.url}`)

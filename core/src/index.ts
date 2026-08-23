@@ -1,32 +1,32 @@
 import * as z from "zod"
-import { Loopy } from "./loopy"
+import { ClankHouse } from "./clankhouse"
 import type { EventSource, EventSourceResult } from "./events"
 import type { RerunOptions, WorkflowOptions, Workflows } from "./workflows"
 import type { WorkflowRuns } from "./runs"
 import type { Artifacts } from "./artifacts"
 import type { AISessions } from "./ai/sessions"
 
-let instance: Loopy | undefined
+let instance: ClankHouse | undefined
 
-export function loopy(): Loopy {
-    if (instance === undefined || instance.closed) instance = new Loopy()
+export function clankhouse(): ClankHouse {
+    if (instance === undefined || instance.closed) instance = new ClankHouse()
     return instance
 }
 
 export function workflows(): Workflows {
-    return loopy().workflows
+    return clankhouse().workflows
 }
 
 export function runs(): WorkflowRuns {
-    return loopy().runs
+    return clankhouse().runs
 }
 
 export function artifacts(): Artifacts {
-    return loopy().artifacts
+    return clankhouse().artifacts
 }
 
 export function sessions(): AISessions {
-    return loopy().sessions
+    return clankhouse().sessions
 }
 
 export function registerWorkflow<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(
@@ -34,19 +34,19 @@ export function registerWorkflow<I extends z.ZodTypeAny, O extends z.ZodTypeAny>
     options: WorkflowOptions<I, O>,
     workflowFn: (input: z.infer<I>) => Promise<z.infer<O>>
 ) {
-    loopy().registerWorkflow(name, options, workflowFn)
+    clankhouse().registerWorkflow(name, options, workflowFn)
 }
 
 export function start(name: string, input?: any): string {
-    return loopy().start(name, input)
+    return clankhouse().start(name, input)
 }
 
 export function resume(runId: string): string {
-    return loopy().resume(runId)
+    return clankhouse().resume(runId)
 }
 
 export function rerun(runId: string, options: RerunOptions): string {
-    return loopy().rerun(runId, options)
+    return clankhouse().rerun(runId, options)
 }
 
 export function run<T extends z.ZodTypeAny>(
@@ -55,7 +55,7 @@ export function run<T extends z.ZodTypeAny>(
     output: T,
     workflowFn: () => Promise<z.infer<T>>
 ): Promise<z.infer<T>> {
-    return loopy().run(name, key, output, workflowFn)
+    return clankhouse().run(name, key, output, workflowFn)
 }
 
 export function step<T extends z.ZodTypeAny>(
@@ -63,27 +63,27 @@ export function step<T extends z.ZodTypeAny>(
     output: T,
     stepFn: () => Promise<z.infer<T>>
 ): Promise<z.infer<T>> {
-    return loopy().step(name, output, stepFn)
+    return clankhouse().step(name, output, stepFn)
 }
 
 export function prefix<O>(name: string, fn: () => Promise<O>): Promise<O> {
-    return loopy().prefix(name, fn)
+    return clankhouse().prefix(name, fn)
 }
 
 export function emit(key: string, event: any): Promise<void> {
-    return loopy().emit(key, event)
+    return clankhouse().emit(key, event)
 }
 
 export function waitFor<T extends z.ZodTypeAny>(source: EventSource<T>): Promise<z.output<T>> {
-    return loopy().waitFor(source)
+    return clankhouse().waitFor(source)
 }
 
 export function waitForAny<const S extends readonly EventSource[]>(sources: S): Promise<EventSourceResult<S[number]>> {
-    return loopy().waitForAny(sources)
+    return clankhouse().waitForAny(sources)
 }
 
 export type { RerunOptions, WorkflowOptions } from "./workflows"
 export type { EventSource, EventSourceHandle, EventSourceListener, EventSourceResult } from "./events"
 export { fileCreated, fileCreatedIn } from "./files"
-export { LoopyError } from "./errors"
-export type { LoopyErrorCode } from "./errors"
+export { ClankHouseError } from "./errors"
+export type { ClankHouseErrorCode } from "./errors"

@@ -1,5 +1,5 @@
 {
-    "name": "@loopy/pi",
+    "name": "@clankhouse/pi",
     "version": "1.0.0",
     "type": "module",
     "main": "./src/index.ts",
@@ -12,10 +12,10 @@
     },
     "dependencies": {
         "@earendil-works/pi-coding-agent": "^0.84.1",
-        "@loopy/core": "workspace:*",
+        "@clankhouse/core": "workspace:*",
         "zod": "catalog:"
     },
     "devDependencies": {
-        "@loopy/test-utils": "workspace:*"
+        "@clankhouse/test-utils": "workspace:*"
     }
 }

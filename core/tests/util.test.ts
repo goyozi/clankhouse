@@ -1,5 +1,5 @@
 import { expect, test } from "vitest"
-import { newId } from "@loopy/core/util"
+import { newId } from "@clankhouse/core/util"
 
 test("newId generates unique alphanumeric ids safe to pass as CLI arguments", () => {
     // given a large batch of generated ids

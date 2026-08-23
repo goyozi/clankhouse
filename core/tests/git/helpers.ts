@@ -1,12 +1,12 @@
 import * as fs from "node:fs"
 import * as path from "node:path"
 import { createHash } from "node:crypto"
-import { type GitRepository, Worktree, type WorktreeOptions } from "@loopy/core/git"
-import { runGit, tempLoopy, testRun } from "@loopy/test-utils"
+import { type GitRepository, Worktree, type WorktreeOptions } from "@clankhouse/core/git"
+import { runGit, tempClankHouse, testRun } from "@clankhouse/test-utils"
 
 export function userSnapshotRef(worktree: Worktree, name: string): string {
     const namespace = createHash("sha256").update(path.resolve(worktree.path)).digest("hex")
-    return `refs/loopy/user/${namespace}/${name}`
+    return `refs/clankhouse/user/${namespace}/${name}`
 }
 
 export async function writeTree(
@@ -27,9 +27,9 @@ export async function writeTree(
 }
 
 export async function createWorktree(repository: GitRepository, options: WorktreeOptions): Promise<Worktree> {
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     let worktree!: Worktree
-    await testRun(loopy, async () => {
+    await testRun(clankhouse, async () => {
         worktree = await repository.worktree(options)
         return null
     })

@@ -1,8 +1,8 @@
 import type { CodexOptions, RunStreamedResult, Thread, ThreadItem, ThreadOptions } from "@openai/codex-sdk"
 import { Codex } from "@openai/codex-sdk"
-import { BaseCodingAgent, type CodingAgentInvocation } from "@loopy/core/ai/base-agent"
-import type { SessionRecorder } from "@loopy/core/ai/sessions"
-import type { Worktree } from "@loopy/core/git"
+import { BaseCodingAgent, type CodingAgentInvocation } from "@clankhouse/core/ai/base-agent"
+import type { SessionRecorder } from "@clankhouse/core/ai/sessions"
+import type { Worktree } from "@clankhouse/core/git"
 
 type CodexThread = Pick<Thread, "runStreamed">
 

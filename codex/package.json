@@ -1,5 +1,5 @@
 {
-    "name": "@loopy/codex",
+    "name": "@clankhouse/codex",
     "version": "1.0.0",
     "type": "module",
     "main": "./src/index.ts",
@@ -11,11 +11,11 @@
         "typecheck": "tsc -p tsconfig.json --noEmit"
     },
     "dependencies": {
-        "@loopy/core": "workspace:*",
+        "@clankhouse/core": "workspace:*",
         "@openai/codex-sdk": "^0.144.6",
         "zod": "catalog:"
     },
     "devDependencies": {
-        "@loopy/test-utils": "workspace:*"
+        "@clankhouse/test-utils": "workspace:*"
     }
 }

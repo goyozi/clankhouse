@@ -2,45 +2,45 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as z from "zod"
 import { expect, test, vi } from "vitest"
-import { gate, runOutput, tempDir } from "@loopy/test-utils"
+import { gate, runOutput, tempDir } from "@clankhouse/test-utils"
 
-function withLoopyDir<T>(prefix: string, body: (dir: string) => Promise<T>): Promise<T> {
-    const dir = path.join(tempDir(prefix), "loopy")
-    const previous = process.env.LOOPY_DIR
-    process.env.LOOPY_DIR = dir
+function withClankHouseDir<T>(prefix: string, body: (dir: string) => Promise<T>): Promise<T> {
+    const dir = path.join(tempDir(prefix), "clankhouse")
+    const previous = process.env.CLANKHOUSE_DIR
+    process.env.CLANKHOUSE_DIR = dir
     vi.resetModules()
     return body(dir).finally(() => {
-        if (previous === undefined) delete process.env.LOOPY_DIR
-        else process.env.LOOPY_DIR = previous
+        if (previous === undefined) delete process.env.CLANKHOUSE_DIR
+        else process.env.CLANKHOUSE_DIR = previous
     })
 }
 
-test("importing the package does not create the loopy dir until first use", async () => {
-    await withLoopyDir("loopy-lazy-", async (dir) => {
-        // given the package freshly imported under a LOOPY_DIR that does not yet exist
-        const mod = await import("@loopy/core")
-        // then the loopy dir is not created just from importing
+test("importing the package does not create the clankhouse dir until first use", async () => {
+    await withClankHouseDir("clankhouse-lazy-", async (dir) => {
+        // given the package freshly imported under a CLANKHOUSE_DIR that does not yet exist
+        const mod = await import("@clankhouse/core")
+        // then the clankhouse dir is not created just from importing
         expect(fs.existsSync(dir)).toBe(false)
 
-        // when getting the loopy instance for the first time
-        const instance = mod.loopy()
-        // then the loopy db file is created
-        expect(fs.existsSync(path.join(dir, "loopy.db"))).toBe(true)
-        // and calling loopy() again returns the same cached instance
-        expect(mod.loopy()).toBe(instance)
+        // when getting the clankhouse instance for the first time
+        const instance = mod.clankhouse()
+        // then the clankhouse db file is created
+        expect(fs.existsSync(path.join(dir, "clankhouse.db"))).toBe(true)
+        // and calling clankhouse() again returns the same cached instance
+        expect(mod.clankhouse()).toBe(instance)
         instance.close()
     })
 })
 
 test("a closed singleton is replaced instead of handed out again", async () => {
-    await withLoopyDir("loopy-reopen-", async () => {
+    await withClankHouseDir("clankhouse-reopen-", async () => {
         // given the cached singleton instance
-        const mod = await import("@loopy/core")
-        const first = mod.loopy()
+        const mod = await import("@clankhouse/core")
+        const first = mod.clankhouse()
 
         // when it is closed and the singleton is requested again
         first.close()
-        const second = mod.loopy()
+        const second = mod.clankhouse()
 
         // then a usable instance replaces the closed one
         expect(second).not.toBe(first)
@@ -50,11 +50,11 @@ test("a closed singleton is replaced instead of handed out again", async () => {
     })
 })
 
-test("top-level workflow functions delegate to the singleton loopy instance", async () => {
-    await withLoopyDir("loopy-index-", async () => {
+test("top-level workflow functions delegate to the singleton clankhouse instance", async () => {
+    await withClankHouseDir("clankhouse-index-", async () => {
         // given the lazily-created singleton instance
-        const mod = await import("@loopy/core")
-        const instance = mod.loopy()
+        const mod = await import("@clankhouse/core")
+        const instance = mod.clankhouse()
 
         // then the top-level workflows accessor exposes the singleton's public service
         expect(mod.workflows()).toBe(instance.workflows)

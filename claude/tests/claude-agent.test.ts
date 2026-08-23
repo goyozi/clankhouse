@@ -2,9 +2,9 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { ClaudeAgent } from "@loopy/claude"
-import { GitRepository, Worktree } from "@loopy/core/git"
-import { uniqueName } from "@loopy/core/util"
+import { ClaudeAgent } from "@clankhouse/claude"
+import { GitRepository, Worktree } from "@clankhouse/core/git"
+import { uniqueName } from "@clankhouse/core/util"
 import { fakeClaudeQuery } from "./fake-claude-sdk"
 import {
     instructedSchema,
@@ -16,9 +16,9 @@ import {
     taggedOutput,
     taggedStringOutput,
     tempGitRepo,
-    tempLoopy,
+    tempClankHouse,
     testRun
-} from "@loopy/test-utils"
+} from "@clankhouse/test-utils"
 
 const outputSchema = z.object({ done: z.boolean() })
 const workflowOptions = { input: z.null(), output: z.json(), key: () => "test-key" }
@@ -36,7 +36,7 @@ const liveOutputSchema = z.array(
 
 test("ClaudeAgent maps the SDK conversation to the session and snapshots the worktree", async () => {
     // given a fake SDK scripted with text, a file-writing tool call and a structured output
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { query } = fakeClaudeQuery(() => ({
@@ -56,7 +56,7 @@ test("ClaudeAgent maps the SDK conversation to the session and snapshots the wor
     let worktree!: Worktree
 
     // when the agent runs inside a durable step
-    const result = await testRun(loopy, async () => {
+    const result = await testRun(clankhouse, async () => {
         worktree = await repository.worktree({ base: "main" })
         return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
     })
@@ -66,16 +66,16 @@ test("ClaudeAgent maps the SDK conversation to the session and snapshots the wor
     // and the tool call's file change is applied to the worktree
     expect(fs.readFileSync(path.join(worktree.path, "src/hello.ts"), "utf8")).toBe("export const hi = 1\n")
     // and the run records an agent step with a snapshot ref
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     expect(step.kind).toBe("agent")
     if (step.kind !== "agent") throw new Error("unreachable")
     expect(step.snapshotRef).toBe(
-        `refs/loopy/agent/${uniqueName("test-workflow/test-key")}/1/${uniqueName("implement")}`
+        `refs/clankhouse/agent/${uniqueName("test-workflow/test-key")}/1/${uniqueName("implement")}`
     )
     expect((await worktree.git(["rev-parse", step.snapshotRef!])).exitCode).toBe(0)
     // and the session is persisted with client, provider and model info and succeeds
-    const session = await loopy.sessions.get(step.sessionId!)
+    const session = await clankhouse.sessions.get(step.sessionId!)
     expect(session.kind).toBe("coding-agent")
     expect(session.client).toBe("claude")
     expect(session.provider).toBe("anthropic")
@@ -117,7 +117,7 @@ test("ClaudeAgent maps the SDK conversation to the session and snapshots the wor
 
 test("ClaudeAgent runs a void-output step without instructed output framing", async () => {
     // given a fake SDK that writes a file and returns no structured output
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { query, calls } = fakeClaudeQuery(() => ({
@@ -135,7 +135,7 @@ test("ClaudeAgent runs a void-output step without instructed output framing", as
 
     // when the agent runs with a void output schema
     const result = await testRun(
-        loopy,
+        clankhouse,
         async () => {
             worktree = await repository.worktree({ base: "main" })
             return agent.run("implement", { prompt: "do it", output: z.void(), worktree })
@@ -148,16 +148,16 @@ test("ClaudeAgent runs a void-output step without instructed output framing", as
     expect(calls[0].prompt).toBe("do it")
     // and the coding work is applied and the step and session still succeed with a snapshot
     expect(fs.readFileSync(path.join(worktree.path, "src/hello.ts"), "utf8")).toBe("export const hi = 1\n")
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
     expect((await worktree.git(["rev-parse", step.snapshotRef!])).exitCode).toBe(0)
-    expect((await loopy.sessions.get(step.sessionId!)).status).toBe("succeeded")
+    expect((await clankhouse.sessions.get(step.sessionId!)).status).toBe("succeeded")
 })
 
 test("ClaudeAgent returns an earlier tagged string after an untagged monitor message", async () => {
     // given a fake SDK emitting a tagged answer before a final monitor notification
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const worktree = new Worktree(repo.path)
     const answer = "  All 8 issues stand as written.  "
@@ -169,7 +169,7 @@ test("ClaudeAgent returns an earlier tagged string after an untagged monitor mes
     const agent = new ClaudeAgent({ model: "claude-test", query })
 
     // when the agent runs with a root string schema
-    const result = await testRun(loopy, () =>
+    const result = await testRun(clankhouse, () =>
         agent.run("report", { prompt: "report naturally", output: z.string(), worktree })
     )
 
@@ -178,11 +178,11 @@ test("ClaudeAgent returns an earlier tagged string after an untagged monitor mes
     expect(calls[0].prompt).not.toMatch(/JSON/i)
     expect(result).toBe(answer)
     // and both assistant messages remain recorded while only the extracted answer is persisted
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
     expect(step.outputJson).toBe(JSON.stringify(answer))
-    const messages = sessionTextMessages((await loopy.sessions.get(step.sessionId!)).messages)
+    const messages = sessionTextMessages((await clankhouse.sessions.get(step.sessionId!)).messages)
     expect(messages.slice(-2).map((message) => message.content)).toEqual([
         taggedStringOutput(calls[0].prompt, answer),
         monitorMessage
@@ -191,7 +191,7 @@ test("ClaudeAgent returns an earlier tagged string after an untagged monitor mes
 
 test("ClaudeAgent records every supported SDK message and block type", async () => {
     // given a fake SDK scripted with one of each supported block type and an empty thinking block
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { query } = fakeClaudeQuery(() => ({
@@ -203,7 +203,7 @@ test("ClaudeAgent records every supported SDK message and block type", async () 
                 name: "web_search",
                 kind: "server_tool_use",
                 id: "toolu_srv1",
-                input: { query: "loopy" },
+                input: { query: "clankhouse" },
                 result: "hits"
             },
             { name: "lookup", kind: "mcp_tool_use", id: "toolu_mcp1", input: { key: "v" }, result: "value" }
@@ -213,16 +213,16 @@ test("ClaudeAgent records every supported SDK message and block type", async () 
     const agent = new ClaudeAgent({ model: "claude-sonnet-5", query })
 
     // when the agent runs
-    await testRun(loopy, async () => {
+    await testRun(clankhouse, async () => {
         const worktree = await repository.worktree({ base: "main" })
         return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
     })
 
     // then the prompt, init, thinking, text, every tool call, every result and the output are all recorded
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
-    const session = await loopy.sessions.get(step.sessionId!)
+    const session = await clankhouse.sessions.get(step.sessionId!)
     expect(session.messages.map((item) => (item.type === "message" ? item.role : item.type))).toEqual([
         "user", // prompt
         "system", // init
@@ -254,8 +254,8 @@ test("ClaudeAgent records every supported SDK message and block type", async () 
             id: "toolu_srv1",
             name: "web_search",
             source: { kind: "provider" },
-            input: { query: "loopy" },
-            common: { name: "web.search", query: "loopy" }
+            input: { query: "clankhouse" },
+            common: { name: "web.search", query: "clankhouse" }
         }
     })
     expect(session.messages[8]).toMatchObject({
@@ -280,7 +280,7 @@ test("ClaudeAgent records every supported SDK message and block type", async () 
 
 test("ClaudeAgent normalizes every native common tool and configured MCP tools", async () => {
     // given every native common tool and a configured MCP call delivered as ordinary tool_use blocks
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const worktree = new Worktree(repo.path)
     const { query } = fakeClaudeQuery(() => ({
@@ -298,7 +298,7 @@ test("ClaudeAgent normalizes every native common tool and configured MCP tools",
             {
                 id: "toolu_search1",
                 name: "WebSearch",
-                input: { query: "loopy", allowed_domains: ["example.com"] },
+                input: { query: "clankhouse", allowed_domains: ["example.com"] },
                 result: "hits"
             },
             {
@@ -316,13 +316,13 @@ test("ClaudeAgent normalizes every native common tool and configured MCP tools",
     const agent = new ClaudeAgent({ model: "claude-sonnet-5", query })
 
     // when the agent runs the tools
-    await testRun(loopy, () => agent.run("implement", { prompt: "do it", output: outputSchema, worktree }))
+    await testRun(clankhouse, () => agent.run("implement", { prompt: "do it", output: outputSchema, worktree }))
 
     // then common calls keep raw inputs and normalized essentials while MCP and malformed calls have no common payload
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
-    const calls = sessionToolCallMessages((await loopy.sessions.get(step.sessionId!)).messages)
+    const calls = sessionToolCallMessages((await clankhouse.sessions.get(step.sessionId!)).messages)
     expect(calls.map((item) => item.toolCall)).toEqual([
         {
             id: "toolu_read1",
@@ -370,8 +370,8 @@ test("ClaudeAgent normalizes every native common tool and configured MCP tools",
             id: "toolu_search1",
             name: "WebSearch",
             source: { kind: "native" },
-            input: { query: "loopy", allowed_domains: ["example.com"] },
-            common: { name: "web.search", query: "loopy" }
+            input: { query: "clankhouse", allowed_domains: ["example.com"] },
+            common: { name: "web.search", query: "clankhouse" }
         },
         {
             id: "toolu_mcp_local1",
@@ -402,7 +402,7 @@ test("ClaudeAgent normalizes every native common tool and configured MCP tools",
 
 test("ClaudeAgent preserves an unknown tool and normalizes its failed result", async () => {
     // given an unknown native Claude tool that returns an error
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const worktree = new Worktree(repo.path)
     const { query } = fakeClaudeQuery(() => ({
@@ -423,13 +423,13 @@ test("ClaudeAgent preserves an unknown tool and normalizes its failed result", a
     const agent = new ClaudeAgent({ model: "claude-sonnet-5", query })
 
     // when the agent runs successfully after handling the tool failure
-    await testRun(loopy, () => agent.run("implement", { prompt: "do it", output: outputSchema, worktree }))
+    await testRun(clankhouse, () => agent.run("implement", { prompt: "do it", output: outputSchema, worktree }))
 
     // then the raw tool remains available without a guessed common classification
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
-    const session = await loopy.sessions.get(step.sessionId!)
+    const session = await clankhouse.sessions.get(step.sessionId!)
     expect(session.messages.find((item) => item.type === "tool_call")).toMatchObject({
         toolCall: {
             id: "toolu_custom1",
@@ -449,7 +449,7 @@ test("ClaudeAgent preserves an unknown tool and normalizes its failed result", a
 
 test("ClaudeAgent passes default options to the SDK", async () => {
     // given a claude agent configured with only a model
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { query, calls } = fakeClaudeQuery(() => ({ output: { done: true } }))
@@ -457,7 +457,7 @@ test("ClaudeAgent passes default options to the SDK", async () => {
     let worktree!: Worktree
 
     // when the agent runs
-    await testRun(loopy, async () => {
+    await testRun(clankhouse, async () => {
         worktree = await repository.worktree({ base: "main" })
         return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
     })
@@ -465,7 +465,7 @@ test("ClaudeAgent passes default options to the SDK", async () => {
     // then the SDK receives the rendered prompt with nonce tags and the schema exactly once
     expect(calls).toHaveLength(1)
     expect(calls[0].prompt).toMatch(/^do it\n\nIMPORTANT — requested final report:/)
-    expect(instructedTags(calls[0].prompt).opening).toMatch(/^<loopy_structured_output_[0-9a-f_]+>$/)
+    expect(instructedTags(calls[0].prompt).opening).toMatch(/^<clankhouse_structured_output_[0-9a-f_]+>$/)
     expect(instructedSchema(calls[0].prompt)).toEqual({
         type: "object",
         properties: { done: { type: "boolean" } },
@@ -495,7 +495,7 @@ test("ClaudeAgent passes default options to the SDK", async () => {
 
 test("ClaudeAgent passes configured options to the SDK", async () => {
     // given a claude agent with every option customized
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { query, calls } = fakeClaudeQuery(() => ({ output: { done: true } }))
@@ -512,7 +512,7 @@ test("ClaudeAgent passes configured options to the SDK", async () => {
     })
 
     // when the agent runs
-    await testRun(loopy, async () => {
+    await testRun(clankhouse, async () => {
         const worktree = await repository.worktree({ base: "main" })
         return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
     })
@@ -531,15 +531,15 @@ test("ClaudeAgent passes configured options to the SDK", async () => {
     expect(options.settingSources).toEqual([])
     expect(options.systemPrompt).toBe("custom prompt")
     // and the session records the configured model
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
-    expect((await loopy.sessions.get(step.sessionId!)).model).toBe("claude-opus-4-8")
+    expect((await clankhouse.sessions.get(step.sessionId!)).model).toBe("claude-opus-4-8")
 })
 
 test("a non-JSON-representable output schema fails the step without invoking the SDK", async () => {
     // given an output schema containing a Date, which JSON structured output cannot represent
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { query, calls } = fakeClaudeQuery(() => ({ output: { done: true } }))
@@ -547,7 +547,7 @@ test("a non-JSON-representable output schema fails the step without invoking the
 
     // when the agent runs
     await expect(
-        testRun(loopy, async () => {
+        testRun(clankhouse, async () => {
             const worktree = await repository.worktree({ base: "main" })
             return agent.run("implement", {
                 prompt: "do it",
@@ -560,14 +560,14 @@ test("a non-JSON-representable output schema fails the step without invoking the
     // then the SDK is never invoked
     expect(calls).toHaveLength(0)
     // and no agent step or session was created
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     expect(run.steps.filter((step) => step.kind === "agent")).toHaveLength(0)
-    expect(loopy.db.prepare("SELECT COUNT(*) AS n FROM sessions").get()).toEqual({ n: 0 })
+    expect(clankhouse.db.prepare("SELECT COUNT(*) AS n FROM sessions").get()).toEqual({ n: 0 })
 })
 
 test("an error result fails the step and the session", async () => {
     // given a fake SDK that ends with a max-turns error result
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { query } = fakeClaudeQuery(() => ({
@@ -579,26 +579,26 @@ test("an error result fails the step and the session", async () => {
 
     // when the agent runs
     await expect(
-        testRun(loopy, async () => {
+        testRun(clankhouse, async () => {
             const worktree = await repository.worktree({ base: "main" })
             return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
         })
     ).rejects.toThrow("Claude agent failed with error_max_turns: exceeded maximum turns")
 
     // then the agent step is marked failed
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     expect(step.status).toBe("failed")
     if (step.kind !== "agent") throw new Error("unreachable")
     // and the session is marked failed with the messages recorded so far preserved
-    const session = await loopy.sessions.get(step.sessionId!)
+    const session = await clankhouse.sessions.get(step.sessionId!)
     expect(session.status).toBe("failed")
     expect(sessionTextMessages(session.messages).map((item) => item.role)).toEqual(["user", "system", "assistant"])
 })
 
 test("an untagged final response fails the step", async () => {
     // given a fake SDK whose successful turn returns plain JSON without the instructed tags
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { query } = fakeClaudeQuery(() => ({ finalResponse: JSON.stringify({ done: true }) }))
@@ -606,23 +606,23 @@ test("an untagged final response fails the step", async () => {
 
     // when the agent runs
     await expect(
-        testRun(loopy, async () => {
+        testRun(clankhouse, async () => {
             const worktree = await repository.worktree({ base: "main" })
             return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
         })
     ).rejects.toThrow("AI did not return the instructed output tags")
 
     // then the agent step and the session are marked failed
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     expect(step.status).toBe("failed")
     if (step.kind !== "agent") throw new Error("unreachable")
-    expect((await loopy.sessions.get(step.sessionId!)).status).toBe("failed")
+    expect((await clankhouse.sessions.get(step.sessionId!)).status).toBe("failed")
 })
 
 test("invalid JSON inside the instructed tags fails the step", async () => {
     // given a fake SDK returning plain text inside the instructed tags
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { query } = fakeClaudeQuery((prompt) => {
@@ -632,7 +632,7 @@ test("invalid JSON inside the instructed tags fails the step", async () => {
     const agent = new ClaudeAgent({ model: "claude-sonnet-5", query })
 
     // when the agent runs
-    const result = testRun(loopy, async () => {
+    const result = testRun(clankhouse, async () => {
         const worktree = await repository.worktree({ base: "main" })
         return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
     })
@@ -643,7 +643,7 @@ test("invalid JSON inside the instructed tags fails the step", async () => {
 
 test("structured output violating the schema fails the step", async () => {
     // given a fake SDK returning structured output that does not match the schema
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { query } = fakeClaudeQuery(() => ({ output: { done: "yes" } }))
@@ -651,23 +651,23 @@ test("structured output violating the schema fails the step", async () => {
 
     // when the agent runs
     await expect(
-        testRun(loopy, async () => {
+        testRun(clankhouse, async () => {
             const worktree = await repository.worktree({ base: "main" })
             return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
         })
     ).rejects.toThrow()
 
     // then the agent step and the session are marked failed
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     expect(step.status).toBe("failed")
     if (step.kind !== "agent") throw new Error("unreachable")
-    expect((await loopy.sessions.get(step.sessionId!)).status).toBe("failed")
+    expect((await clankhouse.sessions.get(step.sessionId!)).status).toBe("failed")
 })
 
 test("a mid-stream SDK failure fails the step and preserves recorded messages", async () => {
     // given a fake SDK that throws right after the init message
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { query } = fakeClaudeQuery(() => ({ throwMidStream: new Error("process exited unexpectedly") }))
@@ -675,18 +675,18 @@ test("a mid-stream SDK failure fails the step and preserves recorded messages", 
 
     // when the agent runs
     await expect(
-        testRun(loopy, async () => {
+        testRun(clankhouse, async () => {
             const worktree = await repository.worktree({ base: "main" })
             return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
         })
     ).rejects.toThrow("process exited unexpectedly")
 
     // then the agent step and the session are marked failed
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     expect(step.status).toBe("failed")
     if (step.kind !== "agent") throw new Error("unreachable")
-    const session = await loopy.sessions.get(step.sessionId!)
+    const session = await clankhouse.sessions.get(step.sessionId!)
     expect(session.status).toBe("failed")
     // and the messages recorded before the failure are preserved
     expect(sessionTextMessages(session.messages).map((item) => item.role)).toEqual(["user", "system"])
@@ -694,7 +694,7 @@ test("a mid-stream SDK failure fails the step and preserves recorded messages", 
 
 test("a stream that ends without a result fails the step", async () => {
     // given a fake SDK whose stream ends without a result message
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { query } = fakeClaudeQuery(() => ({ text: ["hm"], endWithoutResult: true }))
@@ -702,20 +702,20 @@ test("a stream that ends without a result fails the step", async () => {
 
     // when the agent runs
     await expect(
-        testRun(loopy, async () => {
+        testRun(clankhouse, async () => {
             const worktree = await repository.worktree({ base: "main" })
             return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
         })
     ).rejects.toThrow("Claude agent stream ended without a result")
 
     // then the agent step is marked failed
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     expect(run.steps.find((step) => step.kind === "agent")!.status).toBe("failed")
 })
 
 test("claude agent step replay restores the worktree without re-invoking the SDK", async () => {
     // given a claude agent backed by a fake SDK and a publish step that initially fails
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { query, calls } = fakeClaudeQuery(() => ({
@@ -736,20 +736,20 @@ test("claude agent step replay restores the worktree without re-invoking the SDK
     const body = async () => {
         worktree = await repository.worktree({ base: "main" })
         await agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
-        return loopy.step("publish", z.string(), async () => publishImpl())
+        return clankhouse.step("publish", z.string(), async () => publishImpl())
     }
-    loopy.registerWorkflow("test-workflow", workflowOptions, body)
+    clankhouse.registerWorkflow("test-workflow", workflowOptions, body)
 
     // when the workflow runs and the publish step throws
-    const firstId = loopy.start("test-workflow", null)
-    await expect(runOutput(loopy, firstId)).rejects.toThrow("boom")
+    const firstId = clankhouse.start("test-workflow", null)
+    await expect(runOutput(clankhouse, firstId)).rejects.toThrow("boom")
     // and the worktree's uncommitted changes are discarded
     await runGit(worktree.path, ["reset", "--hard"])
     await runGit(worktree.path, ["clean", "-fd"])
     // and the workflow reruns from the publish step with a working implementation
     publishImpl = () => "published"
-    const secondId = loopy.rerun(firstId, { from: "publish" })
-    expect(await runOutput(loopy, secondId)).toBe("published")
+    const secondId = clankhouse.rerun(firstId, { from: "publish" })
+    expect(await runOutput(clankhouse, secondId)).toBe("published")
 
     // then the SDK is invoked exactly once
     expect(calls).toHaveLength(1)
@@ -762,19 +762,19 @@ test.skipIf(!process.env.CLAUDE_AGENT_LIVE_TEST)(
     { timeout: 180_000 },
     async () => {
         // given a real claude agent and a real worktree
-        const { loopy } = tempLoopy()
+        const { clankhouse } = tempClankHouse()
         const repo = await tempGitRepo()
         const repository = new GitRepository(repo.path)
         const agent = new ClaudeAgent({ model: "claude-sonnet-4-6" })
         let worktree!: Worktree
 
         // when it creates a two-line file and reports an array-root discriminated union
-        const result = await testRun(loopy, async () => {
+        const result = await testRun(clankhouse, async () => {
             worktree = await repository.worktree({ base: "main" })
             return agent.run("implement", {
                 prompt: `Create hello.txt with exactly these two lines:
 hello
-loopy
+clankhouse
 
 Report exactly two array entries in order: a file entry for hello.txt with lineCount 2, then a status entry with done true. Omit the optional note and warning fields.`,
                 output: liveOutputSchema,
@@ -787,12 +787,12 @@ Report exactly two array entries in order: a file entry for hello.txt with lineC
             { kind: "file", path: "hello.txt", lineCount: 2 },
             { kind: "status", done: true }
         ])
-        expect(fs.readFileSync(path.join(worktree.path, "hello.txt"), "utf8")).toBe("hello\nloopy\n")
+        expect(fs.readFileSync(path.join(worktree.path, "hello.txt"), "utf8")).toBe("hello\nclankhouse\n")
         // and the session succeeds with a valid worktree snapshot
-        const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+        const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
         const step = run.steps.find((candidate) => candidate.kind === "agent")!
         if (step.kind !== "agent") throw new Error("unreachable")
-        const session = await loopy.sessions.get(step.sessionId!)
+        const session = await clankhouse.sessions.get(step.sessionId!)
         expect(session.status).toBe("succeeded")
         expect(session.messages.length).toBeGreaterThan(2)
         expect((await worktree.git(["rev-parse", step.snapshotRef!])).exitCode).toBe(0)

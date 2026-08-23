@@ -2,18 +2,18 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { GitRepository, Worktree, type WorktreeReference } from "@loopy/core/git"
-import { runGit, tempGitRepo, tempLoopy, testRun } from "@loopy/test-utils"
+import { GitRepository, Worktree, type WorktreeReference } from "@clankhouse/core/git"
+import { runGit, tempGitRepo, tempClankHouse, testRun } from "@clankhouse/test-utils"
 
 test("worktree creation is a durable step publishing a random detached checkout", async () => {
-    // given a Loopy instance and fresh repository
-    const { loopy, dir } = tempLoopy()
+    // given a ClankHouse instance and fresh repository
+    const { clankhouse, dir } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     let worktree!: Worktree
 
     // when a workflow creates a worktree at main
-    await testRun(loopy, async () => {
+    await testRun(clankhouse, async () => {
         worktree = await repository.worktree({ base: "main" })
         return null
     })
@@ -26,7 +26,7 @@ test("worktree creation is a durable step publishing a random detached checkout"
     expect(await runGit(worktree.path, ["symbolic-ref", "-q", "HEAD"]).catch(() => "detached")).toBe("detached")
     expect(fs.existsSync(path.join(worktree.path, "README.md"))).toBe(true)
     // and the run exposes only its persisted candidate identity
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     expect(run.steps).toHaveLength(1)
     expect(run.steps[0]).toMatchObject({ key: "worktree", kind: "worktree", status: "succeeded" })
     const id = path.basename(path.dirname(worktree.path))
@@ -39,30 +39,32 @@ test("worktree creation is a durable step publishing a random detached checkout"
         seedOid: expect.stringMatching(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/)
     })
     expect(manifest.seedOid).toBe(await runGit(repo.path, ["rev-parse", "main^{commit}"]))
-    expect(await runGit(repo.path, ["rev-parse", `refs/loopy/worktrees/${id}/seed^{commit}`])).toBe(manifest.seedOid)
+    expect(await runGit(repo.path, ["rev-parse", `refs/clankhouse/worktrees/${id}/seed^{commit}`])).toBe(
+        manifest.seedOid
+    )
 })
 
 test("worktree keys obey durable prefix identity", async () => {
     // given a workflow repository
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const paths: string[] = []
 
     // when identical keys and default keys are created under different prefixes
-    await testRun(loopy, async () => {
-        paths.push((await loopy.prefix("one", () => repository.worktree({ base: "main", key: "review" }))).path)
-        paths.push((await loopy.prefix("two", () => repository.worktree({ base: "main", key: "review" }))).path)
-        paths.push((await loopy.prefix("one", () => repository.worktree({ base: "main", key: "other" }))).path)
-        paths.push((await loopy.prefix("three", () => repository.worktree({ base: "main" }))).path)
-        paths.push((await loopy.prefix("four", () => repository.worktree({ base: "main" }))).path)
+    await testRun(clankhouse, async () => {
+        paths.push((await clankhouse.prefix("one", () => repository.worktree({ base: "main", key: "review" }))).path)
+        paths.push((await clankhouse.prefix("two", () => repository.worktree({ base: "main", key: "review" }))).path)
+        paths.push((await clankhouse.prefix("one", () => repository.worktree({ base: "main", key: "other" }))).path)
+        paths.push((await clankhouse.prefix("three", () => repository.worktree({ base: "main" }))).path)
+        paths.push((await clankhouse.prefix("four", () => repository.worktree({ base: "main" }))).path)
         return null
     })
 
     // then every fully qualified durable key owns a distinct checkout
     expect(new Set(paths).size).toBe(paths.length)
     // and the recorded keys include their normal durable prefixes
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     expect(run.steps.map((step) => step.key)).toEqual([
         "one/worktree:review",
         "two/worktree:review",
@@ -77,13 +79,13 @@ test("worktree keys obey durable prefix identity", async () => {
 
 test("the same worktree key under one prefix is a duplicate step", async () => {
     // given a workflow repository
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
 
     // when one prefix requests the same key twice
-    const result = testRun(loopy, () =>
-        loopy.prefix("review", async () => {
+    const result = testRun(clankhouse, () =>
+        clankhouse.prefix("review", async () => {
             await repository.worktree({ base: "main", key: "candidate" })
             await repository.worktree({ base: "main", key: "candidate" })
             return null
@@ -106,14 +108,14 @@ test("worktree creation requires a workflow", async () => {
 
 test("replay restores the recorded checkout without resolving a moved branch or deleting ignored files", async () => {
     // given a completed creation step whose checkout is subsequently changed
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     repo.write(".gitignore", "dist/\n")
     await repo.commitAll("ignore build output")
     const repository = new GitRepository(repo.path)
     let worktree!: Worktree
     const firstPath = await testRun(
-        loopy,
+        clankhouse,
         async () => {
             worktree = await repository.worktree({ base: "main" })
             return worktree.path
@@ -127,11 +129,13 @@ test("replay restores the recorded checkout without resolving a moved branch or 
     fs.writeFileSync(path.join(worktree.path, "dist", "stale.txt"), "stale")
     repo.write("new-main.txt", "new")
     await repo.commitAll("move main")
-    const runId = (await loopy.runs.list())[0].id
-    loopy.db.prepare("UPDATE runs SET status = 'interrupted', output = NULL, ended_at = NULL WHERE id = ?").run(runId)
+    const runId = (await clankhouse.runs.list())[0].id
+    clankhouse.db
+        .prepare("UPDATE runs SET status = 'interrupted', output = NULL, ended_at = NULL WHERE id = ?")
+        .run(runId)
 
     // when the run replays worktree creation after main moved
-    const replayedPath = await testRun(loopy, async () => (await repository.worktree({ base: "main" })).path, {
+    const replayedPath = await testRun(clankhouse, async () => (await repository.worktree({ base: "main" })).path, {
         output: z.string()
     })
 
@@ -170,11 +174,11 @@ test("includeUncommitted copies the working tree and exact index state", async (
     const unstagedBefore = await runGit(repo.path, ["diff", "--binary"])
     const indexBefore = fs.readFileSync(path.join(repo.path, ".git", "index"))
     const repository = new GitRepository(repo.path)
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     let worktree!: Worktree
 
     // when a workflow includes the current uncommitted state
-    await testRun(loopy, async () => {
+    await testRun(clankhouse, async () => {
         worktree = await repository.worktree({ includeUncommitted: true })
         return null
     })
@@ -195,9 +199,11 @@ test("includeUncommitted copies the working tree and exact index state", async (
     fs.writeFileSync(path.join(worktree.path, "README.md"), "agent change")
     fs.writeFileSync(path.join(worktree.path, "agent.txt"), "agent")
     repo.write("later-source.txt", "later")
-    const runId = (await loopy.runs.list())[0].id
-    loopy.db.prepare("UPDATE runs SET status = 'interrupted', output = NULL, ended_at = NULL WHERE id = ?").run(runId)
-    await testRun(loopy, async () => {
+    const runId = (await clankhouse.runs.list())[0].id
+    clankhouse.db
+        .prepare("UPDATE runs SET status = 'interrupted', output = NULL, ended_at = NULL WHERE id = ?")
+        .run(runId)
+    await testRun(clankhouse, async () => {
         worktree = await repository.worktree({ includeUncommitted: true })
         return null
     })
@@ -210,7 +216,7 @@ test("includeUncommitted copies the working tree and exact index state", async (
 
 test("replay reconstructs a missing includeUncommitted checkout from its captured seed", async () => {
     // given a worktree seeded from distinct staged, unstaged and untracked source changes
-    const { loopy, dir } = tempLoopy()
+    const { clankhouse, dir } = tempClankHouse()
     const repo = await tempGitRepo()
     repo.write("README.md", "staged\n")
     await runGit(repo.path, ["add", "README.md"])
@@ -221,7 +227,7 @@ test("replay reconstructs a missing includeUncommitted checkout from its capture
     const unstagedBefore = await runGit(repo.path, ["diff", "--binary"])
     const repository = new GitRepository(repo.path)
     let worktree!: Worktree
-    await testRun(loopy, async () => {
+    await testRun(clankhouse, async () => {
         worktree = await repository.worktree({ includeUncommitted: true })
         return null
     })
@@ -229,18 +235,22 @@ test("replay reconstructs a missing includeUncommitted checkout from its capture
     const manifest = JSON.parse(fs.readFileSync(path.join(dir, "worktrees", id, "candidate.json"), "utf8"))
     await runGit(repo.path, ["worktree", "remove", "--force", worktree.path])
     repo.write("later.txt", "later")
-    const runId = (await loopy.runs.list())[0].id
-    loopy.db.prepare("UPDATE runs SET status = 'interrupted', output = NULL, ended_at = NULL WHERE id = ?").run(runId)
+    const runId = (await clankhouse.runs.list())[0].id
+    clankhouse.db
+        .prepare("UPDATE runs SET status = 'interrupted', output = NULL, ended_at = NULL WHERE id = ?")
+        .run(runId)
 
     // when the durable creation step replays without its checkout or registration
-    await testRun(loopy, async () => {
+    await testRun(clankhouse, async () => {
         worktree = await repository.worktree({ includeUncommitted: true })
         return null
     })
 
     // then it recreates the original source state from the pinned snapshot envelope
     expect(manifest.seedMode).toBe("uncommitted")
-    expect(await runGit(repo.path, ["rev-parse", `refs/loopy/worktrees/${id}/seed^{commit}`])).toBe(manifest.seedOid)
+    expect(await runGit(repo.path, ["rev-parse", `refs/clankhouse/worktrees/${id}/seed^{commit}`])).toBe(
+        manifest.seedOid
+    )
     expect(await runGit(worktree.path, ["status", "--porcelain"])).toBe(statusBefore)
     expect(await runGit(worktree.path, ["diff", "--cached", "--binary"])).toBe(cachedBefore)
     expect(await runGit(worktree.path, ["diff", "--binary"])).toBe(unstagedBefore)
@@ -260,11 +270,11 @@ test("includeUncommitted preserves an unmerged index and conflict working tree",
     const stagesBefore = await runGit(repo.path, ["ls-files", "--stage"])
     const conflictBefore = fs.readFileSync(path.join(repo.path, "README.md"), "utf8")
     const repository = new GitRepository(repo.path)
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     let worktree!: Worktree
 
     // when a workflow captures the uncommitted repository
-    await testRun(loopy, async () => {
+    await testRun(clankhouse, async () => {
         worktree = await repository.worktree({ includeUncommitted: true })
         return null
     })
@@ -276,12 +286,12 @@ test("includeUncommitted preserves an unmerged index and conflict working tree",
 
 test("replay reconstructs a missing recorded checkout from its immutable seed", async () => {
     // given a succeeded worktree creation whose checkout disappears while its registration remains
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     repo.write(".gitignore", "cache/\n")
     await repo.commitAll("ignore cache")
     const repository = new GitRepository(repo.path)
-    const worktreePath = await testRun(loopy, async () => (await repository.worktree({ base: "main" })).path, {
+    const worktreePath = await testRun(clankhouse, async () => (await repository.worktree({ base: "main" })).path, {
         output: z.string()
     })
     const seededHead = await runGit(worktreePath, ["rev-parse", "HEAD"])
@@ -290,11 +300,13 @@ test("replay reconstructs a missing recorded checkout from its immutable seed", 
     fs.rmSync(worktreePath, { recursive: true })
     repo.write("later.txt", "later")
     await repo.commitAll("move main")
-    const runId = (await loopy.runs.list())[0].id
-    loopy.db.prepare("UPDATE runs SET status = 'interrupted', output = NULL, ended_at = NULL WHERE id = ?").run(runId)
+    const runId = (await clankhouse.runs.list())[0].id
+    clankhouse.db
+        .prepare("UPDATE runs SET status = 'interrupted', output = NULL, ended_at = NULL WHERE id = ?")
+        .run(runId)
 
     // when the creation step replays
-    const replayedPath = await testRun(loopy, async () => (await repository.worktree({ base: "main" })).path, {
+    const replayedPath = await testRun(clankhouse, async () => (await repository.worktree({ base: "main" })).path, {
         output: z.string()
     })
 
@@ -308,24 +320,26 @@ test("replay reconstructs a missing recorded checkout from its immutable seed", 
 
 test("replay rejects a moved seed ref before modifying the checkout", async () => {
     // given a recorded worktree whose private seed ref is moved and whose checkout has new work
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     let worktree!: Worktree
-    await testRun(loopy, async () => {
+    await testRun(clankhouse, async () => {
         worktree = await repository.worktree({ base: "main" })
         return null
     })
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const reference = run.steps[0].output as WorktreeReference
     fs.writeFileSync(path.join(worktree.path, "keep.txt"), "keep")
     repo.write("later.txt", "later")
     await repo.commitAll("later")
-    await runGit(repo.path, ["update-ref", `refs/loopy/worktrees/${reference.id}/seed`, "main"])
-    loopy.db.prepare("UPDATE runs SET status = 'interrupted', output = NULL, ended_at = NULL WHERE id = ?").run(run.id)
+    await runGit(repo.path, ["update-ref", `refs/clankhouse/worktrees/${reference.id}/seed`, "main"])
+    clankhouse.db
+        .prepare("UPDATE runs SET status = 'interrupted', output = NULL, ended_at = NULL WHERE id = ?")
+        .run(run.id)
 
     // when the creation step replays
-    const replay = testRun(loopy, () => repository.worktree({ base: "main" }))
+    const replay = testRun(clankhouse, () => repository.worktree({ base: "main" }))
 
     // then it fails without resetting the existing checkout
     await expect(replay).rejects.toMatchObject({ code: "git_worktree_unavailable" })
@@ -334,22 +348,24 @@ test("replay rejects a moved seed ref before modifying the checkout", async () =
 
 test("replay rejects missing candidate metadata without modifying the checkout", async () => {
     // given a recorded worktree whose manifest is missing and whose checkout has new work
-    const { loopy, dir } = tempLoopy()
+    const { clankhouse, dir } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     let worktree!: Worktree
-    await testRun(loopy, async () => {
+    await testRun(clankhouse, async () => {
         worktree = await repository.worktree({ base: "main" })
         return null
     })
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const reference = run.steps[0].output as WorktreeReference
     fs.rmSync(path.join(dir, "worktrees", reference.id, "candidate.json"))
     fs.writeFileSync(path.join(worktree.path, "keep.txt"), "keep")
-    loopy.db.prepare("UPDATE runs SET status = 'interrupted', output = NULL, ended_at = NULL WHERE id = ?").run(run.id)
+    clankhouse.db
+        .prepare("UPDATE runs SET status = 'interrupted', output = NULL, ended_at = NULL WHERE id = ?")
+        .run(run.id)
 
     // when the creation step replays
-    const replay = testRun(loopy, () => repository.worktree({ base: "main" }))
+    const replay = testRun(clankhouse, () => repository.worktree({ base: "main" }))
 
     // then it fails without resetting the existing checkout
     await expect(replay).rejects.toMatchObject({ code: "git_worktree_unavailable" })
@@ -358,25 +374,27 @@ test("replay rejects missing candidate metadata without modifying the checkout",
 
 test("replay rejects candidate metadata belonging to another repository", async () => {
     // given a recorded worktree whose manifest repository identity is changed
-    const { loopy, dir } = tempLoopy()
+    const { clankhouse, dir } = tempClankHouse()
     const repo = await tempGitRepo()
     const other = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     let worktree!: Worktree
-    await testRun(loopy, async () => {
+    await testRun(clankhouse, async () => {
         worktree = await repository.worktree({ base: "main" })
         return null
     })
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const reference = run.steps[0].output as WorktreeReference
     const manifestPath = path.join(dir, "worktrees", reference.id, "candidate.json")
     const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"))
     fs.writeFileSync(manifestPath, JSON.stringify({ ...manifest, repositoryPath: fs.realpathSync(other.path) }))
     fs.writeFileSync(path.join(worktree.path, "keep.txt"), "keep")
-    loopy.db.prepare("UPDATE runs SET status = 'interrupted', output = NULL, ended_at = NULL WHERE id = ?").run(run.id)
+    clankhouse.db
+        .prepare("UPDATE runs SET status = 'interrupted', output = NULL, ended_at = NULL WHERE id = ?")
+        .run(run.id)
 
     // when the creation step replays
-    const replay = testRun(loopy, () => repository.worktree({ base: "main" }))
+    const replay = testRun(clankhouse, () => repository.worktree({ base: "main" }))
 
     // then it fails without resetting the existing checkout
     await expect(replay).rejects.toMatchObject({ code: "git_worktree_unavailable" })

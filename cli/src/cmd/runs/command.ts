@@ -18,9 +18,9 @@ import {
     type WatchRunResponse,
     type WatchSessionResponse,
     type WorkflowRun
-} from "@loopy/server/proto"
+} from "@clankhouse/server/proto"
 import { InvalidArgumentError, type Command } from "commander"
-import type { LoopyClient } from "../../client"
+import type { ClankHouseClient } from "../../client"
 import { CliError } from "../../errors"
 import { collectIncludes, includes, type IncludeOptions } from "../../includes"
 import { readJsonInput } from "../../io"
@@ -188,7 +188,7 @@ async function startWorkflowRun(
     command: Command,
     workflowName: string,
     inputFile: string | undefined
-): Promise<{ client: LoopyClient; response: StartRunResponse }> {
+): Promise<{ client: ClankHouseClient; response: StartRunResponse }> {
     const inputJson =
         inputFile === undefined ? undefined : await readJsonInput(inputFile, runtime.cwd, runtime.stdin, runtime.signal)
     const client = await runtime.client(command)
@@ -202,7 +202,7 @@ async function startWorkflowRun(
     return { client, response }
 }
 
-async function waitForRunCompletion(client: LoopyClient, runId: string, signal: AbortSignal): Promise<void> {
+async function waitForRunCompletion(client: ClankHouseClient, runId: string, signal: AbortSignal): Promise<void> {
     for await (const response of client.watchRun({ runId }, { signal })) {
         if (response.item.case === "run" && terminalStatus(response.item.value.status)) return
     }
@@ -276,7 +276,7 @@ async function getRun(runtime: Runtime, command: Command, runId: string, options
 }
 
 async function getRunSessions(
-    client: LoopyClient,
+    client: ClankHouseClient,
     response: GetRunResponse,
     signal: AbortSignal
 ): Promise<GetSessionResponse[]> {
@@ -323,7 +323,7 @@ function observeRunFailure(runtime: Runtime, response: WatchRunResponse | undefi
 async function emitWatchItem(
     runtime: Runtime,
     command: Command,
-    client: LoopyClient,
+    client: ClankHouseClient,
     output: Output,
     item: RunWatchItem,
     human: HumanRunWatch | undefined
@@ -363,7 +363,7 @@ async function emitWatchItem(
     observeRunFailure(runtime, item.kind === "run" ? item.message : undefined)
 }
 
-async function* watchRun(client: LoopyClient, options: RunWatchOptions): AsyncGenerator<RunWatchItem, void, void> {
+async function* watchRun(client: ClankHouseClient, options: RunWatchOptions): AsyncGenerator<RunWatchItem, void, void> {
     const controller = new AbortController()
     const abort = () => controller.abort(options.signal.reason)
     if (options.signal.aborted) abort()

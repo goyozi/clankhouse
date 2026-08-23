@@ -1,8 +1,8 @@
 import * as fs from "node:fs"
 import * as path from "node:path"
-import type { CodingAgent, CodingRunOptions } from "@loopy/core/ai/coding-agent"
-import { FakeCodingAgent } from "@loopy/core/ai/fake-agent"
-import { gate, runGit, tempGitRepo, tempLoopy, testRun } from "@loopy/test-utils"
+import type { CodingAgent, CodingRunOptions } from "@clankhouse/core/ai/coding-agent"
+import { FakeCodingAgent } from "@clankhouse/core/ai/fake-agent"
+import { gate, runGit, tempGitRepo, tempClankHouse, testRun } from "@clankhouse/test-utils"
 import { expect, test } from "vitest"
 import * as z from "zod"
 import { createDualReviewWorkflow } from "../src/workflow"
@@ -15,7 +15,7 @@ test("reviews captured uncommitted changes and synthesizes both findings without
     repo.write("README.md", "staged change\n")
     await runGit(repo.path, ["add", "README.md"])
     repo.write("untracked.txt", "untracked change\n")
-    const { loopy, dir } = tempLoopy()
+    const { clankhouse, dir } = tempClankHouse()
     const invocations: { agent: string; stepName: string; prompt: string }[] = []
     const reviewer1 = new FakeCodingAgent((stepName, prompt) => {
         invocations.push({ agent: "reviewer1", stepName, prompt })
@@ -32,7 +32,7 @@ test("reviews captured uncommitted changes and synthesizes both findings without
     const workflow = createDualReviewWorkflow({ reviewer1, reviewer2, synthesizer })
 
     // when the dual-review workflow runs with the nested repository path as input
-    const output = await testRun(loopy, () => workflow({ repositoryPath: path.join(repo.path, "nested") }), {
+    const output = await testRun(clankhouse, () => workflow({ repositoryPath: path.join(repo.path, "nested") }), {
         output: z.string()
     })
 
@@ -77,7 +77,7 @@ Reviewer2 finding
         }
     ])
     // and the durable worktree contains the staged and untracked source changes
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const worktreeStep = run.steps.find((step) => step.kind === "worktree")
     if (worktreeStep?.kind !== "worktree" || worktreeStep.output === undefined) throw new Error("unreachable")
     const checkout = path.join(dir, "worktrees", worktreeStep.output.id, "checkout")
@@ -102,7 +102,7 @@ Reviewer2 finding
 test("waits for both reviewers to finish before propagating a review failure", async () => {
     // given one reviewer fails while the other remains in progress
     const repo = await tempGitRepo()
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const reviewer2Started = gate()
     const reviewer2MayFinish = gate()
     let reviewer2Finished = false
@@ -129,7 +129,7 @@ test("waits for both reviewers to finish before propagating a review failure", a
     const workflow = createDualReviewWorkflow({ reviewer1, reviewer2, synthesizer })
 
     // when the workflow starts both reviewers
-    const workflowResult = testRun(loopy, () => workflow({ repositoryPath: repo.path }), { output: z.string() })
+    const workflowResult = testRun(clankhouse, () => workflow({ repositoryPath: repo.path }), { output: z.string() })
     let earlyFailure: unknown
     void workflowResult.catch((error: unknown) => {
         earlyFailure = error
@@ -152,7 +152,7 @@ test("waits for both reviewers to finish before propagating a review failure", a
 test("rewrites absolute worktree file references to the repository in the final result", async () => {
     // given a synthesis that references existing, missing, and deleted files in the durable worktree
     const repo = await tempGitRepo()
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const reviewer1 = new FakeCodingAgent(() => ({ changes: [], output: "Reviewer1 finding" }))
     const reviewer2 = new FakeCodingAgent(() => ({ changes: [], output: "Reviewer2 finding" }))
     const repositoryPath = fs.realpathSync(repo.path)
@@ -171,7 +171,7 @@ test("rewrites absolute worktree file references to the repository in the final 
     const workflow = createDualReviewWorkflow({ reviewer1, reviewer2, synthesizer })
 
     // when the workflow returns the synthesized review
-    const output = await testRun(loopy, () => workflow({ repositoryPath: repo.path }), { output: z.string() })
+    const output = await testRun(clankhouse, () => workflow({ repositoryPath: repo.path }), { output: z.string() })
 
     // then every worktree reference points to the source repository without checking file existence
     expect(output).toBe(

@@ -1,20 +1,20 @@
 import type { MessageInitShape } from "@bufbuild/protobuf"
 import { timestampFromDate } from "@bufbuild/protobuf/wkt"
-import type { Artifact as CoreArtifact } from "@loopy/core/artifacts"
+import type { Artifact as CoreArtifact } from "@clankhouse/core/artifacts"
 import type {
     AISession,
     AISessionMessage,
     CommonTool as CoreCommonTool,
     SessionMessageRole,
     ToolSource
-} from "@loopy/core/ai/sessions"
+} from "@clankhouse/core/ai/sessions"
 import type {
     ObservableRunStatus,
     ObservableStepStatus,
     Step as CoreStep,
     WorkflowRun as CoreWorkflowRun,
     WorkflowRunMetadata as CoreRunMetadata
-} from "@loopy/core/runs"
+} from "@clankhouse/core/runs"
 import {
     ArtifactKind,
     ArtifactSchema,
@@ -30,7 +30,7 @@ import {
     ToolResultStatus,
     ToolSourceKind,
     WorkflowRunSchema
-} from "./gen/loopy/server/v1/server_pb"
+} from "./gen/clankhouse/server/v1/server_pb"
 
 export function toRunMetadata(row: CoreRunMetadata): MessageInitShape<typeof RunMetadataSchema> {
     return {

@@ -1,8 +1,8 @@
 import OpenAI, { type ClientOptions } from "openai"
 import type { Response, ResponseOutputItem } from "openai/resources/responses/responses"
-import { BaseLanguageModel, type LanguageModelInvocation } from "@loopy/core/ai/base-llm"
-import type { SessionRecorder } from "@loopy/core/ai/sessions"
-import { LoopyError } from "@loopy/core/errors"
+import { BaseLanguageModel, type LanguageModelInvocation } from "@clankhouse/core/ai/base-llm"
+import type { SessionRecorder } from "@clankhouse/core/ai/sessions"
+import { ClankHouseError } from "@clankhouse/core/errors"
 
 export type OpenAIModelOptions = {
     model: string
@@ -35,13 +35,13 @@ export class OpenAIModel extends BaseLanguageModel {
             const output = recordOutput(invocation.session, response)
             requireCompleted(response)
             if (output.refusals.length > 0) {
-                throw new LoopyError(
+                throw new ClankHouseError(
                     "llm_response_failed",
                     `OpenAI refused to produce a response: ${output.refusals.join("\n")}`
                 )
             }
             if (output.assistantMessages.length === 0) {
-                throw new LoopyError("llm_response_invalid", "OpenAI response did not contain text output")
+                throw new ClankHouseError("llm_response_invalid", "OpenAI response did not contain text output")
             }
             return output.assistantMessages
         })
@@ -75,7 +75,7 @@ function recordOutput(
             }
             if (text.length > 0) assistantMessages.push(text.join(""))
         } else {
-            throw new LoopyError(
+            throw new ClankHouseError(
                 "llm_response_invalid",
                 `OpenAI returned unexpected output item for a tool-free request: ${output.type}`
             )
@@ -92,17 +92,17 @@ function reasoningText(output: Extract<ResponseOutputItem, { type: "reasoning" }
 function requireCompleted(response: Response): void {
     if (response.error !== null) {
         const detail = response.error.message ?? response.error.code
-        throw new LoopyError("llm_response_failed", `OpenAI response failed: ${detail}`)
+        throw new ClankHouseError("llm_response_failed", `OpenAI response failed: ${detail}`)
     }
     if (response.status === "completed") return
     if (response.status === "incomplete" || response.status === "queued" || response.status === "in_progress") {
         const detail = response.incomplete_details?.reason ?? response.status
-        throw new LoopyError("llm_response_incomplete", `OpenAI response was incomplete: ${detail}`)
+        throw new ClankHouseError("llm_response_incomplete", `OpenAI response was incomplete: ${detail}`)
     }
     if (response.status === "failed" || response.status === "cancelled") {
-        throw new LoopyError("llm_response_failed", `OpenAI response failed: ${response.status}`)
+        throw new ClankHouseError("llm_response_failed", `OpenAI response failed: ${response.status}`)
     }
     if (response.status === undefined) {
-        throw new LoopyError("llm_response_invalid", "OpenAI response did not include a status")
+        throw new ClankHouseError("llm_response_invalid", "OpenAI response did not include a status")
     }
 }

@@ -1,5 +1,5 @@
 {
-    "name": "@loopy/anthropic",
+    "name": "@clankhouse/anthropic",
     "version": "1.0.0",
     "type": "module",
     "main": "./src/index.ts",
@@ -12,10 +12,10 @@
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.115.0",
-        "@loopy/core": "workspace:*",
+        "@clankhouse/core": "workspace:*",
         "zod": "catalog:"
     },
     "devDependencies": {
-        "@loopy/test-utils": "workspace:*"
+        "@clankhouse/test-utils": "workspace:*"
     }
 }

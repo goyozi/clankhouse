@@ -1,26 +1,26 @@
 import { PassThrough, Readable } from "node:stream"
 import { timestampFromDate } from "@bufbuild/protobuf/wkt"
-import type { SessionRecorder } from "@loopy/core/ai/sessions"
-import { LoopyError } from "@loopy/core/errors"
-import type { Loopy } from "@loopy/core/loopy"
-import { listen, type LoopyServer } from "@loopy/server"
-import { gate, tempLoopy, waitForRun } from "@loopy/test-utils"
+import type { SessionRecorder } from "@clankhouse/core/ai/sessions"
+import { ClankHouseError } from "@clankhouse/core/errors"
+import type { ClankHouse } from "@clankhouse/core/clankhouse"
+import { listen, type ClankHouseServer } from "@clankhouse/server"
+import { gate, tempClankHouse, waitForRun } from "@clankhouse/test-utils"
 import { expect, onTestFinished, test } from "vitest"
 import * as z from "zod"
 import { runCli } from "../../../src"
 import { executionTiming } from "../../../src/output"
 
-async function testServer(loopy: Loopy): Promise<LoopyServer> {
-    const server = await listen(loopy, { port: 0 })
+async function testServer(clankhouse: ClankHouse): Promise<ClankHouseServer> {
+    const server = await listen(clankhouse, { port: 0 })
     onTestFinished(() => server.close())
     return server
 }
 
-function serverEnv(server: LoopyServer): NodeJS.ProcessEnv {
+function serverEnv(server: ClankHouseServer): NodeJS.ProcessEnv {
     return {
         ...process.env,
-        LOOPY_SERVER_URL: server.url,
-        LOOPY_API_KEY: server.apiKey
+        CLANK_SERVER_URL: server.url,
+        CLANK_API_KEY: server.apiKey
     }
 }
 
@@ -96,10 +96,10 @@ function twoDigits(value: number): string {
 
 test("runs get command output matches designs", async () => {
     // given completed detailed, empty, and failed workflow runs
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     let sessionId = ""
     let emptySessionId = ""
-    loopy.registerWorkflow(
+    clankhouse.registerWorkflow(
         "compact-snapshot",
         {
             input: z.null(),
@@ -107,12 +107,12 @@ test("runs get command output matches designs", async () => {
             key: () => "compact-key"
         },
         async () => {
-            const verdict = await loopy.engine.executeStep({
+            const verdict = await clankhouse.engine.executeStep({
                 kind: "agent",
                 name: "review",
                 schema: z.string(),
                 execute: async (handle) => {
-                    const session = loopy.sessions.create({
+                    const session = clankhouse.sessions.create({
                         kind: "coding-agent",
                         client: "fixture-agent",
                         provider: "fixture-provider",
@@ -120,7 +120,7 @@ test("runs get command output matches designs", async () => {
                     })
                     sessionId = session.id
                     handle.set("session_id", session.id)
-                    handle.set("snapshot_ref", "refs/loopy/review")
+                    handle.set("snapshot_ref", "refs/clankhouse/review")
                     session.addMessage("user", "Review this\n\ncarefully")
                     session.addToolCall({
                         id: "call-1",
@@ -135,7 +135,7 @@ test("runs get command output matches designs", async () => {
                     return "approve"
                 }
             })
-            await loopy.engine.executeStep({
+            await clankhouse.engine.executeStep({
                 kind: "event",
                 name: "approval",
                 schema: z.object({ approved: z.boolean() }),
@@ -144,12 +144,12 @@ test("runs get command output matches designs", async () => {
                     return { approved: true }
                 }
             })
-            await loopy.engine.executeStep({
+            await clankhouse.engine.executeStep({
                 kind: "llm",
                 name: "empty-session",
                 schema: z.void(),
                 execute: async (handle) => {
-                    const session = loopy.sessions.create({
+                    const session = clankhouse.sessions.create({
                         kind: "llm",
                         client: "fixture-llm",
                         provider: "fixture-provider",
@@ -160,31 +160,31 @@ test("runs get command output matches designs", async () => {
                     session.succeed()
                 }
             })
-            const artifact = await loopy.artifacts.writeText("summary", verdict, "text/plain")
+            const artifact = await clankhouse.artifacts.writeText("summary", verdict, "text/plain")
             return { verdict, artifactId: artifact.id }
         }
     )
-    loopy.registerWorkflow(
+    clankhouse.registerWorkflow(
         "empty-snapshot",
         { input: z.null(), output: z.string(), key: () => "empty-key" },
         async () => "ready"
     )
-    loopy.registerWorkflow(
+    clankhouse.registerWorkflow(
         "failed-snapshot",
         { input: z.null(), output: z.void(), key: () => "failed-key" },
         async () => {
-            await loopy.step("explode", z.void(), async () => {
-                throw new LoopyError("event_sources_empty", "coded failure")
+            await clankhouse.step("explode", z.void(), async () => {
+                throw new ClankHouseError("event_sources_empty", "coded failure")
             })
         }
     )
-    const detailedRunId = loopy.start("compact-snapshot", null)
-    const emptyRunId = loopy.start("empty-snapshot", null)
-    const failedRunId = loopy.start("failed-snapshot", null)
+    const detailedRunId = clankhouse.start("compact-snapshot", null)
+    const emptyRunId = clankhouse.start("empty-snapshot", null)
+    const failedRunId = clankhouse.start("failed-snapshot", null)
     const [detailedRun, emptyRun, failedRun] = await Promise.all([
-        waitForRun(loopy, detailedRunId),
-        waitForRun(loopy, emptyRunId),
-        waitForRun(loopy, failedRunId)
+        waitForRun(clankhouse, detailedRunId),
+        waitForRun(clankhouse, emptyRunId),
+        waitForRun(clankhouse, failedRunId)
     ])
     const review = detailedRun.steps.find((step) => step.key === "review")!
     const approval = detailedRun.steps.find((step) => step.key === "approval")!
@@ -192,7 +192,7 @@ test("runs get command output matches designs", async () => {
     const artifactStep = detailedRun.steps.find((step) => step.kind === "artifact")!
     const artifact = detailedRun.artifacts[0]!
     const failedStep = failedRun.steps[0]!
-    const env = serverEnv(await testServer(loopy))
+    const env = serverEnv(await testServer(clankhouse))
 
     // when the runs are requested in compact and expanded human-readable forms
     const detailed = await runCliCommand(["runs", "get", detailedRunId, "--include", "sessions"], env)
@@ -225,7 +225,7 @@ Steps
          tool       read README.md
          assistant  approve
 
-     Snapshot refs/loopy/review
+     Snapshot refs/clankhouse/review
 
      Output
        "approve"
@@ -316,20 +316,20 @@ Artifacts
 
 test("runs get command omits an empty active step count", async () => {
     // given a running workflow with no active step
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const entered = gate()
     const finish = gate()
     onTestFinished(finish.release)
-    loopy.registerWorkflow("step-gap", { input: z.null(), output: z.void(), key: () => "step-gap" }, async () => {
+    clankhouse.registerWorkflow("step-gap", { input: z.null(), output: z.void(), key: () => "step-gap" }, async () => {
         entered.release()
         await finish.released
     })
-    const runId = loopy.start("step-gap", null)
+    const runId = clankhouse.start("step-gap", null)
     await entered.released
-    const run = await loopy.runs.get(runId)
+    const run = await clankhouse.runs.get(runId)
 
     // when the running workflow is rendered
-    const output = await runCliCommand(["runs", "get", runId], serverEnv(await testServer(loopy)))
+    const output = await runCliCommand(["runs", "get", runId], serverEnv(await testServer(clankhouse)))
 
     // then the header does not report zero active steps
     expect(output).toBe(`Run ${runId}
@@ -346,13 +346,13 @@ Artifacts
 
 test("runs watch command output matches scoped activity designs", async () => {
     // given a real run with two active agent steps and externally controlled sessions
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const sessionsReady = gate()
     const firstDone = gate()
     const secondDone = gate()
     let firstSession: SessionRecorder | undefined
     let secondSession: SessionRecorder | undefined
-    loopy.registerWorkflow(
+    clankhouse.registerWorkflow(
         "scoped-activity",
         {
             input: z.null(),
@@ -361,12 +361,12 @@ test("runs watch command output matches scoped activity designs", async () => {
         },
         async () => {
             const [first, second] = await Promise.all([
-                loopy.engine.executeStep({
+                clankhouse.engine.executeStep({
                     kind: "agent",
                     name: "code-review",
                     schema: z.object({ verdict: z.string() }),
                     execute: async (handle) => {
-                        const session = loopy.sessions.create({
+                        const session = clankhouse.sessions.create({
                             kind: "coding-agent",
                             client: "fixture-review",
                             provider: "fixture",
@@ -380,12 +380,12 @@ test("runs watch command output matches scoped activity designs", async () => {
                         return { verdict: "approve" }
                     }
                 }),
-                loopy.engine.executeStep({
+                clankhouse.engine.executeStep({
                     kind: "agent",
                     name: "test-review",
                     schema: z.object({ tests: z.number() }),
                     execute: async (handle) => {
-                        const session = loopy.sessions.create({
+                        const session = clankhouse.sessions.create({
                             kind: "coding-agent",
                             client: "fixture-test",
                             provider: "fixture",
@@ -407,9 +407,9 @@ test("runs watch command output matches scoped activity designs", async () => {
         firstDone.release()
         secondDone.release()
     })
-    const runId = loopy.start("scoped-activity", null)
+    const runId = clankhouse.start("scoped-activity", null)
     await sessionsReady.released
-    const env = serverEnv(await testServer(loopy))
+    const env = serverEnv(await testServer(clankhouse))
 
     // when messages and completions interleave while compact and verbose human watches are running
     const watch = startCliCommand(["runs", "watch", runId, "--include", "sessions"], env)
@@ -440,11 +440,11 @@ test("runs watch command output matches scoped activity designs", async () => {
     secondDone.release()
     const code = await watch.done
     const verboseCode = await verboseWatch.done
-    const run = await loopy.runs.get(runId)
+    const run = await clankhouse.runs.get(runId)
     const firstStep = run.steps.find((step) => step.key === "code-review")!
     const secondStep = run.steps.find((step) => step.key === "test-review")!
-    const storedFirst = await loopy.sessions.get(firstSession!.id)
-    const storedSecond = await loopy.sessions.get(secondSession!.id)
+    const storedFirst = await clankhouse.sessions.get(firstSession!.id)
+    const storedSecond = await clankhouse.sessions.get(secondSession!.id)
 
     // then the exact output uses owner blocks, aligned multiline messages, and compact terminal details
     expect(code).toBe(0)
@@ -505,30 +505,30 @@ Activity
 
 test("runs watch command output scopes step and run failures", async () => {
     // given a watched run parked inside a step that will fail
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const entered = gate()
     const fail = gate()
     onTestFinished(fail.release)
-    loopy.registerWorkflow(
+    clankhouse.registerWorkflow(
         "failed-activity",
         { input: z.null(), output: z.void(), key: () => "failed-key" },
         async () => {
-            await loopy.step("draft-notes", z.void(), async () => {
+            await clankhouse.step("draft-notes", z.void(), async () => {
                 entered.release()
                 await fail.released
-                throw new LoopyError("event_sources_empty", "Repository checks failed")
+                throw new ClankHouseError("event_sources_empty", "Repository checks failed")
             })
         }
     )
-    const runId = loopy.start("failed-activity", null)
+    const runId = clankhouse.start("failed-activity", null)
     await entered.released
-    const watch = startCliCommand(["runs", "watch", runId], serverEnv(await testServer(loopy)))
+    const watch = startCliCommand(["runs", "watch", runId], serverEnv(await testServer(clankhouse)))
 
     // when the parked step is allowed to fail
     await waitForOutput(watch.stdout, "custom · running")
     fail.release()
     const code = await watch.done
-    const run = await loopy.runs.get(runId)
+    const run = await clankhouse.runs.get(runId)
     const step = run.steps[0]!
 
     // then both failure scopes are appended and the command exits unsuccessfully
@@ -552,21 +552,21 @@ Activity
 
 test("runs get --watch command output matches snapshot and scoped update designs", async () => {
     // given a running agent step with included multiline session history
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const ready = gate()
     const finish = gate()
     let session: SessionRecorder | undefined
     onTestFinished(finish.release)
-    loopy.registerWorkflow(
+    clankhouse.registerWorkflow(
         "snapshot-activity",
         { input: z.null(), output: z.string(), key: () => "snapshot-key" },
         async () =>
-            loopy.engine.executeStep({
+            clankhouse.engine.executeStep({
                 kind: "agent",
                 name: "review",
                 schema: z.string(),
                 execute: async (handle) => {
-                    session = loopy.sessions.create({
+                    session = clankhouse.sessions.create({
                         kind: "coding-agent",
                         client: "fixture-agent",
                         provider: "fixture",
@@ -581,11 +581,11 @@ test("runs get --watch command output matches snapshot and scoped update designs
                 }
             })
     )
-    const runId = loopy.start("snapshot-activity", null)
+    const runId = clankhouse.start("snapshot-activity", null)
     await ready.released
     const watch = startCliCommand(
         ["runs", "get", runId, "--include", "sessions", "--watch"],
-        serverEnv(await testServer(loopy))
+        serverEnv(await testServer(clankhouse))
     )
 
     // when a later assistant message completes the snapshotted step and run
@@ -594,9 +594,9 @@ test("runs get --watch command output matches snapshot and scoped update designs
     await waitForOutput(watch.stdout, "with no blockers")
     finish.release()
     const code = await watch.done
-    const run = await loopy.runs.get(runId)
+    const run = await clankhouse.runs.get(runId)
     const step = run.steps[0]!
-    const storedSession = await loopy.sessions.get(session!.id)
+    const storedSession = await clankhouse.sessions.get(session!.id)
 
     // then the initial active snapshot is followed by updates without a repeated final snapshot
     expect(code).toBe(0)

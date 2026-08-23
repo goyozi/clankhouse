@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import * as z from "zod"
-import { LoopyError } from "../errors"
+import { ClankHouseError } from "../errors"
 import { jsonSchema } from "../json-schema"
 
 export type InstructedOutputMode = "coding-agent" | "llm"
@@ -41,7 +41,7 @@ export function prepareInstructedOutput(
 }
 
 function nonceTags(): { openingTag: string; closingTag: string } {
-    const tagName = `loopy_structured_output_${randomUUID().replaceAll("-", "_")}`
+    const tagName = `clankhouse_structured_output_${randomUUID().replaceAll("-", "_")}`
     return { openingTag: `<${tagName}>`, closingTag: `</${tagName}>` }
 }
 
@@ -93,7 +93,7 @@ Your entire final reply should contain only the opening nonce tag, the JSON answ
 function extractTaggedOutput(assistantMessages: readonly string[], openingTag: string, closingTag: string): string {
     const blocks = assistantMessages.flatMap((message) => tagBlocks(message, openingTag, closingTag))
     if (blocks.length === 0) {
-        throw new LoopyError(
+        throw new ClankHouseError(
             "ai_output_missing",
             "AI did not return the instructed output tags in any assistant message"
         )
@@ -124,7 +124,7 @@ function parseJson(text: string): unknown {
     try {
         return JSON.parse(text)
     } catch (error) {
-        throw new LoopyError("ai_output_invalid", "AI returned invalid JSON between the instructed output tags", {
+        throw new ClankHouseError("ai_output_invalid", "AI returned invalid JSON between the instructed output tags", {
             cause: error
         })
     }

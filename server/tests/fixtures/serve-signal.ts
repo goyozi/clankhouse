@@ -1,8 +1,8 @@
-import { loopy as defaultLoopy } from "@loopy/core"
+import { clankhouse as defaultClankHouse } from "@clankhouse/core"
 import * as z from "zod"
 import { serve } from "../../src"
 
-const instance = defaultLoopy()
+const instance = defaultClankHouse()
 instance.registerWorkflow(
     "waiting",
     { input: z.null(), output: z.number(), key: () => "waiting" },

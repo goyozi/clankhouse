@@ -3,10 +3,10 @@ import * as os from "node:os"
 import * as path from "node:path"
 import { createClient, type Client, type Interceptor } from "@connectrpc/connect"
 import { createConnectTransport } from "@connectrpc/connect-node"
-import { LoopyService } from "@loopy/server/proto"
+import { ClankHouseService } from "@clankhouse/server/proto"
 import { CliError } from "./errors"
 
-export type LoopyClient = Client<typeof LoopyService>
+export type ClankHouseClient = Client<typeof ClankHouseService>
 
 export type ConnectionOptions = {
     server?: string
@@ -14,15 +14,15 @@ export type ConnectionOptions = {
     env: NodeJS.ProcessEnv
 }
 
-export async function connect(options: ConnectionOptions): Promise<LoopyClient> {
-    const baseUrl = resolveServer(options.server ?? options.env.LOOPY_SERVER_URL)
+export async function connect(options: ConnectionOptions): Promise<ClankHouseClient> {
+    const baseUrl = resolveServer(options.server ?? options.env.CLANK_SERVER_URL)
     const apiKey = await resolveApiKey(options.apiKey, options.env)
     const bearer: Interceptor = (next) => async (request) => {
         request.header.set("authorization", `Bearer ${apiKey}`)
         return next(request)
     }
     return createClient(
-        LoopyService,
+        ClankHouseService,
         createConnectTransport({
             httpVersion: "1.1",
             baseUrl,
@@ -37,16 +37,16 @@ function resolveServer(value: string | undefined): string {
     try {
         url = new URL(candidate)
     } catch (cause) {
-        throw new CliError("configuration", `Invalid Loopy server URL: ${candidate}`, { cause })
+        throw new CliError("configuration", `Invalid ClankHouse server URL: ${candidate}`, { cause })
     }
     if (url.protocol !== "http:" && url.protocol !== "https:") {
-        throw new CliError("configuration", "Loopy server URL must use http or https")
+        throw new CliError("configuration", "ClankHouse server URL must use http or https")
     }
     if (url.protocol === "http:" && !isLoopbackHost(url.hostname)) {
-        throw new CliError("configuration", "Loopy server URL must use https for non-loopback hosts")
+        throw new CliError("configuration", "ClankHouse server URL must use https for non-loopback hosts")
     }
     if (url.username.length > 0 || url.password.length > 0) {
-        throw new CliError("configuration", "Loopy server URL must not contain credentials")
+        throw new CliError("configuration", "ClankHouse server URL must not contain credentials")
     }
     return url.toString().replace(/\/$/, "")
 }
@@ -59,32 +59,33 @@ function isLoopbackHost(hostname: string): boolean {
 }
 
 async function resolveApiKey(explicit: string | undefined, env: NodeJS.ProcessEnv): Promise<string> {
-    const configured = explicit ?? env.LOOPY_API_KEY
+    const configured = explicit ?? env.CLANK_API_KEY
     if (configured !== undefined) {
-        if (configured.length === 0) throw new CliError("configuration", "Loopy API key must not be empty")
+        if (configured.length === 0) throw new CliError("configuration", "ClankHouse API key must not be empty")
         return configured
     }
 
     const home = env.HOME ?? env.USERPROFILE ?? os.homedir()
-    const loopyDir = env.LOOPY_DIR ?? path.join(home, ".loopy")
-    const file = path.join(loopyDir, "credentials.json")
+    const clankhouseDir = env.CLANKHOUSE_DIR ?? path.join(home, ".clankhouse")
+    const file = path.join(clankhouseDir, "credentials.json")
     let text: string
     try {
         const stat = await lstat(file)
-        if (!stat.isFile()) throw new CliError("configuration", `Loopy credentials are not a regular file: ${file}`)
+        if (!stat.isFile())
+            throw new CliError("configuration", `ClankHouse credentials are not a regular file: ${file}`)
         text = await readFile(file, "utf8")
     } catch (cause) {
         if (cause instanceof CliError) throw cause
-        throw new CliError("configuration", `Unable to read Loopy credentials from ${file}`, { cause })
+        throw new CliError("configuration", `Unable to read ClankHouse credentials from ${file}`, { cause })
     }
     let value: unknown
     try {
         value = JSON.parse(text)
     } catch (cause) {
-        throw new CliError("configuration", `Loopy credentials are malformed: ${file}`, { cause })
+        throw new CliError("configuration", `ClankHouse credentials are malformed: ${file}`, { cause })
     }
     if (!isCredentials(value)) {
-        throw new CliError("configuration", `Loopy credentials are malformed: ${file}`)
+        throw new CliError("configuration", `ClankHouse credentials are malformed: ${file}`)
     }
     return value.apiKey
 }

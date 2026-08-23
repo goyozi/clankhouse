@@ -1,13 +1,13 @@
 import * as fs from "node:fs"
 import * as path from "node:path"
 import { Readable } from "node:stream"
-import { tempDir } from "@loopy/test-utils"
+import { tempDir } from "@clankhouse/test-utils"
 import { expect, test } from "vitest"
 import { copyWithoutClobber, readJsonInput } from "../src/io"
 
 test("reading JSON input from a file respects cancellation", async () => {
     // given a valid JSON input file and an already-cancelled operation
-    const cwd = tempDir("loopy-input-")
+    const cwd = tempDir("clankhouse-input-")
     fs.writeFileSync(path.join(cwd, "input.json"), "{}")
     const controller = new AbortController()
     controller.abort()
@@ -24,7 +24,7 @@ test("reading JSON input from a file respects cancellation", async () => {
 
 test("copy without clobber does not start its source when the destination exists", async () => {
     // given an existing destination and an observable lazy byte source
-    const destination = path.join(tempDir("loopy-copy-"), "existing.txt")
+    const destination = path.join(tempDir("clankhouse-copy-"), "existing.txt")
     fs.writeFileSync(destination, "existing")
     let starts = 0
     const source = () => {

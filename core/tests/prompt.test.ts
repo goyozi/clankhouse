@@ -2,12 +2,12 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import { pathToFileURL } from "node:url"
 import { expect, test } from "vitest"
-import { renderPrompt } from "@loopy/core/ai/prompt"
-import { tempDir } from "@loopy/test-utils"
+import { renderPrompt } from "@clankhouse/core/ai/prompt"
+import { tempDir } from "@clankhouse/test-utils"
 
 test("relative prompt files resolve against the project root", async () => {
     // given a temp project with a prompts/greet.md template file
-    const project = tempDir("loopy-project-")
+    const project = tempDir("clankhouse-project-")
     fs.writeFileSync(path.join(project, "package.json"), "{}")
     fs.mkdirSync(path.join(project, "prompts"))
     fs.writeFileSync(path.join(project, "prompts", "greet.md"), "Hello {{name}}!")
@@ -31,7 +31,7 @@ test("relative prompt files resolve against the project root", async () => {
 
 test("template variables are not HTML-escaped", async () => {
     // given a prompt template interpolating a value into text with HTML-significant characters
-    const dir = tempDir("loopy-prompt-escape-")
+    const dir = tempDir("clankhouse-prompt-escape-")
     const file = path.join(dir, "p.md")
     fs.writeFileSync(file, 'Dear {{name}}, use <tag> & "quotes"')
     // when rendering with a value containing &, <, >, ' and "
@@ -42,7 +42,7 @@ test("template variables are not HTML-escaped", async () => {
 
 test("file URL prompt files resolve relative to an installed workflow module", async () => {
     // given an installed workflow package with a template next to its module directory
-    const project = tempDir("loopy-package-prompt-")
+    const project = tempDir("clankhouse-package-prompt-")
     const packageDir = path.join(project, "node_modules", "@scope", "workflow")
     const templateDir = path.join(packageDir, "templates")
     fs.mkdirSync(templateDir, { recursive: true })
@@ -61,7 +61,7 @@ test("file URL prompt files resolve relative to an installed workflow module", a
 
 test("changed prompt files are re-read", async () => {
     // given a prompt file with initial content
-    const dir = tempDir("loopy-prompt-cache-")
+    const dir = tempDir("clankhouse-prompt-cache-")
     const file = path.join(dir, "p.md")
     fs.writeFileSync(file, "one {{x}}")
     // when rendering it the first time

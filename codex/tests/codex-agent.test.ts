@@ -2,9 +2,9 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { CodexAgent } from "@loopy/codex"
-import { GitRepository, Worktree } from "@loopy/core/git"
-import { uniqueName } from "@loopy/core/util"
+import { CodexAgent } from "@clankhouse/codex"
+import { GitRepository, Worktree } from "@clankhouse/core/git"
+import { uniqueName } from "@clankhouse/core/util"
 import {
     instructedSchema,
     instructedTags,
@@ -14,9 +14,9 @@ import {
     taggedOutput,
     taggedStringOutput,
     tempGitRepo,
-    tempLoopy,
+    tempClankHouse,
     testRun
-} from "@loopy/test-utils"
+} from "@clankhouse/test-utils"
 import { fakeCodex } from "./fake-codex-sdk"
 
 const outputSchema = z.object({ done: z.boolean() })
@@ -35,7 +35,7 @@ const liveOutputSchema = z.array(
 
 test("CodexAgent maps the SDK conversation to the session and snapshots the worktree", async () => {
     // given a fake SDK scripted with reasoning, a file change and structured output
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { codexFactory } = fakeCodex(() => ({
@@ -59,7 +59,7 @@ test("CodexAgent maps the SDK conversation to the session and snapshots the work
     let worktree!: Worktree
 
     // when the agent runs inside a durable step
-    const result = await testRun(loopy, async () => {
+    const result = await testRun(clankhouse, async () => {
         worktree = await repository.worktree({ base: "main" })
         return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
     })
@@ -68,16 +68,16 @@ test("CodexAgent maps the SDK conversation to the session and snapshots the work
     expect(result).toEqual({ done: true })
     expect(fs.readFileSync(path.join(worktree.path, "src/hello.ts"), "utf8")).toBe("export const hi = 1\n")
     // and the durable step stores a valid worktree snapshot
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     expect(step.kind).toBe("agent")
     if (step.kind !== "agent") throw new Error("unreachable")
     expect(step.snapshotRef).toBe(
-        `refs/loopy/agent/${uniqueName("test-workflow/test-key")}/1/${uniqueName("implement")}`
+        `refs/clankhouse/agent/${uniqueName("test-workflow/test-key")}/1/${uniqueName("implement")}`
     )
     expect((await worktree.git(["rev-parse", step.snapshotRef!])).exitCode).toBe(0)
     // and the session records client and provider metadata and the normalized conversation
-    const session = await loopy.sessions.get(step.sessionId!)
+    const session = await clankhouse.sessions.get(step.sessionId!)
     expect(session.client).toBe("codex")
     expect(session.provider).toBe("openai")
     expect(session.model).toBe("gpt-5.4")
@@ -112,7 +112,7 @@ test("CodexAgent maps the SDK conversation to the session and snapshots the work
 
 test("CodexAgent runs a void-output step without instructed output framing", async () => {
     // given a fake SDK that applies a file change and returns no structured output
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { codexFactory, runCalls } = fakeCodex(() => ({
@@ -133,7 +133,7 @@ test("CodexAgent runs a void-output step without instructed output framing", asy
 
     // when the agent runs with a void output schema
     const result = await testRun(
-        loopy,
+        clankhouse,
         async () => {
             worktree = await repository.worktree({ base: "main" })
             return agent.run("implement", { prompt: "do it", output: z.void(), worktree })
@@ -146,16 +146,16 @@ test("CodexAgent runs a void-output step without instructed output framing", asy
     expect(runCalls[0].input).toBe("do it")
     // and the coding work is applied and the step and session still succeed with a snapshot
     expect(fs.readFileSync(path.join(worktree.path, "src/hello.ts"), "utf8")).toBe("export const hi = 1\n")
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
     expect((await worktree.git(["rev-parse", step.snapshotRef!])).exitCode).toBe(0)
-    expect((await loopy.sessions.get(step.sessionId!)).status).toBe("succeeded")
+    expect((await clankhouse.sessions.get(step.sessionId!)).status).toBe("succeeded")
 })
 
 test("CodexAgent returns an earlier tagged string after an untagged monitor message", async () => {
     // given a fake SDK emitting a tagged answer before a final monitor notification
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const worktree = new Worktree(repo.path)
     const answer = "  All 8 issues stand as written.  "
@@ -175,7 +175,7 @@ test("CodexAgent returns an earlier tagged string after an untagged monitor mess
     const agent = new CodexAgent({ model: "gpt-5.4", codexFactory })
 
     // when the agent runs with a checked and branded root string schema
-    const result = await testRun(loopy, () =>
+    const result = await testRun(clankhouse, () =>
         agent.run("report", {
             prompt: "report naturally",
             output: z.string().min(1).brand<"AgentReport">(),
@@ -188,11 +188,11 @@ test("CodexAgent returns an earlier tagged string after an untagged monitor mess
     expect(runCalls[0].input).not.toMatch(/JSON/i)
     expect(result).toBe(answer)
     // and both assistant messages remain recorded while only the extracted answer is persisted
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
     expect(step.outputJson).toBe(JSON.stringify(answer))
-    const messages = sessionTextMessages((await loopy.sessions.get(step.sessionId!)).messages)
+    const messages = sessionTextMessages((await clankhouse.sessions.get(step.sessionId!)).messages)
     expect(messages.slice(-2).map((message) => message.content)).toEqual([
         taggedStringOutput(String(runCalls[0].input), answer),
         monitorMessage
@@ -201,7 +201,7 @@ test("CodexAgent returns an earlier tagged string after an untagged monitor mess
 
 test("CodexAgent records every supported SDK item type", async () => {
     // given a fake SDK stream containing each supported item and an ignored update
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { codexFactory } = fakeCodex(() => ({
@@ -260,7 +260,7 @@ test("CodexAgent records every supported SDK item type", async () => {
                     status: "failed"
                 }
             },
-            { started: { id: "search_1", type: "web_search", query: "loopy" } },
+            { started: { id: "search_1", type: "web_search", query: "clankhouse" } },
             {
                 started: {
                     id: "todo_1",
@@ -280,16 +280,16 @@ test("CodexAgent records every supported SDK item type", async () => {
     const agent = new CodexAgent({ model: "gpt-5.4", codexFactory })
 
     // when the agent runs
-    await testRun(loopy, async () => {
+    await testRun(clankhouse, async () => {
         const worktree = await repository.worktree({ base: "main" })
         return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
     })
 
     // then every completed item is recorded once and the update adds no duplicate
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
-    const session = await loopy.sessions.get(step.sessionId!)
+    const session = await clankhouse.sessions.get(step.sessionId!)
     expect(session.messages.map((item) => (item.type === "message" ? item.role : item.type))).toEqual([
         "user",
         "system",
@@ -335,8 +335,8 @@ test("CodexAgent records every supported SDK item type", async () => {
             id: "search_1",
             name: "web_search",
             source: { kind: "provider" },
-            input: { query: "loopy" },
-            common: { name: "web.search", query: "loopy" }
+            input: { query: "clankhouse" },
+            common: { name: "web.search", query: "clankhouse" }
         }
     })
     // and tool completions preserve the authoritative completed item
@@ -369,7 +369,7 @@ test("CodexAgent records every supported SDK item type", async () => {
 
 test("CodexAgent records a no-argument MCP call without failing the run", async () => {
     // given a Codex MCP item whose no-argument payload is absent
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const worktree = new Worktree(repo.path)
     const { codexFactory } = fakeCodex(() => ({
@@ -399,13 +399,13 @@ test("CodexAgent records a no-argument MCP call without failing the run", async 
     const agent = new CodexAgent({ model: "gpt-5.4", codexFactory })
 
     // when the agent runs the tool and completes the turn
-    await testRun(loopy, () => agent.run("implement", { prompt: "do it", output: outputSchema, worktree }))
+    await testRun(clankhouse, () => agent.run("implement", { prompt: "do it", output: outputSchema, worktree }))
 
     // then the call is durable with a JSON null input and the session succeeds
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
-    const session = await loopy.sessions.get(step.sessionId!)
+    const session = await clankhouse.sessions.get(step.sessionId!)
     expect(session.status).toBe("succeeded")
     expect(session.messages.find((item) => item.type === "tool_call")).toMatchObject({
         toolCall: { id: "mcp_noop_1", input: null }
@@ -414,7 +414,7 @@ test("CodexAgent records a no-argument MCP call without failing the run", async 
 
 test("CodexAgent passes locked default options to the SDK", async () => {
     // given a codex agent configured with only a model and fake factory
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { codexFactory, clientOptions, threadOptions, runCalls } = fakeCodex(() => ({
@@ -424,7 +424,7 @@ test("CodexAgent passes locked default options to the SDK", async () => {
     let worktree!: Worktree
 
     // when the agent runs
-    await testRun(loopy, async () => {
+    await testRun(clankhouse, async () => {
         worktree = await repository.worktree({ base: "main" })
         return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
     })
@@ -472,7 +472,7 @@ You may include prose outside the tags.`)
 
 test("CodexAgent forwards every configured native SDK option", async () => {
     // given a codex agent configured with every supported client and thread option
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { codexFactory, clientOptions, threadOptions, runCalls } = fakeCodex(() => ({
@@ -495,7 +495,7 @@ test("CodexAgent forwards every configured native SDK option", async () => {
     let worktree!: Worktree
 
     // when the agent runs
-    await testRun(loopy, async () => {
+    await testRun(clankhouse, async () => {
         worktree = await repository.worktree({ base: "main" })
         return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
     })
@@ -528,43 +528,43 @@ test("CodexAgent forwards every configured native SDK option", async () => {
 
 test("CodexAgent augments the process environment with the configured env", async () => {
     // given process env entries and an agent that overrides one and adds another
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { codexFactory, clientOptions } = fakeCodex(() => ({ output: { done: true } }))
-    const previousInherited = process.env.LOOPY_CODEX_INHERITED
-    const previousOverridden = process.env.LOOPY_CODEX_OVERRIDDEN
-    process.env.LOOPY_CODEX_INHERITED = "from-process"
-    process.env.LOOPY_CODEX_OVERRIDDEN = "from-process"
+    const previousInherited = process.env.CLANKHOUSE_CODEX_INHERITED
+    const previousOverridden = process.env.CLANKHOUSE_CODEX_OVERRIDDEN
+    process.env.CLANKHOUSE_CODEX_INHERITED = "from-process"
+    process.env.CLANKHOUSE_CODEX_OVERRIDDEN = "from-process"
     const agent = new CodexAgent({
         model: "gpt-5.4",
-        env: { LOOPY_CODEX_OVERRIDDEN: "from-agent", LOOPY_CODEX_ADDED: "from-agent" },
+        env: { CLANKHOUSE_CODEX_OVERRIDDEN: "from-agent", CLANKHOUSE_CODEX_ADDED: "from-agent" },
         codexFactory
     })
 
     // when the agent runs
     try {
-        await testRun(loopy, async () => {
+        await testRun(clankhouse, async () => {
             const worktree = await repository.worktree({ base: "main" })
             return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
         })
     } finally {
-        if (previousInherited === undefined) delete process.env.LOOPY_CODEX_INHERITED
-        else process.env.LOOPY_CODEX_INHERITED = previousInherited
-        if (previousOverridden === undefined) delete process.env.LOOPY_CODEX_OVERRIDDEN
-        else process.env.LOOPY_CODEX_OVERRIDDEN = previousOverridden
+        if (previousInherited === undefined) delete process.env.CLANKHOUSE_CODEX_INHERITED
+        else process.env.CLANKHOUSE_CODEX_INHERITED = previousInherited
+        if (previousOverridden === undefined) delete process.env.CLANKHOUSE_CODEX_OVERRIDDEN
+        else process.env.CLANKHOUSE_CODEX_OVERRIDDEN = previousOverridden
     }
 
     // then the subprocess environment inherits unrelated process variables
-    expect(clientOptions[0].env!.LOOPY_CODEX_INHERITED).toBe("from-process")
+    expect(clientOptions[0].env!.CLANKHOUSE_CODEX_INHERITED).toBe("from-process")
     // and the configured entries override matching keys and extend the rest
-    expect(clientOptions[0].env!.LOOPY_CODEX_OVERRIDDEN).toBe("from-agent")
-    expect(clientOptions[0].env!.LOOPY_CODEX_ADDED).toBe("from-agent")
+    expect(clientOptions[0].env!.CLANKHOUSE_CODEX_OVERRIDDEN).toBe("from-agent")
+    expect(clientOptions[0].env!.CLANKHOUSE_CODEX_ADDED).toBe("from-agent")
 })
 
 test("CodexAgent includes format annotations and recursive references in the instructed schema", async () => {
     // given a recursive Zod output schema with a format-annotated field
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { codexFactory, runCalls } = fakeCodex(() => ({
@@ -574,7 +574,7 @@ test("CodexAgent includes format annotations and recursive references in the ins
     const category: z.ZodType = z.lazy(() => z.object({ contact: z.email(), children: z.array(category) }))
 
     // when the agent runs against the schema
-    const result = await testRun(loopy, async () => {
+    const result = await testRun(clankhouse, async () => {
         const worktree = await repository.worktree({ base: "main" })
         return agent.run("report", { prompt: "report", output: category, worktree })
     })
@@ -595,7 +595,7 @@ test("CodexAgent includes format annotations and recursive references in the ins
 
 test("a non-JSON-representable output schema fails before starting a Codex thread", async () => {
     // given an output schema containing a Date
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { codexFactory, threadOptions, runCalls } = fakeCodex(() => ({ output: { done: true } }))
@@ -603,7 +603,7 @@ test("a non-JSON-representable output schema fails before starting a Codex threa
 
     // when the agent runs with the unrepresentable schema
     await expect(
-        testRun(loopy, async () => {
+        testRun(clankhouse, async () => {
             const worktree = await repository.worktree({ base: "main" })
             return agent.run("implement", {
                 prompt: "do it",
@@ -617,14 +617,14 @@ test("a non-JSON-representable output schema fails before starting a Codex threa
     expect(threadOptions).toHaveLength(0)
     expect(runCalls).toHaveLength(0)
     // and no agent step or session was created
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     expect(run.steps.filter((step) => step.kind === "agent")).toHaveLength(0)
-    expect(loopy.db.prepare("SELECT COUNT(*) AS n FROM sessions").get()).toEqual({ n: 0 })
+    expect(clankhouse.db.prepare("SELECT COUNT(*) AS n FROM sessions").get()).toEqual({ n: 0 })
 })
 
 test("a failed Codex turn fails the durable step and preserves recorded messages", async () => {
     // given a fake SDK that reasons before returning a failed turn
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { codexFactory } = fakeCodex(() => ({
@@ -635,25 +635,25 @@ test("a failed Codex turn fails the durable step and preserves recorded messages
 
     // when the agent runs
     await expect(
-        testRun(loopy, async () => {
+        testRun(clankhouse, async () => {
             const worktree = await repository.worktree({ base: "main" })
             return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
         })
     ).rejects.toThrow("Codex agent failed: model exhausted its context")
 
     // then the step and session fail with earlier messages preserved
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     expect(step.status).toBe("failed")
     if (step.kind !== "agent") throw new Error("unreachable")
-    const session = await loopy.sessions.get(step.sessionId!)
+    const session = await clankhouse.sessions.get(step.sessionId!)
     expect(session.status).toBe("failed")
     expect(sessionTextMessages(session.messages).map((item) => item.role)).toEqual(["user", "system", "reasoning"])
 })
 
 test("a fatal Codex stream event fails the durable step", async () => {
     // given a fake SDK that emits a fatal stream error
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { codexFactory } = fakeCodex(() => ({
@@ -674,7 +674,7 @@ test("a fatal Codex stream event fails the durable step", async () => {
     const agent = new CodexAgent({ model: "gpt-5.4", codexFactory })
 
     // when the agent runs
-    const result = testRun(loopy, async () => {
+    const result = testRun(clankhouse, async () => {
         const worktree = await repository.worktree({ base: "main" })
         return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
     })
@@ -682,17 +682,17 @@ test("a fatal Codex stream event fails the durable step", async () => {
     // then the fatal event is surfaced as a provider error
     await expect(result).rejects.toThrow("Codex agent stream error: connection lost")
     // and the started tool remains durable without a synthetic completion
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
-    const session = await loopy.sessions.get(step.sessionId!)
+    const session = await clankhouse.sessions.get(step.sessionId!)
     expect(session.messages.filter((item) => item.type === "tool_call")).toHaveLength(1)
     expect(session.messages.filter((item) => item.type === "tool_result")).toHaveLength(0)
 })
 
 test("a thrown SDK stream error fails the step and preserves initialization", async () => {
     // given a fake SDK that throws after starting the thread
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { codexFactory } = fakeCodex(() => ({ throwMidStream: new Error("process exited unexpectedly") }))
@@ -700,31 +700,31 @@ test("a thrown SDK stream error fails the step and preserves initialization", as
 
     // when the agent runs
     await expect(
-        testRun(loopy, async () => {
+        testRun(clankhouse, async () => {
             const worktree = await repository.worktree({ base: "main" })
             return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
         })
     ).rejects.toThrow("process exited unexpectedly")
 
     // then the failed session preserves the prompt and thread metadata
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
-    const session = await loopy.sessions.get(step.sessionId!)
+    const session = await clankhouse.sessions.get(step.sessionId!)
     expect(session.status).toBe("failed")
     expect(sessionTextMessages(session.messages).map((item) => item.role)).toEqual(["user", "system"])
 })
 
 test("a stream ending without turn completion fails the step", async () => {
     // given a fake SDK that emits output but no turn completion
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { codexFactory } = fakeCodex(() => ({ output: { done: true }, endWithoutCompletion: true }))
     const agent = new CodexAgent({ model: "gpt-5.4", codexFactory })
 
     // when the agent runs
-    const result = testRun(loopy, async () => {
+    const result = testRun(clankhouse, async () => {
         const worktree = await repository.worktree({ base: "main" })
         return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
     })
@@ -735,14 +735,14 @@ test("a stream ending without turn completion fails the step", async () => {
 
 test("an untagged final agent response fails the step", async () => {
     // given a fake SDK that replies with plain JSON without the instructed tags
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { codexFactory } = fakeCodex(() => ({ finalResponse: JSON.stringify({ done: true }) }))
     const agent = new CodexAgent({ model: "gpt-5.4", codexFactory })
 
     // when the agent runs
-    const result = testRun(loopy, async () => {
+    const result = testRun(clankhouse, async () => {
         const worktree = await repository.worktree({ base: "main" })
         return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
     })
@@ -753,7 +753,7 @@ test("an untagged final agent response fails the step", async () => {
 
 test("invalid JSON inside the instructed tags fails the step", async () => {
     // given a fake SDK returning plain text inside the instructed tags
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { codexFactory } = fakeCodex((prompt) => {
@@ -763,7 +763,7 @@ test("invalid JSON inside the instructed tags fails the step", async () => {
     const agent = new CodexAgent({ model: "gpt-5.4", codexFactory })
 
     // when the agent runs
-    const result = testRun(loopy, async () => {
+    const result = testRun(clankhouse, async () => {
         const worktree = await repository.worktree({ base: "main" })
         return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
     })
@@ -774,29 +774,29 @@ test("invalid JSON inside the instructed tags fails the step", async () => {
 
 test("Codex output fails when the turn has no final agent message", async () => {
     // given a Codex agent whose turn completes without an agent message
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { codexFactory } = fakeCodex(() => ({}))
     const agent = new CodexAgent({ model: "gpt-5.4", codexFactory })
 
     // when the agent runs
-    const result = testRun(loopy, async () => {
+    const result = testRun(clankhouse, async () => {
         const worktree = await repository.worktree({ base: "main" })
         return agent.run("report", { prompt: "report", output: outputSchema, worktree })
     })
 
     // then the missing tagged report fails the durable step and session
     await expect(result).rejects.toThrow("did not return the instructed output tags")
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     if (step.kind !== "agent") throw new Error("unreachable")
-    expect((await loopy.sessions.get(step.sessionId!)).status).toBe("failed")
+    expect((await clankhouse.sessions.get(step.sessionId!)).status).toBe("failed")
 })
 
 test("structured output violating the Zod schema fails the step", async () => {
     // given a fake SDK returning valid JSON with the wrong field type
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { codexFactory } = fakeCodex(() => ({ output: { done: "yes" } }))
@@ -804,23 +804,23 @@ test("structured output violating the Zod schema fails the step", async () => {
 
     // when the agent runs
     await expect(
-        testRun(loopy, async () => {
+        testRun(clankhouse, async () => {
             const worktree = await repository.worktree({ base: "main" })
             return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
         })
     ).rejects.toThrow()
 
     // then the engine marks the step and session failed after final validation
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!
     expect(step.status).toBe("failed")
     if (step.kind !== "agent") throw new Error("unreachable")
-    expect((await loopy.sessions.get(step.sessionId!)).status).toBe("failed")
+    expect((await clankhouse.sessions.get(step.sessionId!)).status).toBe("failed")
 })
 
 test("codex agent step replay restores the worktree without re-invoking the SDK", async () => {
     // given a codex agent backed by a fake SDK and a later failing step
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     const { codexFactory, runCalls } = fakeCodex(() => ({
@@ -845,19 +845,19 @@ test("codex agent step replay restores the worktree without re-invoking the SDK"
     const body = async () => {
         worktree = await repository.worktree({ base: "main" })
         await agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
-        return loopy.step("publish", z.string(), async () => publishImpl())
+        return clankhouse.step("publish", z.string(), async () => publishImpl())
     }
-    loopy.registerWorkflow("test-workflow", workflowOptions, body)
+    clankhouse.registerWorkflow("test-workflow", workflowOptions, body)
 
     // when the workflow fails after the agent and its changes are discarded
-    const firstId = loopy.start("test-workflow", null)
-    await expect(runOutput(loopy, firstId)).rejects.toThrow("boom")
+    const firstId = clankhouse.start("test-workflow", null)
+    await expect(runOutput(clankhouse, firstId)).rejects.toThrow("boom")
     await runGit(worktree.path, ["reset", "--hard"])
     await runGit(worktree.path, ["clean", "-fd"])
     // and the workflow reruns from the later step
     publishImpl = () => "published"
-    const secondId = loopy.rerun(firstId, { from: "publish" })
-    expect(await runOutput(loopy, secondId)).toBe("published")
+    const secondId = clankhouse.rerun(firstId, { from: "publish" })
+    expect(await runOutput(clankhouse, secondId)).toBe("published")
 
     // then the SDK ran once and the stored snapshot restored the change
     expect(runCalls).toHaveLength(1)
@@ -869,19 +869,19 @@ test.skipIf(!process.env.CODEX_AGENT_LIVE_TEST)(
     { timeout: 180_000 },
     async () => {
         // given a real codex agent and a real worktree
-        const { loopy } = tempLoopy()
+        const { clankhouse } = tempClankHouse()
         const repo = await tempGitRepo()
         const repository = new GitRepository(repo.path)
         const agent = new CodexAgent({ model: "gpt-5.4-mini" })
         let worktree!: Worktree
 
         // when it creates a two-line file and reports an array-root discriminated union
-        const result = await testRun(loopy, async () => {
+        const result = await testRun(clankhouse, async () => {
             worktree = await repository.worktree({ base: "main" })
             return agent.run("implement", {
                 prompt: `Create hello.txt with exactly these two lines:
 hello
-loopy
+clankhouse
 
 Report exactly two array entries in order: a file entry for hello.txt with lineCount 2, then a status entry with done true. Omit the optional note and warning fields.`,
                 output: liveOutputSchema,
@@ -894,12 +894,12 @@ Report exactly two array entries in order: a file entry for hello.txt with lineC
             { kind: "file", path: "hello.txt", lineCount: 2 },
             { kind: "status", done: true }
         ])
-        expect(fs.readFileSync(path.join(worktree.path, "hello.txt"), "utf8")).toBe("hello\nloopy\n")
+        expect(fs.readFileSync(path.join(worktree.path, "hello.txt"), "utf8")).toBe("hello\nclankhouse\n")
         // and the session succeeds with a valid worktree snapshot
-        const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+        const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
         const step = run.steps.find((candidate) => candidate.kind === "agent")!
         if (step.kind !== "agent") throw new Error("unreachable")
-        const session = await loopy.sessions.get(step.sessionId!)
+        const session = await clankhouse.sessions.get(step.sessionId!)
         expect(session.status).toBe("succeeded")
         expect(session.messages.length).toBeGreaterThan(2)
         expect((await worktree.git(["rev-parse", step.snapshotRef!])).exitCode).toBe(0)

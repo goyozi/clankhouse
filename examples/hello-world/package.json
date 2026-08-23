@@ -1,5 +1,5 @@
 {
-    "name": "@loopy/example-hello-world",
+    "name": "@clankhouse/example-hello-world",
     "version": "1.0.0",
     "private": true,
     "type": "module",
@@ -10,12 +10,12 @@
         "typecheck": "tsc -p tsconfig.json --noEmit"
     },
     "dependencies": {
-        "@loopy/codex": "workspace:*",
-        "@loopy/core": "workspace:*",
-        "@loopy/server": "workspace:*",
+        "@clankhouse/codex": "workspace:*",
+        "@clankhouse/core": "workspace:*",
+        "@clankhouse/server": "workspace:*",
         "zod": "catalog:"
     },
     "devDependencies": {
-        "@loopy/test-utils": "workspace:*"
+        "@clankhouse/test-utils": "workspace:*"
     }
 }

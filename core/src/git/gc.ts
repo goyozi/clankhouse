@@ -2,7 +2,7 @@ import { lstat, readdir, rm } from "node:fs/promises"
 import * as path from "node:path"
 import type { Db } from "../db"
 import * as sql from "../db"
-import { LoopyError } from "../errors"
+import { ClankHouseError } from "../errors"
 import { exists } from "../util"
 import {
     candidateCheckoutPath,
@@ -18,18 +18,18 @@ import { removeStaleRescueRefs } from "./worktree"
 const WORKTREE_GC_MIN_AGE_MS = 14 * 24 * 60 * 60 * 1000
 
 /**
- * Collects Loopy-managed worktree candidates not referenced by any succeeded worktree step and at least
+ * Collects ClankHouse-managed worktree candidates not referenced by any succeeded worktree step and at least
  * fourteen days old. Reachability is validated before deletion; malformed durable rows fail the sweep closed.
  * Valid seed refs are deleted only when they still target their recorded object, and a missing seed ref is
  * treated as already cleaned up by an earlier interrupted sweep. Temporary restore refs older than fourteen
- * days are removed from repositories discoverable through valid candidate manifests. Calls for the same Loopy
+ * days are removed from repositories discoverable through valid candidate manifests. Calls for the same ClankHouse
  * directory must not overlap. Old unreachable candidates with invalid manifests are removed as filesystem
  * state without attempting to repair undiscoverable Git metadata, while inconsistencies in discoverable Git
  * metadata abort the sweep for manual repair. This does not delete runs or user or agent snapshot refs, and
  * it does not compact Git objects.
  */
-export async function gcWorktrees(loopyDir: string, db: Db): Promise<WorktreeGcResult> {
-    const worktreesRoot = path.join(loopyDir, "worktrees")
+export async function gcWorktrees(clankhouseDir: string, db: Db): Promise<WorktreeGcResult> {
+    const worktreesRoot = path.join(clankhouseDir, "worktrees")
     const reachable = reachableWorktrees(db)
     if (!(await exists(worktreesRoot))) return { removed: 0, paths: [] }
     const candidates = await candidateDirectories(worktreesRoot)
@@ -42,9 +42,9 @@ export async function gcWorktrees(loopyDir: string, db: Db): Promise<WorktreeGcR
         if (manifest !== undefined) repositories.add(manifest.repositoryPath)
         if (reachable.has(id)) continue
         if (Date.now() - candidateStats.mtimeMs < WORKTREE_GC_MIN_AGE_MS) continue
-        if (manifest !== undefined) await removeGitState(resolveCandidate(loopyDir, id, manifest))
+        if (manifest !== undefined) await removeGitState(resolveCandidate(clankhouseDir, id, manifest))
         await rm(candidateRoot, { recursive: true, force: true })
-        removed.push(candidateCheckoutPath(loopyDir, id))
+        removed.push(candidateCheckoutPath(clankhouseDir, id))
     }
     for (const repositoryPath of [...repositories].sort()) {
         if (!(await exists(repositoryPath))) continue
@@ -97,8 +97,8 @@ async function removeGitState(candidate: ManagedCandidate): Promise<void> {
     }
 }
 
-function gcFailure(message: string, cause?: unknown): LoopyError {
-    return new LoopyError("git_worktree_gc_failed", message, cause === undefined ? undefined : { cause })
+function gcFailure(message: string, cause?: unknown): ClankHouseError {
+    return new ClankHouseError("git_worktree_gc_failed", message, cause === undefined ? undefined : { cause })
 }
 
 export type WorktreeGcResult = { removed: number; paths: string[] }

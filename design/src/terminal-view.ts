@@ -75,7 +75,7 @@ export function createTerminalView(viewport: HTMLElement, output: HTMLElement): 
             viewport.scrollTop = 0
         },
         setLabel(label) {
-            output.setAttribute("aria-label", `Simulated Loopy output for ${label}`)
+            output.setAttribute("aria-label", `Simulated ClankHouse output for ${label}`)
         }
     }
 }

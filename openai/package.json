@@ -1,5 +1,5 @@
 {
-    "name": "@loopy/openai",
+    "name": "@clankhouse/openai",
     "version": "1.0.0",
     "type": "module",
     "main": "./src/index.ts",
@@ -11,11 +11,11 @@
         "typecheck": "tsc -p tsconfig.json --noEmit"
     },
     "dependencies": {
-        "@loopy/core": "workspace:*",
+        "@clankhouse/core": "workspace:*",
         "openai": "^6.49.0",
         "zod": "catalog:"
     },
     "devDependencies": {
-        "@loopy/test-utils": "workspace:*"
+        "@clankhouse/test-utils": "workspace:*"
     }
 }

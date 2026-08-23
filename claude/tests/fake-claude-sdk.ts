@@ -8,9 +8,9 @@ import type {
     SDKSystemMessage,
     SDKUserMessage
 } from "@anthropic-ai/claude-agent-sdk"
-import type { QueryFunction } from "@loopy/claude"
-import { applyChange, type FakeChange } from "@loopy/core/ai/fake-agent"
-import { taggedOutput } from "@loopy/test-utils"
+import type { QueryFunction } from "@clankhouse/claude"
+import { applyChange, type FakeChange } from "@clankhouse/core/ai/fake-agent"
+import { taggedOutput } from "@clankhouse/test-utils"
 
 type AssistantBlock = SDKAssistantMessage["message"]["content"][number]
 type UserContentBlock = Exclude<SDKUserMessage["message"]["content"], string>[number]

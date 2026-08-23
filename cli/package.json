@@ -1,5 +1,5 @@
 {
-    "name": "@loopy/cli",
+    "name": "@clankhouse/cli",
     "version": "1.0.0",
     "type": "module",
     "main": "./src/index.ts",
@@ -7,7 +7,7 @@
         ".": "./src/index.ts"
     },
     "bin": {
-        "loopy": "./bin/loopy.js"
+        "clank": "./bin/clank.js"
     },
     "scripts": {
         "test": "vitest run --config vitest.config.ts",
@@ -17,13 +17,13 @@
         "@bufbuild/protobuf": "^2.12.1",
         "@connectrpc/connect": "^2.1.2",
         "@connectrpc/connect-node": "^2.1.2",
-        "@loopy/server": "workspace:*",
+        "@clankhouse/server": "workspace:*",
         "commander": "^15.0.0",
         "tsx": "^4.23.0"
     },
     "devDependencies": {
-        "@loopy/core": "workspace:*",
-        "@loopy/test-utils": "workspace:*",
+        "@clankhouse/core": "workspace:*",
+        "@clankhouse/test-utils": "workspace:*",
         "zod": "catalog:"
     }
 }

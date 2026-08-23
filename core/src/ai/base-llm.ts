@@ -38,9 +38,9 @@ export abstract class BaseLanguageModel implements LanguageModel {
 
     async call<T extends z.ZodTypeAny>(stepName: string, options: ModelCallOptions<T>): Promise<z.infer<T>> {
         const role = `LLM "${stepName}" output schema`
-        const loopy = requireContext().loopy
+        const clankhouse = requireContext().clankhouse
         let session: SessionRecorder | undefined
-        return loopy.engine.executeStep({
+        return clankhouse.engine.executeStep({
             kind: "llm",
             name: stepName,
             schema: options.output,
@@ -49,7 +49,7 @@ export abstract class BaseLanguageModel implements LanguageModel {
             allowTopLevelVoid: false,
             execute: async (handle) => {
                 const prompt = await renderPrompt(options.prompt)
-                session = loopy.sessions.create({
+                session = clankhouse.sessions.create({
                     kind: "llm",
                     client: this.client,
                     provider: this.provider,

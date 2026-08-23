@@ -5,7 +5,7 @@ import {
     ReadArtifactResponseSchema,
     type Artifact,
     type GetArtifactResponse
-} from "@loopy/server/proto"
+} from "@clankhouse/server/proto"
 import type { Command } from "commander"
 import { copyWithoutClobber, writeBytes } from "../io"
 import { indent } from "../output"

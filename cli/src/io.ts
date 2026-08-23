@@ -45,7 +45,7 @@ export async function copyWithoutClobber(destination: string, chunks: () => Asyn
 
     const temporary = path.join(
         path.dirname(destination),
-        `.${path.basename(destination)}.loopy-${process.pid}-${randomBytes(8).toString("hex")}.tmp`
+        `.${path.basename(destination)}.clankhouse-${process.pid}-${randomBytes(8).toString("hex")}.tmp`
     )
     let handle: FileHandle | undefined
     try {

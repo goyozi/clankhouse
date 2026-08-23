@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
-import { CodexAgent } from "@loopy/codex"
-import { registerWorkflow } from "@loopy/core"
-import { serve } from "@loopy/server"
+import { CodexAgent } from "@clankhouse/codex"
+import { registerWorkflow } from "@clankhouse/core"
+import { serve } from "@clankhouse/server"
 import * as z from "zod"
 import { createHelloWorldWorkflow } from "./workflow"
 
@@ -17,4 +17,4 @@ registerWorkflow(
 )
 
 const server = await serve()
-console.log(`Loopy hello-world server listening at ${server.url}`)
+console.log(`ClankHouse hello-world server listening at ${server.url}`)

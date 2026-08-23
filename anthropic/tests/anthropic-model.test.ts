@@ -1,7 +1,7 @@
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { AnthropicModel } from "@loopy/anthropic"
-import { sessionTextMessages, taggedOutput, taggedStringOutput, tempLoopy, testRun } from "@loopy/test-utils"
+import { AnthropicModel } from "@clankhouse/anthropic"
+import { sessionTextMessages, taggedOutput, taggedStringOutput, tempClankHouse, testRun } from "@clankhouse/test-utils"
 import { fakeAnthropic, redactedThinkingBlock, textBlock, thinkingBlock } from "./fake-anthropic"
 
 const outputSchema = z.object({ done: z.boolean() })
@@ -14,7 +14,7 @@ const complexOutputSchema = z.array(
 
 test("AnthropicModel uses the official streaming client and records thinking separately", async () => {
     // given an official Anthropic response containing text around a thinking block
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const expected = [
         { kind: "calculation" as const, expression: "6 * 7", value: 42 },
         { kind: "status" as const, done: true }
@@ -37,7 +37,7 @@ test("AnthropicModel uses the official streaming client and records thinking sep
     })
 
     // when the model is called inside a durable step
-    const result = await testRun(loopy, async () =>
+    const result = await testRun(clankhouse, async () =>
         model.call("calculate", { prompt: "Calculate the requested result.", output: complexOutputSchema })
     )
 
@@ -55,10 +55,10 @@ test("AnthropicModel uses the official streaming client and records thinking sep
     if (typeof prompt !== "string") throw new Error("unreachable")
     expect(prompt).toMatch(/^Calculate the requested result\.\n\nIMPORTANT — requested final answer:/)
     // and thinking is a reasoning event rather than an assistant message
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps[0]
     if (step.kind !== "llm") throw new Error("unreachable")
-    const session = await loopy.sessions.get(step.sessionId!)
+    const session = await clankhouse.sessions.get(step.sessionId!)
     const reply = assistantReply(prompt)
     const splitAt = reply.indexOf(JSON.stringify(expected))
     expect(session).toMatchObject({
@@ -78,7 +78,7 @@ test("AnthropicModel uses the official streaming client and records thinking sep
 
 test("AnthropicModel collects a tagged string split across assistant content blocks", async () => {
     // given an official response whose tagged string is split around a thinking block
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const answer = "  first line\nsecond line  "
     const fake = fakeAnthropic((prompt) => {
         const reply = taggedStringOutput(prompt, answer)
@@ -92,7 +92,9 @@ test("AnthropicModel collects a tagged string split across assistant content blo
     const model = new AnthropicModel({ model: "claude-test", maxTokens: 256, clientOptions: fake.clientOptions })
 
     // when the model is called with a root string schema
-    const result = await testRun(loopy, () => model.call("answer", { prompt: "Answer naturally.", output: z.string() }))
+    const result = await testRun(clankhouse, () =>
+        model.call("answer", { prompt: "Answer naturally.", output: z.string() })
+    )
 
     // then the dedicated string prompt is used and the joined tagged answer is extracted
     const prompt = fake.requests[0].messages[0].content
@@ -101,20 +103,20 @@ test("AnthropicModel collects a tagged string split across assistant content blo
     expect(prompt).not.toMatch(/JSON/i)
     expect(result).toBe(answer)
     // and the durable output stores only the answer while the session retains provider blocks
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps[0]
     if (step.kind !== "llm") throw new Error("unreachable")
     expect(step.outputJson).toBe(JSON.stringify(answer))
     const reply = taggedStringOutput(prompt, answer)
     const splitAt = reply.indexOf("second line")
     expect(
-        sessionTextMessages((await loopy.sessions.get(step.sessionId!)).messages).map((message) => message.content)
+        sessionTextMessages((await clankhouse.sessions.get(step.sessionId!)).messages).map((message) => message.content)
     ).toEqual([prompt, reply.slice(0, splitAt), "Checked the answer.", reply.slice(splitAt)])
 })
 
 test("AnthropicModel records readable thinking but drops redacted thinking", async () => {
     // given an official response mixing readable thinking with an encrypted redacted block
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const ciphertext = "RWtaTVNVSkJVMFVnUlU1RFVsbFFWRVZFSUdSaGRHRT0="
     const fake = fakeAnthropic((prompt) => [
         thinkingBlock("Checked the calculation."),
@@ -124,14 +126,16 @@ test("AnthropicModel records readable thinking but drops redacted thinking", asy
     const model = new AnthropicModel({ model: "claude-test", maxTokens: 256, clientOptions: fake.clientOptions })
 
     // when the model is called
-    const result = await testRun(loopy, async () => model.call("check", { prompt: "Check.", output: outputSchema }))
+    const result = await testRun(clankhouse, async () =>
+        model.call("check", { prompt: "Check.", output: outputSchema })
+    )
 
     // then only the readable thinking is durable and the ciphertext is nowhere in the session
     expect(result).toEqual({ done: true })
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps[0]
     if (step.kind !== "llm") throw new Error("unreachable")
-    const session = await loopy.sessions.get(step.sessionId!)
+    const session = await clankhouse.sessions.get(step.sessionId!)
     const messages = sessionTextMessages(session.messages)
     expect(messages.map((message) => [message.role, message.content])).toEqual([
         ["user", expect.any(String)],
@@ -143,13 +147,13 @@ test("AnthropicModel records readable thinking but drops redacted thinking", asy
 
 test("AnthropicModel rejects a void output before making an SDK request", async () => {
     // given an official client transport and a void output schema
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const fake = fakeAnthropic(() => [textBlock("unused")])
     const model = new AnthropicModel({ model: "claude-test", maxTokens: 256, clientOptions: fake.clientOptions })
 
     // when the model is called
     const result = testRun(
-        loopy,
+        clankhouse,
         async () => model.call("notify", { prompt: "Send the notification.", output: z.void() }),
         { output: z.void() }
     )
@@ -157,14 +161,14 @@ test("AnthropicModel rejects a void output before making an SDK request", async 
     // then schema validation prevents both the request and durable side effects
     await expect(result).rejects.toThrow(/LLM "notify" output schema.*z\.void\(\)/)
     expect(fake.requests).toHaveLength(0)
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     expect(run.steps).toHaveLength(0)
-    expect(loopy.db.prepare("SELECT COUNT(*) AS n FROM sessions").get()).toEqual({ n: 0 })
+    expect(clankhouse.db.prepare("SELECT COUNT(*) AS n FROM sessions").get()).toEqual({ n: 0 })
 })
 
 test("AnthropicModel streams token caps above the SDK non-streaming ceiling", async () => {
     // given an official Anthropic model whose configured token cap requires streaming
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const fake = fakeAnthropic((prompt) => [textBlock(taggedOutput(prompt, '{"done":true}'))])
     const model = new AnthropicModel({
         model: "claude-opus-4-0",
@@ -173,7 +177,7 @@ test("AnthropicModel streams token caps above the SDK non-streaming ceiling", as
     })
 
     // when a structured-output call is executed
-    const result = await testRun(loopy, async () =>
+    const result = await testRun(clankhouse, async () =>
         model.call("long", { prompt: "Write a long response.", output: outputSchema })
     )
 
@@ -184,7 +188,7 @@ test("AnthropicModel streams token caps above the SDK non-streaming ceiling", as
 
 test("AnthropicModel reports truncation before parsing instructed output", async () => {
     // given an official streamed response stopped by the output-token limit
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const fake = fakeAnthropic(() => ({
         content: [textBlock("partial tagged response")],
         stopReason: "max_tokens"
@@ -192,24 +196,24 @@ test("AnthropicModel reports truncation before parsing instructed output", async
     const model = new AnthropicModel({ model: "claude-test", maxTokens: 256, clientOptions: fake.clientOptions })
 
     // when the model is called
-    const result = testRun(loopy, async () => model.call("check", { prompt: "Check.", output: outputSchema }))
+    const result = testRun(clankhouse, async () => model.call("check", { prompt: "Check.", output: outputSchema }))
 
     // then the provider completion error wins over instructed-output parsing
     await expect(result).rejects.toMatchObject({
         code: "llm_response_incomplete",
         message: expect.stringContaining("max_tokens")
     })
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps[0]
     if (step.kind !== "llm") throw new Error("unreachable")
     expect(
-        sessionTextMessages((await loopy.sessions.get(step.sessionId!)).messages).map((message) => message.role)
+        sessionTextMessages((await clankhouse.sessions.get(step.sessionId!)).messages).map((message) => message.role)
     ).toEqual(["user", "assistant"])
 })
 
 test("AnthropicModel rejects tool output from a request that supplied no tools", async () => {
     // given an official tool-use content block despite the request containing no tools
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const fake = fakeAnthropic(() => ({
         content: [
             {
@@ -225,18 +229,18 @@ test("AnthropicModel rejects tool output from a request that supplied no tools",
     const model = new AnthropicModel({ model: "claude-test", maxTokens: 256, clientOptions: fake.clientOptions })
 
     // when the model is called
-    const result = testRun(loopy, async () => model.call("check", { prompt: "Check.", output: outputSchema }))
+    const result = testRun(clankhouse, async () => model.call("check", { prompt: "Check.", output: outputSchema }))
 
     // then the impossible result fails loudly instead of becoming a tool or assistant message
     await expect(result).rejects.toMatchObject({
         code: "llm_response_invalid",
         message: expect.stringContaining("tool_use")
     })
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps[0]
     if (step.kind !== "llm") throw new Error("unreachable")
     expect(
-        sessionTextMessages((await loopy.sessions.get(step.sessionId!)).messages).map((message) => message.role)
+        sessionTextMessages((await clankhouse.sessions.get(step.sessionId!)).messages).map((message) => message.role)
     ).toEqual(["user"])
 })
 
@@ -245,12 +249,12 @@ test.each([
     ["invalid JSON", (prompt: string) => textBlock(taggedOutput(prompt, "not json")), "ai_output_invalid"]
 ] as const)("AnthropicModel reports %s from official text output", async (_case, reply, code) => {
     // given an official text response that violates instructed-output framing
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const fake = fakeAnthropic((prompt) => [reply(prompt)])
     const model = new AnthropicModel({ model: "claude-test", maxTokens: 256, clientOptions: fake.clientOptions })
 
     // when the model is called
-    const result = testRun(loopy, async () => model.call("check", { prompt: "Check.", output: outputSchema }))
+    const result = testRun(clankhouse, async () => model.call("check", { prompt: "Check.", output: outputSchema }))
 
     // then the shared instructed-output error is preserved
     await expect(result).rejects.toMatchObject({ code })
@@ -258,28 +262,28 @@ test.each([
 
 test("AnthropicModel preserves the prompt when the official client request fails", async () => {
     // given a fetch transport that fails beneath the official client
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const fake = fakeAnthropic(() => {
         throw new Error("connection lost")
     })
     const model = new AnthropicModel({ model: "claude-test", maxTokens: 256, clientOptions: fake.clientOptions })
 
     // when the model is called
-    const result = testRun(loopy, async () => model.call("check", { prompt: "Check.", output: outputSchema }))
+    const result = testRun(clankhouse, async () => model.call("check", { prompt: "Check.", output: outputSchema }))
 
     // then the SDK failure propagates and only the durable user prompt remains
     await expect(result).rejects.toThrow()
-    const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps[0]
     if (step.kind !== "llm") throw new Error("unreachable")
-    const session = await loopy.sessions.get(step.sessionId!)
+    const session = await clankhouse.sessions.get(step.sessionId!)
     expect(session.status).toBe("failed")
     expect(sessionTextMessages(session.messages).map((message) => message.role)).toEqual(["user"])
 })
 
 test("AnthropicModel replay skips a second official client request", async () => {
     // given a persisted successful call through an official client
-    const { loopy, reopen } = tempLoopy()
+    const { clankhouse, reopen } = tempClankHouse()
     const fake = fakeAnthropic((prompt) => [textBlock(taggedOutput(prompt, '{"done":true}'))])
     const initialModel = new AnthropicModel({
         model: "claude-test",
@@ -287,7 +291,7 @@ test("AnthropicModel replay skips a second official client request", async () =>
         clientOptions: fake.clientOptions
     })
     const initialBody = () => initialModel.call("check", { prompt: "Check.", output: outputSchema })
-    expect(await testRun(loopy, initialBody)).toEqual({ done: true })
+    expect(await testRun(clankhouse, initialBody)).toEqual({ done: true })
 
     // when a fresh model replays the durable call
     const replayed = reopen()
@@ -311,11 +315,11 @@ test.skipIf(!process.env.ANTHROPIC_MODEL_LIVE_TEST)(
     { timeout: 180_000 },
     async () => {
         // given a real Anthropic model using standard SDK environment credentials
-        const { loopy } = tempLoopy()
+        const { clankhouse } = tempClankHouse()
         const model = new AnthropicModel({ model: "claude-sonnet-4-6", maxTokens: 1024 })
 
         // when it is asked for an exact array-root discriminated union
-        const result = await testRun(loopy, async () =>
+        const result = await testRun(clankhouse, async () =>
             model.call("calculate", {
                 prompt: `Calculate 6 * 7.
 
@@ -329,10 +333,10 @@ Answer with exactly two array entries in order: a calculation entry with express
             { kind: "calculation", expression: "6 * 7", value: 42 },
             { kind: "status", done: true }
         ])
-        const run = await loopy.runs.get((await loopy.runs.list())[0].id)
+        const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
         const step = run.steps[0]
         if (step.kind !== "llm") throw new Error("unreachable")
-        const session = await loopy.sessions.get(step.sessionId!)
+        const session = await clankhouse.sessions.get(step.sessionId!)
         expect(session.status).toBe("succeeded")
         const messages = sessionTextMessages(session.messages)
         expect(messages[0].role).toBe("user")

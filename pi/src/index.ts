@@ -8,9 +8,9 @@ import {
     type AgentSessionEvent,
     type CreateAgentSessionOptions
 } from "@earendil-works/pi-coding-agent"
-import { BaseCodingAgent, type CodingAgentInvocation } from "@loopy/core/ai/base-agent"
-import type { CommonTool, SessionRecorder } from "@loopy/core/ai/sessions"
-import type { Worktree } from "@loopy/core/git"
+import { BaseCodingAgent, type CodingAgentInvocation } from "@clankhouse/core/ai/base-agent"
+import type { CommonTool, SessionRecorder } from "@clankhouse/core/ai/sessions"
+import type { Worktree } from "@clankhouse/core/git"
 
 export type PiAgentSessionOptions = Omit<CreateAgentSessionOptions, "cwd" | "model" | "sessionManager">
 

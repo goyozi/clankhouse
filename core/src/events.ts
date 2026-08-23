@@ -3,7 +3,7 @@ import { runContext } from "./context"
 import * as sql from "./db"
 import type { Db } from "./db"
 import type { Engine } from "./engine"
-import { LoopyError } from "./errors"
+import { ClankHouseError } from "./errors"
 import { jsonSchema } from "./json-schema"
 import { newId, nowIso } from "./util"
 
@@ -69,7 +69,7 @@ export class Events {
 
     async waitForAny<const S extends readonly EventSource[]>(sources: S): Promise<EventSourceResult<S[number]>> {
         if (sources.length === 0) {
-            throw new LoopyError("event_sources_empty", "waitForAny requires at least one event source")
+            throw new ClankHouseError("event_sources_empty", "waitForAny requires at least one event source")
         }
         return this.waitForEventStep(sources, `wait:${sources.map((source) => source.key).join("+")}`) as Promise<
             EventSourceResult<S[number]>
@@ -101,7 +101,7 @@ export class Events {
                 } catch (error) {
                     if (!(error instanceof z.ZodError)) throw error
                     const key = eventKey(value)
-                    throw new LoopyError(
+                    throw new ClankHouseError(
                         "event_schema_validation_failed",
                         `Event on "${key}" failed schema validation: ${error.message}`,
                         { cause: error }
@@ -120,7 +120,7 @@ export class Events {
         const id = newId()
         const payload = JSON.stringify(event)
         if (payload === undefined) {
-            throw new LoopyError("event_payload_required", `Event "${key}" requires a JSON-serializable payload`)
+            throw new ClankHouseError("event_payload_required", `Event "${key}" requires a JSON-serializable payload`)
         }
         if (origin !== undefined) sql.deleteUnconsumedEventsByOrigin(this.db, origin)
         sql.insertEvent(this.db, {
@@ -185,7 +185,7 @@ export class Events {
     private register(waiter: Waiter): void {
         for (const key of waiter.keys) {
             if (this.waiters.has(key)) {
-                throw new LoopyError(
+                throw new ClankHouseError(
                     "event_wait_already_registered",
                     `Another wait is already registered for event key "${key}"`
                 )

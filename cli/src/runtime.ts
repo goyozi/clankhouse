@@ -1,6 +1,6 @@
 import { type DescMessage, type MessageShape } from "@bufbuild/protobuf"
 import type { Command } from "commander"
-import { connect, type LoopyClient } from "./client"
+import { connect, type ClankHouseClient } from "./client"
 import { publicError } from "./errors"
 import { Output, type ErrorOutputOptions, writeErrorOutput } from "./output"
 
@@ -20,7 +20,7 @@ type GlobalOptions = {
 }
 
 export class Runtime {
-    private cachedClient: LoopyClient | undefined
+    private cachedClient: ClankHouseClient | undefined
     private resultCode = 0
     private pendingOutput: Promise<void> = Promise.resolve()
 
@@ -53,7 +53,7 @@ export class Runtime {
         return new Output(this.options.stdout, command.optsWithGlobals<GlobalOptions>().json === true)
     }
 
-    async client(command: Command): Promise<LoopyClient> {
+    async client(command: Command): Promise<ClankHouseClient> {
         const global = command.optsWithGlobals<GlobalOptions>()
         return (this.cachedClient ??= await connect({
             ...(global.server !== undefined ? { server: global.server } : {}),

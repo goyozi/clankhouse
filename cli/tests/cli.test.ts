@@ -5,12 +5,12 @@ import { PassThrough, Readable, Writable } from "node:stream"
 import { promisify } from "node:util"
 import { fileURLToPath } from "node:url"
 import { fromJsonString } from "@bufbuild/protobuf"
-import { FakeCodingAgent } from "@loopy/core/ai/fake-agent"
-import { FakeLLM } from "@loopy/core/ai/fake-llm"
-import { openDatabase } from "@loopy/core/db"
-import { LoopyError } from "@loopy/core/errors"
-import { GitRepository } from "@loopy/core/git"
-import type { Loopy } from "@loopy/core/loopy"
+import { FakeCodingAgent } from "@clankhouse/core/ai/fake-agent"
+import { FakeLLM } from "@clankhouse/core/ai/fake-llm"
+import { openDatabase } from "@clankhouse/core/db"
+import { ClankHouseError } from "@clankhouse/core/errors"
+import { GitRepository } from "@clankhouse/core/git"
+import type { ClankHouse } from "@clankhouse/core/clankhouse"
 import {
     ExecutionStatus,
     GetArtifactResponseSchema,
@@ -24,9 +24,9 @@ import {
     StartRunResponseSchema,
     WatchRunResponseSchema,
     WatchSessionResponseSchema
-} from "@loopy/server/proto"
-import { listen, type LoopyServer } from "@loopy/server"
-import { gate, runOutput, tempDir, tempGitRepo, tempLoopy, testRun, waitForRun } from "@loopy/test-utils"
+} from "@clankhouse/server/proto"
+import { listen, type ClankHouseServer } from "@clankhouse/server"
+import { gate, runOutput, tempDir, tempGitRepo, tempClankHouse, testRun, waitForRun } from "@clankhouse/test-utils"
 import { expect, onTestFinished, test } from "vitest"
 import * as z from "zod"
 import { runCli } from "../src"
@@ -86,25 +86,25 @@ async function runCliCommand(
     return { code, stdout: execution.stdout(), stderr: execution.stderr() }
 }
 
-function serverEnv(server: LoopyServer): NodeJS.ProcessEnv {
+function serverEnv(server: ClankHouseServer): NodeJS.ProcessEnv {
     return {
         ...process.env,
-        LOOPY_SERVER_URL: server.url,
-        LOOPY_API_KEY: server.apiKey
+        CLANK_SERVER_URL: server.url,
+        CLANK_API_KEY: server.apiKey
     }
 }
 
-async function testServer(loopy: Loopy): Promise<LoopyServer> {
-    const server = await listen(loopy, { port: 0 })
+async function testServer(clankhouse: ClankHouse): Promise<ClankHouseServer> {
+    const server = await listen(clankhouse, { port: 0 })
     onTestFinished(() => server.close())
     return server
 }
 
 const maxPollAttempts = 2000
 
-async function waitForStep(loopy: Loopy, runId: string, key: string) {
+async function waitForStep(clankhouse: ClankHouse, runId: string, key: string) {
     for (let attempt = 0; attempt < maxPollAttempts; attempt++) {
-        const run = await loopy.runs.get(runId)
+        const run = await clankhouse.runs.get(runId)
         const step = run.steps.find((candidate) => candidate.key === key)
         if (step !== undefined) return step
         await delay(5)
@@ -174,7 +174,7 @@ function gatedOutput(predicate: (chunk: Buffer) => boolean): {
 
 test("drives FakeLLM and FakeCodingAgent workflows through the complete CLI surface", async () => {
     // given a real server with a fake-provider workflow, Git repository, and event gate
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     let llmCalls = 0
@@ -191,7 +191,7 @@ test("drives FakeLLM and FakeCodingAgent workflows through the complete CLI surf
             output: { done: true }
         }
     })
-    loopy.registerWorkflow(
+    clankhouse.registerWorkflow(
         "build",
         {
             input: z.object({ id: z.string(), topic: z.string() }),
@@ -214,12 +214,12 @@ test("drives FakeLLM and FakeCodingAgent workflows through the complete CLI surf
                 output: z.object({ done: z.boolean() }),
                 worktree
             })
-            const artifact = await loopy.artifacts.writeText("summary", plan.summary, "text/plain")
-            const approval = await loopy.waitFor({
+            const artifact = await clankhouse.artifacts.writeText("summary", plan.summary, "text/plain")
+            const approval = await clankhouse.waitFor({
                 key: `approval:${input.id}`,
                 schema: z.object({ ok: z.boolean() })
             })
-            const result = await loopy.step("publish", z.string(), async () => published)
+            const result = await clankhouse.step("publish", z.string(), async () => published)
             return {
                 summary: plan.summary,
                 artifactId: artifact.id,
@@ -228,9 +228,9 @@ test("drives FakeLLM and FakeCodingAgent workflows through the complete CLI surf
             }
         }
     )
-    const server = await testServer(loopy)
+    const server = await testServer(clankhouse)
     const env = serverEnv(server)
-    const cwd = tempDir("loopy-cli-")
+    const cwd = tempDir("clankhouse-cli-")
     fs.writeFileSync(path.join(cwd, "input.json"), JSON.stringify({ id: "feature-1", topic: "cli" }))
 
     // when workflows are discovered and a run is started from a real input file
@@ -242,7 +242,7 @@ test("drives FakeLLM and FakeCodingAgent workflows through the complete CLI surf
         cwd
     })
     const started = fromJsonString(StartRunResponseSchema, lines(startedResult.stdout)[0]!)
-    const waiting = await waitForStep(loopy, started.runId, "wait:approval:feature-1")
+    const waiting = await waitForStep(clankhouse, started.runId, "wait:approval:feature-1")
 
     // then discovery, filtering, snapshots, sessions, and artifacts use strict ProtoJSON
     expect(workflowList.code).toBe(0)
@@ -351,24 +351,24 @@ test("drives FakeLLM and FakeCodingAgent workflows through the complete CLI surf
     const rerun = fromJsonString(RerunRunResponseSchema, lines(rerunResult.stdout)[0]!)
     const rerunWatch = await runCliCommand(["runs", "watch", rerun.runId, "--json"], { env })
     expect(rerunWatch.code).toBe(0)
-    expect(await loopy.runs.get(rerun.runId)).toMatchObject({ attempt: 2, output: { published: "v2" } })
+    expect(await clankhouse.runs.get(rerun.runId)).toMatchObject({ attempt: 2, output: { published: "v2" } })
     expect({ llmCalls, agentCalls }).toEqual({ llmCalls: 1, agentCalls: 1 })
 })
 
 test("starts void-input workflows without an input file", async () => {
     // given workflows with void and required inputs
-    const { loopy } = tempLoopy()
-    loopy.registerWorkflow(
+    const { clankhouse } = tempClankHouse()
+    clankhouse.registerWorkflow(
         "void-input",
         { input: z.void(), output: z.string(), key: () => "void-input" },
         async () => "done"
     )
-    loopy.registerWorkflow(
+    clankhouse.registerWorkflow(
         "required-input",
         { input: z.string(), output: z.void(), key: (input) => input },
         async () => undefined
     )
-    const server = await testServer(loopy)
+    const server = await testServer(clankhouse)
     const env = serverEnv(server)
 
     // when both workflows are inspected and started without --input
@@ -376,7 +376,7 @@ test("starts void-input workflows without an input file", async () => {
     const voidOutputWorkflow = await runCliCommand(["workflows", "get", "required-input"], { env })
     const startedResult = await runCliCommand(["runs", "start", "void-input", "--json"], { env })
     const started = fromJsonString(StartRunResponseSchema, lines(startedResult.stdout)[0]!)
-    const output = await runOutput(loopy, started.runId)
+    const output = await runOutput(clankhouse, started.runId)
     const rejected = await runCliCommand(["runs", "start", "required-input", "--json"], { env })
 
     // then the void workflow advertises and accepts absent input
@@ -396,7 +396,7 @@ test("starts void-input workflows without an input file", async () => {
 
 test("runs workflows with pipeline-safe output and reconnects to keyed runs", async () => {
     // given a workflow with separate running and immediately available inputs
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const pipeBlocker = gate()
     const fileBlocker = gate()
     onTestFinished(() => {
@@ -408,7 +408,7 @@ test("runs workflows with pipeline-safe output and reconnects to keyed runs", as
         ["file", fileBlocker]
     ])
     let invocations = 0
-    loopy.registerWorkflow(
+    clankhouse.registerWorkflow(
         "pipeline-run",
         {
             input: z.object({ id: z.string(), value: z.number() }),
@@ -419,16 +419,16 @@ test("runs workflows with pipeline-safe output and reconnects to keyed runs", as
             invocations++
             const blocker = blockers.get(input.id)
             if (blocker === undefined) throw new Error(`Missing blocker: ${input.id}`)
-            await loopy.step("wait", z.void(), async () => blocker.released)
+            await clankhouse.step("wait", z.void(), async () => blocker.released)
             return { id: input.id, doubled: input.value * 2 }
         }
     )
-    const server = await testServer(loopy)
+    const server = await testServer(clankhouse)
     const env = serverEnv(server)
-    const cwd = tempDir("loopy-cli-run-")
+    const cwd = tempDir("clankhouse-cli-run-")
     const pipeInput = { id: "pipe", value: 4 }
-    const runningId = loopy.start("pipeline-run", pipeInput)
-    await waitForStep(loopy, runningId, "wait")
+    const runningId = clankhouse.start("pipeline-run", pipeInput)
+    await waitForStep(clankhouse, runningId, "wait")
 
     // when the command receives piped input for an existing run and that run completes
     const running = startCli(["run", "pipeline-run", "--input", "-"], {
@@ -474,9 +474,13 @@ test("runs workflows with pipeline-safe output and reconnects to keyed runs", as
 
 test("runs void workflows without input or output", async () => {
     // given a workflow with void input and output
-    const { loopy } = tempLoopy()
-    loopy.registerWorkflow("void-run", { input: z.void(), output: z.void(), key: () => "void-run" }, async () => {})
-    const server = await testServer(loopy)
+    const { clankhouse } = tempClankHouse()
+    clankhouse.registerWorkflow(
+        "void-run",
+        { input: z.void(), output: z.void(), key: () => "void-run" },
+        async () => {}
+    )
+    const server = await testServer(clankhouse)
 
     // when it is run without an input option
     const result = await runCliCommand(["run", "void-run"], { env: serverEnv(server) })
@@ -491,24 +495,24 @@ test("runs void workflows without input or output", async () => {
 
 test("reports workflow failures without contaminating pipeline output", async () => {
     // given workflows that fail with coded and ordinary errors
-    const { loopy } = tempLoopy()
-    loopy.registerWorkflow(
+    const { clankhouse } = tempClankHouse()
+    clankhouse.registerWorkflow(
         "coded-run-error",
         { input: z.void(), output: z.void(), key: () => "coded-run-error" },
         async () =>
-            loopy.step("fail", z.void(), async () => {
-                throw new LoopyError("event_sources_empty", "coded failure")
+            clankhouse.step("fail", z.void(), async () => {
+                throw new ClankHouseError("event_sources_empty", "coded failure")
             })
     )
-    loopy.registerWorkflow(
+    clankhouse.registerWorkflow(
         "ordinary-run-error",
         { input: z.string(), output: z.void(), key: (input) => input },
         async () =>
-            loopy.step("fail", z.void(), async () => {
+            clankhouse.step("fail", z.void(), async () => {
                 throw new Error("ordinary failure")
             })
     )
-    const server = await testServer(loopy)
+    const server = await testServer(clankhouse)
     const env = serverEnv(server)
 
     // when coded and ordinary failures are requested in JSON and human-readable modes
@@ -532,7 +536,7 @@ test("reports workflow failures without contaminating pipeline output", async ()
         {
             code: 1,
             stdout: "",
-            stderr: "loopy: ordinary failure\n"
+            stderr: "clank: ordinary failure\n"
         }
     )
     expect({
@@ -548,21 +552,25 @@ test("reports workflow failures without contaminating pipeline output", async ()
 
 test("cancels a running workflow command without reporting an error", async () => {
     // given a workflow command waiting for its run to finish
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const entered = gate()
     const parked = gate()
     onTestFinished(() => {
         entered.release()
         parked.release()
     })
-    loopy.registerWorkflow("cancel-run", { input: z.void(), output: z.string(), key: () => "cancel-run" }, async () => {
-        await loopy.step("park", z.void(), async () => {
-            entered.release()
-            await parked.released
-        })
-        return "finished"
-    })
-    const server = await testServer(loopy)
+    clankhouse.registerWorkflow(
+        "cancel-run",
+        { input: z.void(), output: z.string(), key: () => "cancel-run" },
+        async () => {
+            await clankhouse.step("park", z.void(), async () => {
+                entered.release()
+                await parked.released
+            })
+            return "finished"
+        }
+    )
+    const server = await testServer(clankhouse)
     const controller = new AbortController()
     const command = startCli(["run", "cancel-run"], {
         env: serverEnv(server),
@@ -583,34 +591,34 @@ test("cancels a running workflow command without reporting an error", async () =
 
     // and the observer cancellation does not cancel the underlying workflow
     parked.release()
-    const [run] = await loopy.runs.list({ key: "cancel-run" })
-    expect(await waitForRun(loopy, run!.id)).toMatchObject({ status: "succeeded", output: "finished" })
+    const [run] = await clankhouse.runs.list({ key: "cancel-run" })
+    expect(await waitForRun(clankhouse, run!.id)).toMatchObject({ status: "succeeded", output: "finished" })
 })
 
 test("get --watch prints snapshots around live updates without duplicating included session history", async () => {
     // given a real server with a run waiting after a completed FakeLLM session
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const llm = new FakeLLM((_stepName, prompt) => ({ reply: prompt }))
-    loopy.registerWorkflow(
+    clankhouse.registerWorkflow(
         "approval",
         { input: z.object({ id: z.string() }), output: z.string(), key: (input) => input.id },
         async (input) => {
             await llm.call("prepare", { prompt: input.id, output: z.object({ reply: z.string() }) })
-            const event = await loopy.waitFor({
+            const event = await clankhouse.waitFor({
                 key: `get-watch:${input.id}`,
                 schema: z.object({ value: z.string() })
             })
             return event.value
         }
     )
-    const server = await testServer(loopy)
+    const server = await testServer(clankhouse)
     const env = serverEnv(server)
     const startedResult = await runCliCommand(["runs", "start", "approval", "--input", "-", "--json"], {
         env,
         input: JSON.stringify({ id: "item-1" })
     })
     const runId = fromJsonString(StartRunResponseSchema, lines(startedResult.stdout)[0]!).runId
-    const waiting = await waitForStep(loopy, runId, "wait:get-watch:item-1")
+    const waiting = await waitForStep(clankhouse, runId, "wait:get-watch:item-1")
 
     // when snapshot-then-tail watching starts and an event completes the run
     const watch = startCli(["runs", "get", runId, "--include", "sessions", "--watch", "--json"], { env })
@@ -641,38 +649,38 @@ test("get --watch prints snapshots around live updates without duplicating inclu
 
 test("get --watch observes concurrent steps that complete out of sequence order", async () => {
     // given a real server with two concurrently running workflow steps
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const first = gate()
     const second = gate()
     onTestFinished(() => {
         first.release()
         second.release()
     })
-    loopy.registerWorkflow(
+    clankhouse.registerWorkflow(
         "parallel-watch",
         { input: z.null(), output: z.void(), key: () => "parallel-watch" },
         async () => {
             await Promise.all([
-                loopy.step("first", z.string(), async () => {
+                clankhouse.step("first", z.string(), async () => {
                     await first.released
                     return "first"
                 }),
-                loopy.step("second", z.string(), async () => {
+                clankhouse.step("second", z.string(), async () => {
                     await second.released
                     return "second"
                 })
             ])
         }
     )
-    const server = await testServer(loopy)
+    const server = await testServer(clankhouse)
     const env = serverEnv(server)
     const startedResult = await runCliCommand(["runs", "start", "parallel-watch", "--input", "-", "--json"], {
         env,
         input: "null"
     })
     const runId = fromJsonString(StartRunResponseSchema, lines(startedResult.stdout)[0]!).runId
-    const firstStep = await waitForStep(loopy, runId, "first")
-    const secondStep = await waitForStep(loopy, runId, "second")
+    const firstStep = await waitForStep(clankhouse, runId, "first")
+    const secondStep = await waitForStep(clankhouse, runId, "second")
 
     // when snapshot-then-tail watching starts and the later step completes first
     const watch = startCli(["runs", "get", runId, "--watch", "--json"], { env })
@@ -710,7 +718,7 @@ test("get --watch observes concurrent steps that complete out of sequence order"
 
 test("human run watch does not repeat a step when only hidden metadata changes", async () => {
     // given a watched workflow that parks before attaching a session to an agent step
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const ready = gate()
     const attachSession = gate()
     const parked = gate()
@@ -719,18 +727,18 @@ test("human run watch does not repeat a step when only hidden metadata changes",
         attachSession.release()
         parked.release()
     })
-    loopy.registerWorkflow(
+    clankhouse.registerWorkflow(
         "human-agent-watch",
         { input: z.null(), output: z.void(), key: () => "human-agent-watch" },
         async () => {
-            await loopy.step("ready", z.void(), async () => ready.released)
-            await loopy.engine.executeStep({
+            await clankhouse.step("ready", z.void(), async () => ready.released)
+            await clankhouse.engine.executeStep({
                 kind: "agent",
                 name: "plan",
                 schema: z.object({ done: z.boolean() }),
                 execute: async (handle) => {
                     await attachSession.released
-                    const session = loopy.sessions.create({
+                    const session = clankhouse.sessions.create({
                         kind: "coding-agent",
                         client: "parking-agent",
                         provider: "parking",
@@ -745,10 +753,10 @@ test("human run watch does not repeat a step when only hidden metadata changes",
             })
         }
     )
-    const server = await testServer(loopy)
+    const server = await testServer(clankhouse)
     const env = serverEnv(server)
-    const runId = loopy.start("human-agent-watch", null)
-    await waitForStep(loopy, runId, "ready")
+    const runId = clankhouse.start("human-agent-watch", null)
+    await waitForStep(clankhouse, runId, "ready")
 
     // when watching starts before the agent gains its session metadata
     const watch = startCli(["runs", "watch", runId, "--include", "sessions"], { env })
@@ -772,7 +780,7 @@ test("human run watch does not repeat a step when only hidden metadata changes",
 
 test("human get --watch does not repeat a snapshotted step when only hidden metadata changes", async () => {
     // given an agent step parked before attaching its session metadata
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const entered = gate()
     const attachSession = gate()
     const parked = gate()
@@ -781,18 +789,18 @@ test("human get --watch does not repeat a snapshotted step when only hidden meta
         attachSession.release()
         parked.release()
     })
-    loopy.registerWorkflow(
+    clankhouse.registerWorkflow(
         "human-agent-get-watch",
         { input: z.null(), output: z.void(), key: () => "human-agent-get-watch" },
         async () => {
-            await loopy.engine.executeStep({
+            await clankhouse.engine.executeStep({
                 kind: "agent",
                 name: "plan",
                 schema: z.object({ done: z.boolean() }),
                 execute: async (handle) => {
                     entered.release()
                     await attachSession.released
-                    const session = loopy.sessions.create({
+                    const session = clankhouse.sessions.create({
                         kind: "coding-agent",
                         client: "parking-agent",
                         provider: "parking",
@@ -807,11 +815,11 @@ test("human get --watch does not repeat a snapshotted step when only hidden meta
             })
         }
     )
-    const server = await testServer(loopy)
+    const server = await testServer(clankhouse)
     const env = serverEnv(server)
-    const runId = loopy.start("human-agent-get-watch", null)
+    const runId = clankhouse.start("human-agent-get-watch", null)
     await entered.released
-    const plan = await waitForStep(loopy, runId, "plan")
+    const plan = await waitForStep(clankhouse, runId, "plan")
 
     // when snapshot-then-tail watching starts before the session is attached
     const watch = startCli(["runs", "get", runId, "--include", "sessions", "--watch"], { env })
@@ -835,30 +843,31 @@ test("human get --watch does not repeat a snapshotted step when only hidden meta
 
 test("included session failures do not stop the primary run watch", async () => {
     // given a live run whose completed session cursor becomes invalid after its initial snapshot
-    const { loopy, dir } = tempLoopy()
+    const { clankhouse, dir } = tempClankHouse()
     const llm = new FakeLLM((_stepName, prompt) => ({ reply: prompt }))
-    loopy.registerWorkflow(
+    clankhouse.registerWorkflow(
         "session-watch-error",
         { input: z.null(), output: z.string(), key: () => "session-watch-error" },
         async () => {
             await llm.call("prepare", { prompt: "watch", output: z.object({ reply: z.string() }) })
-            return (await loopy.waitFor({ key: "session-watch-done", schema: z.object({ value: z.string() }) })).value
+            return (await clankhouse.waitFor({ key: "session-watch-done", schema: z.object({ value: z.string() }) }))
+                .value
         }
     )
-    const server = await testServer(loopy)
+    const server = await testServer(clankhouse)
     const env = serverEnv(server)
     const startedResult = await runCliCommand(["runs", "start", "session-watch-error", "--input", "-", "--json"], {
         env,
         input: "null"
     })
     const runId = fromJsonString(StartRunResponseSchema, lines(startedResult.stdout)[0]!).runId
-    await waitForStep(loopy, runId, "wait:session-watch-done")
-    const run = await loopy.runs.get(runId)
+    await waitForStep(clankhouse, runId, "wait:session-watch-done")
+    const run = await clankhouse.runs.get(runId)
     const sessionIds = run.steps.flatMap((step) =>
         "sessionId" in step && step.sessionId !== undefined ? [step.sessionId] : []
     )
     const sessionId = sessionIds[0]!
-    const session = await loopy.sessions.get(sessionId)
+    const session = await clankhouse.sessions.get(sessionId)
     const cursor = session.messages.at(-1)!.id
     const stdout = gatedOutput((chunk) => "session" in (JSON.parse(chunk.toString("utf8")) as Record<string, unknown>))
     const stderr = new PassThrough()
@@ -873,7 +882,7 @@ test("included session failures do not stop the primary run watch", async () => 
     await stdout.blocked
 
     // when the persisted cursor is removed before tailing begins
-    const db = openDatabase(path.join(dir, "loopy.db"))
+    const db = openDatabase(path.join(dir, "clankhouse.db"))
     try {
         db.prepare("DELETE FROM session_messages WHERE id = ?").run(cursor)
     } finally {
@@ -908,22 +917,22 @@ test("included session failures do not stop the primary run watch", async () => 
 
 test("resume reconnects to an interrupted run and prints only its run ID", async () => {
     // given a run interrupted by closing its first real server
-    const { loopy, reopen } = tempLoopy()
-    const register = (instance: Loopy) =>
+    const { clankhouse, reopen } = tempClankHouse()
+    const register = (instance: ClankHouse) =>
         instance.registerWorkflow(
             "resume",
             { input: z.null(), output: z.number(), key: () => "resume" },
             async () => (await instance.waitFor({ key: "resume-event", schema: z.object({ value: z.number() }) })).value
         )
-    register(loopy)
-    const firstServer = await listen(loopy, { port: 0 })
+    register(clankhouse)
+    const firstServer = await listen(clankhouse, { port: 0 })
     const firstEnv = serverEnv(firstServer)
     const startedResult = await runCliCommand(["runs", "start", "resume", "--input", "-", "--json"], {
         env: firstEnv,
         input: "null"
     })
     const runId = fromJsonString(StartRunResponseSchema, lines(startedResult.stdout)[0]!).runId
-    await waitForStep(loopy, runId, "wait:resume-event")
+    await waitForStep(clankhouse, runId, "wait:resume-event")
     await firstServer.close()
     const second = reopen()
     register(second)
@@ -949,20 +958,20 @@ test("resume reconnects to an interrupted run and prints only its run ID", async
 
 test("reports structured failures and reflects failed watched runs in the exit status", async () => {
     // given a real server with a workflow that fails
-    const { loopy } = tempLoopy()
-    loopy.registerWorkflow("failure", { input: z.null(), output: z.void(), key: () => "failure" }, async () =>
-        loopy.step("fail", z.void(), async () => {
+    const { clankhouse } = tempClankHouse()
+    clankhouse.registerWorkflow("failure", { input: z.null(), output: z.void(), key: () => "failure" }, async () =>
+        clankhouse.step("fail", z.void(), async () => {
             throw new Error("broken")
         })
     )
-    const server = await testServer(loopy)
+    const server = await testServer(clankhouse)
     const env = serverEnv(server)
     const startedResult = await runCliCommand(["runs", "start", "failure", "--input", "-", "--json"], {
         env,
         input: "null"
     })
     const runId = fromJsonString(StartRunResponseSchema, lines(startedResult.stdout)[0]!).runId
-    await waitForRun(loopy, runId)
+    await waitForRun(clankhouse, runId)
 
     // when the failed run is inspected and watched alongside usage, input, and authentication errors
     const get = await runCliCommand(["runs", "get", runId, "--json"], { env })
@@ -994,10 +1003,10 @@ test("reports structured failures and reflects failed watched runs in the exit s
     expect(authentication.code).toBe(1)
     expect(JSON.parse(authentication.stderr)).toMatchObject({ type: "error", code: "unauthenticated" })
     expect(consumedJson.code).toBe(1)
-    expect(consumedJson.stderr).toMatch(/^loopy: /)
+    expect(consumedJson.stderr).toMatch(/^clank: /)
 
     // and the executable bootstrap reaches the same authenticated server
-    const executable = path.join(cliDir, "bin", "loopy.js")
+    const executable = path.join(cliDir, "bin", "clank.js")
     const child = await execFileAsync(
         process.execPath,
         [executable, "--server", server.url, "--api-key", server.apiKey, "--json", "workflows", "list"],
@@ -1010,17 +1019,17 @@ test("reports structured failures and reflects failed watched runs in the exit s
 
 test("reports server shutdown without publishing an incomplete artifact copy", async () => {
     // given a live run and an artifact stream that stalls after its first chunk
-    const { loopy } = tempLoopy()
-    const artifact = await testRun(loopy, async () => loopy.artifacts.writeText("report", "complete"))
-    loopy.registerWorkflow(
+    const { clankhouse } = tempClankHouse()
+    const artifact = await testRun(clankhouse, async () => clankhouse.artifacts.writeText("report", "complete"))
+    clankhouse.registerWorkflow(
         "shutdown",
         { input: z.null(), output: z.number(), key: () => "shutdown" },
-        async () => (await loopy.waitFor({ key: "shutdown-event", schema: z.object({ value: z.number() }) })).value
+        async () => (await clankhouse.waitFor({ key: "shutdown-event", schema: z.object({ value: z.number() }) })).value
     )
-    const runId = loopy.start("shutdown", null)
-    const waiting = await waitForStep(loopy, runId, "wait:shutdown-event")
+    const runId = clankhouse.start("shutdown", null)
+    const waiting = await waitForStep(clankhouse, runId, "wait:shutdown-event")
     const sourceDemanded = gate()
-    loopy.artifacts.read = async () => ({
+    clankhouse.artifacts.read = async () => ({
         stream: new ReadableStream<Uint8Array>({
             start(controller) {
                 controller.enqueue(Buffer.from("partial"))
@@ -1030,9 +1039,9 @@ test("reports server shutdown without publishing an incomplete artifact copy", a
             }
         })
     })
-    const server = await testServer(loopy)
+    const server = await testServer(clankhouse)
     const env = serverEnv(server)
-    const cwd = tempDir("loopy-cli-shutdown-")
+    const cwd = tempDir("clankhouse-cli-shutdown-")
     const destination = path.join(cwd, "report.txt")
 
     // when shutdown interrupts a run watch and an artifact copy in progress
@@ -1052,14 +1061,14 @@ test("reports server shutdown without publishing an incomplete artifact copy", a
     expect(fs.readdirSync(cwd)).toEqual([])
 
     // and observing shutdown does not alter the running workflow
-    expect((await loopy.runs.get(runId)).status).toBe("running")
+    expect((await clankhouse.runs.get(runId)).status).toBe("running")
 })
 
 test("treats a closed output pipe as successful early termination", async () => {
     // given a real server and an output stream whose downstream reader has closed
-    const { loopy } = tempLoopy()
-    loopy.registerWorkflow("pipe", { input: z.null(), output: z.void(), key: () => "pipe" }, async () => {})
-    const server = await testServer(loopy)
+    const { clankhouse } = tempClankHouse()
+    clankhouse.registerWorkflow("pipe", { input: z.null(), output: z.void(), key: () => "pipe" }, async () => {})
+    const server = await testServer(clankhouse)
     const stderr = new PassThrough()
     const stderrChunks: Buffer[] = []
     stderr.on("data", (chunk: Buffer) => stderrChunks.push(Buffer.from(chunk)))
@@ -1101,7 +1110,7 @@ test("flushes Commander help output before resolving even when the writer is bac
 
     // and the full help text reaches the stream with a clean exit
     expect(code).toBe(0)
-    expect(stdout.output().toString("utf8")).toContain("Interact with a Loopy server")
+    expect(stdout.output().toString("utf8")).toContain("Interact with a ClankHouse server")
     expect(stdout.output().toString("utf8")).toContain("-v, --verbose")
 })
 
@@ -1121,12 +1130,16 @@ test("rejects unsupported run and session include resources", async () => {
 })
 
 test("resolves connection settings by flag, environment, and local credentials precedence", async () => {
-    // given a real server whose credential is stored in its Loopy directory
-    const { loopy, dir } = tempLoopy()
-    loopy.registerWorkflow("configured", { input: z.null(), output: z.void(), key: () => "configured" }, async () => {})
-    const server = await testServer(loopy)
-    const credentialEnv: NodeJS.ProcessEnv = { ...process.env, LOOPY_SERVER_URL: server.url, LOOPY_DIR: dir }
-    delete credentialEnv.LOOPY_API_KEY
+    // given a real server whose credential is stored in its ClankHouse directory
+    const { clankhouse, dir } = tempClankHouse()
+    clankhouse.registerWorkflow(
+        "configured",
+        { input: z.null(), output: z.void(), key: () => "configured" },
+        async () => {}
+    )
+    const server = await testServer(clankhouse)
+    const credentialEnv: NodeJS.ProcessEnv = { ...process.env, CLANK_SERVER_URL: server.url, CLANKHOUSE_DIR: dir }
+    delete credentialEnv.CLANK_API_KEY
 
     // when the CLI uses file credentials and explicit flags over incorrect environment values
     const fromFile = await runCliCommand(["workflows", "list", "--json"], { env: credentialEnv })
@@ -1135,8 +1148,8 @@ test("resolves connection settings by flag, environment, and local credentials p
         {
             env: {
                 ...process.env,
-                LOOPY_SERVER_URL: "http://127.0.0.1:1",
-                LOOPY_API_KEY: "wrong"
+                CLANK_SERVER_URL: "http://127.0.0.1:1",
+                CLANK_API_KEY: "wrong"
             }
         }
     )
@@ -1150,13 +1163,13 @@ test("resolves connection settings by flag, environment, and local credentials p
     )
 
     // and missing or malformed fallback credentials fail locally without exposing file contents
-    const missingDir = tempDir("loopy-cli-missing-")
+    const missingDir = tempDir("clankhouse-cli-missing-")
     const missing = await runCliCommand(["workflows", "list", "--json"], {
-        env: { ...process.env, LOOPY_SERVER_URL: server.url, LOOPY_DIR: missingDir }
+        env: { ...process.env, CLANK_SERVER_URL: server.url, CLANKHOUSE_DIR: missingDir }
     })
     fs.writeFileSync(path.join(missingDir, "credentials.json"), "secret malformed contents")
     const malformed = await runCliCommand(["workflows", "list", "--json"], {
-        env: { ...process.env, LOOPY_SERVER_URL: server.url, LOOPY_DIR: missingDir }
+        env: { ...process.env, CLANK_SERVER_URL: server.url, CLANKHOUSE_DIR: missingDir }
     })
     expect(missing.code).toBe(1)
     expect(JSON.parse(missing.stderr)).toMatchObject({ type: "error", code: "configuration" })
@@ -1167,16 +1180,16 @@ test("resolves connection settings by flag, environment, and local credentials p
 
 test("requires https for non-loopback servers and treats an empty server URL as unset", async () => {
     // given a server-authenticated environment and an equivalent one with no configured server URL
-    const { loopy } = tempLoopy()
-    loopy.registerWorkflow("policy", { input: z.null(), output: z.void(), key: () => "policy" }, async () => {})
-    const server = await testServer(loopy)
+    const { clankhouse } = tempClankHouse()
+    clankhouse.registerWorkflow("policy", { input: z.null(), output: z.void(), key: () => "policy" }, async () => {})
+    const server = await testServer(clankhouse)
     const env = serverEnv(server)
     const unsetEnv = { ...env }
-    delete unsetEnv.LOOPY_SERVER_URL
+    delete unsetEnv.CLANK_SERVER_URL
 
     // when plaintext http targets a remote host, and when the server URL is empty versus unset
     const insecure = await runCliCommand(["workflows", "list", "--server", "http://192.0.2.1:7331", "--json"], { env })
-    const emptyUrl = await runCliCommand(["workflows", "list", "--json"], { env: { ...env, LOOPY_SERVER_URL: "" } })
+    const emptyUrl = await runCliCommand(["workflows", "list", "--json"], { env: { ...env, CLANK_SERVER_URL: "" } })
     const unsetUrl = await runCliCommand(["workflows", "list", "--json"], { env: unsetEnv })
 
     // then remote plaintext is refused as a configuration error before any request is sent
@@ -1185,26 +1198,26 @@ test("requires https for non-loopback servers and treats an empty server URL as 
     expect(insecure.stderr).toContain("https")
 
     // and an empty URL is never a parse error but falls back to the loopback default, exactly like an unset URL
-    expect(emptyUrl.stderr).not.toContain("Invalid Loopy server URL")
+    expect(emptyUrl.stderr).not.toContain("Invalid ClankHouse server URL")
     expect(JSON.parse(emptyUrl.stderr).code).toBe(JSON.parse(unsetUrl.stderr).code)
 })
 
 test("cancels active watches with exit code 130 and no spurious error output", async () => {
     // given a real server with an active event-waiting run
-    const { loopy } = tempLoopy()
-    loopy.registerWorkflow(
+    const { clankhouse } = tempClankHouse()
+    clankhouse.registerWorkflow(
         "cancel",
         { input: z.null(), output: z.number(), key: () => "cancel" },
-        async () => (await loopy.waitFor({ key: "cancel-event", schema: z.object({ value: z.number() }) })).value
+        async () => (await clankhouse.waitFor({ key: "cancel-event", schema: z.object({ value: z.number() }) })).value
     )
-    const server = await testServer(loopy)
+    const server = await testServer(clankhouse)
     const env = serverEnv(server)
     const startedResult = await runCliCommand(["runs", "start", "cancel", "--input", "-", "--json"], {
         env,
         input: "null"
     })
     const runId = fromJsonString(StartRunResponseSchema, lines(startedResult.stdout)[0]!).runId
-    const waiting = await waitForStep(loopy, runId, "wait:cancel-event")
+    const waiting = await waitForStep(clankhouse, runId, "wait:cancel-event")
     const controller = new AbortController()
 
     // when a dedicated watch is aborted after receiving its current step
@@ -1222,13 +1235,13 @@ test("cancels active watches with exit code 130 and no spurious error output", a
         env,
         input: JSON.stringify({ value: 3 })
     })
-    expect(await waitForRun(loopy, runId)).toMatchObject({ status: "succeeded", output: 3 })
+    expect(await waitForRun(clankhouse, runId)).toMatchObject({ status: "succeeded", output: 3 })
 })
 
 test("cancels a command while it is reading JSON from stdin", async () => {
     // given a command waiting for JSON input from an open stdin stream
-    const { loopy } = tempLoopy()
-    const server = await testServer(loopy)
+    const { clankhouse } = tempClankHouse()
+    const server = await testServer(clankhouse)
     const env = serverEnv(server)
     const stdin = new PassThrough()
     const controller = new AbortController()

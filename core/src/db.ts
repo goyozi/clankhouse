@@ -1,5 +1,5 @@
 import Database from "better-sqlite3"
-import type { LoopyErrorCode } from "./errors"
+import type { ClankHouseErrorCode } from "./errors"
 
 export type Db = Database.Database
 type Statement = Database.Statement
@@ -86,7 +86,7 @@ export type RunRow = {
     input: string | null
     output: string | null
     error: string | null
-    error_code: LoopyErrorCode | null
+    error_code: ClankHouseErrorCode | null
     status: PersistedStatus
     started_at: string
     ended_at: string | null
@@ -145,7 +145,13 @@ export function succeedRun(db: Db, id: string, output: string | null, endedAt: s
     statements(db).runs.succeed.run(output, endedAt, id)
 }
 
-export function failRun(db: Db, id: string, error: string, errorCode: LoopyErrorCode | null, endedAt: string): void {
+export function failRun(
+    db: Db,
+    id: string,
+    error: string,
+    errorCode: ClankHouseErrorCode | null,
+    endedAt: string
+): void {
     statements(db).runs.fail.run(error, errorCode, endedAt, id)
 }
 
@@ -219,7 +225,7 @@ export type StepRow = {
     status: PersistedStatus
     output: string | null
     error: string | null
-    error_code: LoopyErrorCode | null
+    error_code: ClankHouseErrorCode | null
     session_id: string | null
     snapshot_ref: string | null
     snapshot_enabled: 0 | 1
@@ -340,7 +346,13 @@ export function succeedStep(db: Db, id: string, output: string | null, endedAt: 
     statements(db).steps.succeed.run(output, endedAt, id)
 }
 
-export function failStep(db: Db, id: string, error: string, errorCode: LoopyErrorCode | null, endedAt: string): void {
+export function failStep(
+    db: Db,
+    id: string,
+    error: string,
+    errorCode: ClankHouseErrorCode | null,
+    endedAt: string
+): void {
     statements(db).steps.fail.run(error, errorCode, endedAt, id)
 }
 

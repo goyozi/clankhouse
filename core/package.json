@@ -1,5 +1,5 @@
 {
-    "name": "@loopy/core",
+    "name": "@clankhouse/core",
     "version": "1.0.0",
     "type": "module",
     "main": "./src/index.ts",
@@ -19,7 +19,7 @@
         "zod": "catalog:"
     },
     "devDependencies": {
-        "@loopy/test-utils": "workspace:*",
+        "@clankhouse/test-utils": "workspace:*",
         "fast-check": "^4.9.0"
     }
 }

@@ -14,12 +14,12 @@ import {
 import { createHash } from "node:crypto"
 import * as os from "node:os"
 import * as path from "node:path"
-import { LoopyError } from "../errors"
+import { ClankHouseError } from "../errors"
 import { exists, isNodeError, newId } from "../util"
 import * as git from "./client"
 
-const SNAPSHOT_FORMAT = Buffer.from("loopy-snapshot-v1")
-const RESCUE_REF_PREFIX = "refs/loopy/restore"
+const SNAPSHOT_FORMAT = Buffer.from("clankhouse-snapshot-v1")
+const RESCUE_REF_PREFIX = "refs/clankhouse/restore"
 const OBJECT_CHUNK_SIZE = 64
 
 export class Worktree {
@@ -59,7 +59,7 @@ export class Worktree {
      *
      * Replaces the current non-ignored Git-representable state.
      * The target is validated and the current state is temporarily pinned before mutation. If applying the
-     * target fails, Loopy restores that rescue state; ignored files remain outside the restoration contract.
+     * target fails, ClankHouse restores that rescue state; ignored files remain outside the restoration contract.
      * The caller must prevent concurrent mutations during the operation.
      */
     async restore(snapshotName: string): Promise<void> {
@@ -69,7 +69,7 @@ export class Worktree {
 
     /** @internal */
     async snapshotRef(fullRef: string): Promise<string> {
-        const state = await captureState(this.path, "loopy snapshot")
+        const state = await captureState(this.path, "clankhouse snapshot")
         await git.updateRef(this.path, fullRef, state.envelopeCommit)
         return fullRef
     }
@@ -85,7 +85,7 @@ export class Worktree {
 }
 
 export async function captureState(cwd: string, message: string): Promise<CapturedState> {
-    const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "loopy-snapshot-"))
+    const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "clankhouse-snapshot-"))
     try {
         const head = await git.revParse(cwd, "HEAD^{commit}")
         const normalizedIndex = await copyAndNormalizeIndex(cwd, temporaryDirectory)
@@ -112,7 +112,7 @@ async function restoreCapturedStateRecoverably(cwd: string, ref: string): Promis
     let rescue: CapturedState
     let rescueRef: string
     try {
-        rescue = await captureState(cwd, "loopy restore rescue")
+        rescue = await captureState(cwd, "clankhouse restore rescue")
         rescueRef = `${RESCUE_REF_PREFIX}/${Date.now()}-${newId()}`
         await git.updateRef(cwd, rescueRef, rescue.envelopeCommit, "")
     } catch (error) {
@@ -148,7 +148,7 @@ async function restoreCapturedStateRecoverably(cwd: string, ref: string): Promis
 
 export async function removeStaleRescueRefs(cwd: string, olderThan: number): Promise<void> {
     for (const ref of await git.listRefs(cwd, `${RESCUE_REF_PREFIX}/`)) {
-        const match = /^refs\/loopy\/restore\/([0-9]+)-[0-9A-Za-z]{21}$/.exec(ref.name)
+        const match = /^refs\/clankhouse\/restore\/([0-9]+)-[0-9A-Za-z]{21}$/.exec(ref.name)
         if (match === null || Number(match[1]) >= olderThan) continue
         await git.deleteRef(cwd, ref.name, ref.oid)
     }
@@ -171,8 +171,8 @@ async function disposePreparedState(prepared: PreparedIndexRestore): Promise<voi
     await rm(prepared.temporaryDirectory, { recursive: true, force: true })
 }
 
-function restoreFailure(message: string, causes: unknown[]): LoopyError {
-    return new LoopyError("git_snapshot_restore_failed", message, { cause: new AggregateError(causes, message) })
+function restoreFailure(message: string, causes: unknown[]): ClankHouseError {
+    return new ClankHouseError("git_snapshot_restore_failed", message, { cause: new AggregateError(causes, message) })
 }
 
 async function copyAndNormalizeIndex(cwd: string, temporaryDirectory: string): Promise<string> {
@@ -378,9 +378,9 @@ async function prepareIndexRestore(cwd: string, ref: string): Promise<PreparedIn
     const commit = await git.revParse(cwd, `${ref}^{commit}`)
     const format = await git.tryReadBlob(cwd, `${commit}:format`)
     if (format === undefined || !format.equals(SNAPSHOT_FORMAT)) {
-        throw new LoopyError(
+        throw new ClankHouseError(
             "git_snapshot_format_unsupported",
-            `Snapshot ${ref} is not in the supported loopy-snapshot-v1 format`
+            `Snapshot ${ref} is not in the supported clankhouse-snapshot-v1 format`
         )
     }
     const index = await git.readBlob(cwd, `${commit}:index`)
@@ -391,7 +391,7 @@ async function prepareIndexRestore(cwd: string, ref: string): Promise<PreparedIn
     const rawEntries = await readRawTreeEntries(cwd, rawTree)
     for (const entry of rawEntries) resolveSnapshotPath(cwd, entry.path)
     const targetIndex = await git.resolveGitPath(cwd, "index")
-    const temporaryDirectory = await mkdtemp(path.join(path.dirname(targetIndex), "loopy-index-restore-"))
+    const temporaryDirectory = await mkdtemp(path.join(path.dirname(targetIndex), "clankhouse-index-restore-"))
     const temporaryIndex = path.join(temporaryDirectory, "index")
     try {
         await writeFile(temporaryIndex, index)
@@ -405,12 +405,12 @@ async function prepareIndexRestore(cwd: string, ref: string): Promise<PreparedIn
 
 function userSnapshotRef(worktreePath: string, name: string): string {
     const namespace = createHash("sha256").update(path.resolve(worktreePath)).digest("hex")
-    return `refs/loopy/user/${namespace}/${name}`
+    return `refs/clankhouse/user/${namespace}/${name}`
 }
 
 function validateRefSuffix(name: string): void {
     if (!/^[A-Za-z0-9._-]+$/.test(name) || name.includes("..")) {
-        throw new LoopyError(
+        throw new ClankHouseError(
             "git_snapshot_name_invalid",
             `Invalid snapshot name "${name}"; use only letters, digits, ".", "_" and "-"`
         )

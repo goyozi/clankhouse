@@ -8,7 +8,7 @@ import { requireContext } from "./context"
 import * as sql from "./db"
 import type { ArtifactRow, Db, StepRow } from "./db"
 import type { Engine } from "./engine"
-import { LoopyError } from "./errors"
+import { ClankHouseError } from "./errors"
 import { isNodeError, newId, nowIso, uniqueName } from "./util"
 
 export const ArtifactSchema = z.object({
@@ -21,12 +21,12 @@ export const ArtifactSchema = z.object({
 })
 
 export class Artifacts {
-    private readonly loopyDir: string
+    private readonly clankhouseDir: string
     private readonly db: Db
     private readonly engine: Engine
 
-    constructor(loopyDir: string, db: Db, engine: Engine) {
-        this.loopyDir = loopyDir
+    constructor(clankhouseDir: string, db: Db, engine: Engine) {
+        this.clankhouseDir = clankhouseDir
         this.db = db
         this.engine = engine
     }
@@ -40,7 +40,7 @@ export class Artifacts {
 
     async readText(id: string): Promise<TextArtifact> {
         const row = this.rowById(id)
-        const text = await this.readBacking(id, () => readFile(path.join(this.loopyDir, row.file), "utf8"))
+        const text = await this.readBacking(id, () => readFile(path.join(this.clankhouseDir, row.file), "utf8"))
         return { text, ...(row.mime_type !== null ? { mimeType: row.mime_type } : {}) }
     }
 
@@ -50,7 +50,7 @@ export class Artifacts {
 
     async read(id: string): Promise<ArtifactContent> {
         const row = this.rowById(id)
-        const file = await this.readBacking(id, () => open(path.join(this.loopyDir, row.file), "r"))
+        const file = await this.readBacking(id, () => open(path.join(this.clankhouseDir, row.file), "r"))
         const stream = Readable.toWeb(file.createReadStream()) as ReadableStream<Uint8Array>
         return { stream, ...(row.mime_type !== null ? { mimeType: row.mime_type } : {}) }
     }
@@ -60,7 +60,7 @@ export class Artifacts {
             return await read()
         } catch (error) {
             if (isNodeError(error, "ENOENT")) {
-                throw new LoopyError("artifact_not_found", `Artifact not found: ${id}`, { cause: error })
+                throw new ClankHouseError("artifact_not_found", `Artifact not found: ${id}`, { cause: error })
             }
             throw error
         }
@@ -89,7 +89,7 @@ export class Artifacts {
             execute: async (handle) => {
                 const ctx = requireContext()
                 const relative = artifactFile(ctx.runId, handle.stepKey)
-                const absolute = path.join(this.loopyDir, relative)
+                const absolute = path.join(this.clankhouseDir, relative)
                 await mkdir(path.dirname(absolute), { recursive: true })
                 await writeFile(absolute)
                 const id = newId()
@@ -118,7 +118,7 @@ export class Artifacts {
 
     private rowById(id: string): ArtifactRow {
         const row = sql.findArtifactById(this.db, id)
-        if (!row) throw new LoopyError("artifact_not_found", `Artifact not found: ${id}`)
+        if (!row) throw new ClankHouseError("artifact_not_found", `Artifact not found: ${id}`)
         return row
     }
 
@@ -127,9 +127,9 @@ export class Artifacts {
         const source = sql.findArtifactById(this.db, step.artifact_id)!
         const artifactId = newId()
         const file = artifactFile(runId, step.key)
-        const destination = path.join(this.loopyDir, file)
+        const destination = path.join(this.clankhouseDir, file)
         mkdirSync(path.dirname(destination), { recursive: true })
-        copyFileSync(path.join(this.loopyDir, source.file), destination)
+        copyFileSync(path.join(this.clankhouseDir, source.file), destination)
         const artifact = { ...source, id: artifactId, run_id: runId, file }
         sql.insertArtifact(this.db, artifact)
         const output =

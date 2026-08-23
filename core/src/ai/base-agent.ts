@@ -1,6 +1,6 @@
 import * as z from "zod"
 import { requireContext } from "../context"
-import { LoopyError } from "../errors"
+import { ClankHouseError } from "../errors"
 import type { Worktree } from "../git"
 import { uniqueName } from "../util"
 import type { CodingAgent, CodingRunOptions } from "./coding-agent"
@@ -47,7 +47,7 @@ export abstract class BaseCodingAgent implements CodingAgent {
         const ctx = requireContext()
         const snapshot = options.snapshot ?? true
         let session: SessionRecorder | undefined
-        return ctx.loopy.engine.executeStep({
+        return ctx.clankhouse.engine.executeStep({
             kind: "agent",
             name: stepName,
             schema: options.output,
@@ -56,7 +56,7 @@ export abstract class BaseCodingAgent implements CodingAgent {
             execute: async (handle) => {
                 handle.set("snapshot_enabled", snapshot ? 1 : 0)
                 const prompt = await renderPrompt(options.prompt)
-                session = ctx.loopy.sessions.create({
+                session = ctx.clankhouse.sessions.create({
                     kind: "coding-agent",
                     client: this.client,
                     provider: this.provider,
@@ -75,7 +75,7 @@ export abstract class BaseCodingAgent implements CodingAgent {
             onSuccess: async (handle) => {
                 if (snapshot) {
                     const ref = await options.worktree.snapshotRef(
-                        `refs/loopy/agent/${uniqueName(`${ctx.workflowName}/${ctx.runKey}`)}/${ctx.attempt}/${uniqueName(handle.stepKey)}`
+                        `refs/clankhouse/agent/${uniqueName(`${ctx.workflowName}/${ctx.runKey}`)}/${ctx.attempt}/${uniqueName(handle.stepKey)}`
                     )
                     handle.set("snapshot_ref", ref)
                 }
@@ -85,14 +85,14 @@ export abstract class BaseCodingAgent implements CodingAgent {
             onReplay: async (row) => {
                 const recordedSnapshot = row.snapshot_enabled === 1
                 if (recordedSnapshot !== snapshot) {
-                    throw new LoopyError(
+                    throw new ClankHouseError(
                         "coding_agent_snapshot_mismatch",
                         `Agent step "${row.key}" was recorded with snapshots ${recordedSnapshot ? "enabled" : "disabled"} but replay requested snapshots ${snapshot ? "enabled" : "disabled"}`
                     )
                 }
                 if (!snapshot) return
                 if (row.snapshot_ref === null) {
-                    throw new LoopyError(
+                    throw new ClankHouseError(
                         "coding_agent_snapshot_missing",
                         `Agent step "${row.key}" has no worktree snapshot to restore`
                     )

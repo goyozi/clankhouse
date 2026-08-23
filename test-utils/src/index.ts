@@ -4,9 +4,9 @@ import * as os from "node:os"
 import * as path from "node:path"
 import { promisify } from "node:util"
 import { onTestFinished } from "vitest"
-import { Loopy } from "@loopy/core/loopy"
-import type { WorkflowRun } from "@loopy/core/runs"
-import type { AISessionMessage } from "@loopy/core/ai/sessions"
+import { ClankHouse } from "@clankhouse/core/clankhouse"
+import type { WorkflowRun } from "@clankhouse/core/runs"
+import type { AISessionMessage } from "@clankhouse/core/ai/sessions"
 import * as z from "zod"
 
 const execFileAsync = promisify(execFile)
@@ -17,15 +17,15 @@ export function tempDir(prefix: string): string {
     return dir
 }
 
-export function tempLoopy(): { loopy: Loopy; dir: string; reopen: () => Loopy } {
-    const dir = tempDir("loopy-test-")
-    const instances: Loopy[] = []
+export function tempClankHouse(): { clankhouse: ClankHouse; dir: string; reopen: () => ClankHouse } {
+    const dir = tempDir("clankhouse-test-")
+    const instances: ClankHouse[] = []
     const open = () => {
-        const instance = new Loopy(dir)
+        const instance = new ClankHouse(dir)
         instances.push(instance)
         return instance
     }
-    const loopy = open()
+    const clankhouse = open()
     onTestFinished(() => {
         for (const instance of instances) {
             try {
@@ -33,7 +33,7 @@ export function tempLoopy(): { loopy: Loopy; dir: string; reopen: () => Loopy } 
             } catch {}
         }
     })
-    return { loopy, dir, reopen: open }
+    return { clankhouse, dir, reopen: open }
 }
 
 export async function runGit(cwd: string, args: string[]): Promise<string> {
@@ -51,11 +51,11 @@ export type TempGitRepo = {
 }
 
 export async function tempGitRepo(): Promise<TempGitRepo> {
-    const dir = tempDir("loopy-git-")
+    const dir = tempDir("clankhouse-git-")
     await runGit(dir, ["init", "-b", "main"])
     await runGit(dir, ["config", "core.autocrlf", "false"])
-    await runGit(dir, ["config", "user.email", "test@loopy.dev"])
-    await runGit(dir, ["config", "user.name", "Loopy Test"])
+    await runGit(dir, ["config", "user.email", "test@clankhouse.dev"])
+    await runGit(dir, ["config", "user.name", "ClankHouse Test"])
     const repo: TempGitRepo = {
         path: dir,
         write(file, content) {
@@ -70,7 +70,7 @@ export async function tempGitRepo(): Promise<TempGitRepo> {
             await runGit(dir, ["commit", "-m", message])
         },
         async addBareOrigin() {
-            const bare = tempDir("loopy-origin-")
+            const bare = tempDir("clankhouse-origin-")
             await runGit(bare, ["init", "--bare"])
             await runGit(dir, ["remote", "add", "origin", bare])
             return bare
@@ -82,19 +82,19 @@ export async function tempGitRepo(): Promise<TempGitRepo> {
 }
 
 export function testRun<O>(
-    loopy: Loopy,
+    clankhouse: ClankHouse,
     body: () => Promise<O>,
     opts: { key?: string; output?: z.ZodType<O> } = {}
 ): Promise<O> {
     const output = opts.output ?? (z.json() as unknown as z.ZodType<O>)
-    return loopy.run("test-workflow", opts.key ?? "test-key", output, body)
+    return clankhouse.run("test-workflow", opts.key ?? "test-key", output, body)
 }
 
-export async function waitForRun(loopy: Loopy, runId: string): Promise<WorkflowRun> {
-    let run = await loopy.runs.get(runId)
+export async function waitForRun(clankhouse: ClankHouse, runId: string): Promise<WorkflowRun> {
+    let run = await clankhouse.runs.get(runId)
     while (run.status !== "succeeded" && run.status !== "failed") {
         await delay(5)
-        run = await loopy.runs.get(runId)
+        run = await clankhouse.runs.get(runId)
     }
     return run
 }
@@ -103,8 +103,8 @@ function delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-export async function runOutput(loopy: Loopy, runId: string): Promise<unknown> {
-    const run = await waitForRun(loopy, runId)
+export async function runOutput(clankhouse: ClankHouse, runId: string): Promise<unknown> {
+    const run = await waitForRun(clankhouse, runId)
     if (run.status === "failed") throw new Error(run.error)
     return run.output
 }
@@ -118,7 +118,7 @@ export function gate(): { released: Promise<void>; release: () => void } {
 }
 
 export function instructedTags(prompt: string): { name: string; opening: string; closing: string } {
-    const match = prompt.match(/<(loopy_structured_output_[0-9a-f_]+)>/)
+    const match = prompt.match(/<(clankhouse_structured_output_[0-9a-f_]+)>/)
     if (match === null) throw new Error("prompt has no instructed output tags")
     return { name: match[1], opening: `<${match[1]}>`, closing: `</${match[1]}>` }
 }

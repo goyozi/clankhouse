@@ -9,7 +9,7 @@ import {
     type SessionMessage,
     type Step,
     type WorkflowRun
-} from "@loopy/server/proto"
+} from "@clankhouse/server/proto"
 import { executionStatus, executionTiming, indent, prettyJson, table, timestamp } from "../../output"
 import { formatArtifactValue } from "../artifacts"
 import { formatAlignedSessionMessage, formatSessionMessage, type SessionFormatOptions } from "../sessions/output"

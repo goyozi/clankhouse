@@ -4,21 +4,21 @@ Basic workflow that sets up a temporary Git repository and asks an agent to impl
 
 ## Try It
 
-If you don't have `loopy` installed or want to use the source version:
+If you don't have `clank` installed or want to use the source version:
 
 ```sh
-alias loopy="pnpm --filter @loopy/cli exec node bin/loopy.js"
+alias clank="pnpm --filter @clankhouse/cli exec node bin/clank.js"
 ```
 
 Start the server:
 
 ```sh
-pnpm --filter @loopy/example-hello-world start
+pnpm --filter @clankhouse/example-hello-world start
 ```
 
 Start and watch a run:
 
 ```sh
-RUN_ID=$(loopy runs start hello-world)
-loopy runs get $RUN_ID --watch --include sessions
+RUN_ID=$(clank runs start hello-world)
+clank runs get $RUN_ID --watch --include sessions
 ```

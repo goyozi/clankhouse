@@ -1,5 +1,5 @@
 import { expect, test } from "vitest"
-import { Notifier, watch } from "@loopy/core/watch"
+import { Notifier, watch } from "@clankhouse/core/watch"
 
 test("watch re-drains changes that land before the source goes inactive during a pending yield", async () => {
     // given a watch over a drain that emits queued batches and a controllable activity flag

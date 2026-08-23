@@ -1,21 +1,21 @@
 import { Code, ConnectError } from "@connectrpc/connect"
-import { formatZodError } from "@loopy/core/errors"
-import type { Loopy } from "@loopy/core/loopy"
+import { formatZodError } from "@clankhouse/core/errors"
+import type { ClankHouse } from "@clankhouse/core/clankhouse"
 import * as z from "zod"
 import { notFound, parseJson, required, toConnectError } from "./errors"
-import type { LoopyServiceImplementation } from "./types"
+import type { ClankHouseServiceImplementation } from "./types"
 
-type WorkflowHandlers = Pick<LoopyServiceImplementation, "listWorkflows" | "getWorkflow" | "startRun">
+type WorkflowHandlers = Pick<ClankHouseServiceImplementation, "listWorkflows" | "getWorkflow" | "startRun">
 
-export function workflowHandlers(loopy: Loopy): WorkflowHandlers {
+export function workflowHandlers(clankhouse: ClankHouse): WorkflowHandlers {
     return {
         listWorkflows() {
-            return { workflows: loopy.workflows.list() }
+            return { workflows: clankhouse.workflows.list() }
         },
         getWorkflow(request) {
             required(request.name, "name")
             try {
-                const workflow = loopy.workflows.get(request.name)
+                const workflow = clankhouse.workflows.get(request.name)
                 return {
                     workflow: {
                         name: workflow.name,
@@ -36,7 +36,7 @@ export function workflowHandlers(loopy: Loopy): WorkflowHandlers {
         startRun(request) {
             required(request.workflowName, "workflow_name")
             try {
-                return { runId: loopy.start(request.workflowName, parseJson(request.inputJson, "input_json")) }
+                return { runId: clankhouse.start(request.workflowName, parseJson(request.inputJson, "input_json")) }
             } catch (error) {
                 if (error instanceof z.ZodError) {
                     throw new ConnectError(

@@ -1,8 +1,8 @@
 import * as fs from "node:fs"
 import * as path from "node:path"
 import { expect, test } from "vitest"
-import { GitRepository, Worktree } from "@loopy/core/git"
-import { runGit, tempGitRepo } from "@loopy/test-utils"
+import { GitRepository, Worktree } from "@clankhouse/core/git"
+import { runGit, tempGitRepo } from "@clankhouse/test-utils"
 import { createWorktree } from "./helpers"
 
 test("applyChanges transfers the complete effective worktree state as uncommitted target changes", async () => {
@@ -31,7 +31,7 @@ test("applyChanges transfers the complete effective worktree state as uncommitte
     const targetHeadBefore = await runGit(repo.path, ["rev-parse", "HEAD"])
     const targetBranchBefore = await runGit(repo.path, ["symbolic-ref", "HEAD"])
     const targetIndexBefore = await runGit(repo.path, ["write-tree"])
-    const refsBefore = await runGit(repo.path, ["for-each-ref", "--format=%(refname) %(objectname)", "refs/loopy"])
+    const refsBefore = await runGit(repo.path, ["for-each-ref", "--format=%(refname) %(objectname)", "refs/clankhouse"])
 
     // when the worktree changes are applied to the target repository
     await repository.applyChanges(worktree)
@@ -53,11 +53,11 @@ test("applyChanges transfers the complete effective worktree state as uncommitte
     expect(await runGit(repo.path, ["diff", "--cached", "--binary"])).toBe("")
     expect(await runGit(repo.path, ["status", "--porcelain"])).toContain("?? committed.txt")
     expect(await runGit(repo.path, ["diff", "--name-only"])).toContain("README.md")
-    // and the source state and Loopy refs are unchanged
+    // and the source state and ClankHouse refs are unchanged
     expect(await runGit(worktree.path, ["rev-parse", "HEAD"])).toBe(sourceHeadBefore)
     expect(await runGit(worktree.path, ["status", "--porcelain"])).toBe(sourceStatusBefore)
     expect(await runGit(worktree.path, ["write-tree"])).toBe(sourceIndexBefore)
-    expect(await runGit(repo.path, ["for-each-ref", "--format=%(refname) %(objectname)", "refs/loopy"])).toBe(
+    expect(await runGit(repo.path, ["for-each-ref", "--format=%(refname) %(objectname)", "refs/clankhouse"])).toBe(
         refsBefore
     )
 })
@@ -111,14 +111,14 @@ test("applyChanges is a no-op for equal states and remains stateless across prev
     await repo.commitAll("add shared")
     const repository = new GitRepository(repo.path)
     const worktree = await createWorktree(repository, { base: "main" })
-    const refsBefore = await runGit(repo.path, ["for-each-ref", "--format=%(refname) %(objectname)", "refs/loopy"])
+    const refsBefore = await runGit(repo.path, ["for-each-ref", "--format=%(refname) %(objectname)", "refs/clankhouse"])
 
     // when the equal state is applied
     await repository.applyChanges(worktree)
 
     // then nothing changes and no application metadata is persisted
     expect(await runGit(repo.path, ["status", "--porcelain"])).toBe("")
-    expect(await runGit(repo.path, ["for-each-ref", "--format=%(refname) %(objectname)", "refs/loopy"])).toBe(
+    expect(await runGit(repo.path, ["for-each-ref", "--format=%(refname) %(objectname)", "refs/clankhouse"])).toBe(
         refsBefore
     )
 

@@ -1,6 +1,6 @@
 import { toJsonString, type DescMessage, type MessageShape } from "@bufbuild/protobuf"
 import { timestampDate } from "@bufbuild/protobuf/wkt"
-import { ExecutionStatus } from "@loopy/server/proto"
+import { ExecutionStatus } from "@clankhouse/server/proto"
 import { writeText } from "./io"
 
 export type ErrorOutput = {
@@ -40,7 +40,7 @@ export function writeErrorOutput(
             `${JSON.stringify({ type: "error", ...options.details, code: error.code, message: error.message })}\n`
         )
     }
-    return writeText(stream, `loopy: ${options.prefix ?? ""}${error.message}\n`)
+    return writeText(stream, `clank: ${options.prefix ?? ""}${error.message}\n`)
 }
 
 export function prettyJson(value: string): string {

@@ -1,31 +1,31 @@
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { BaseLanguageModel, type LanguageModelInvocation } from "@loopy/core/ai/base-llm"
-import { LoopyError } from "@loopy/core/errors"
-import { gate, tempLoopy, testRun } from "@loopy/test-utils"
-import type { Loopy } from "@loopy/core/loopy"
+import { BaseLanguageModel, type LanguageModelInvocation } from "@clankhouse/core/ai/base-llm"
+import { ClankHouseError } from "@clankhouse/core/errors"
+import { gate, tempClankHouse, testRun } from "@clankhouse/test-utils"
+import type { ClankHouse } from "@clankhouse/core/clankhouse"
 
-async function onlyRunId(loopy: Loopy, key?: string): Promise<string> {
-    const runs = await loopy.runs.list(key !== undefined ? { key } : undefined)
+async function onlyRunId(clankhouse: ClankHouse, key?: string): Promise<string> {
+    const runs = await clankhouse.runs.list(key !== undefined ? { key } : undefined)
     expect(runs).toHaveLength(1)
     return runs[0]!.id
 }
 
 test("stream on a finished run yields each step once in order and ends", async () => {
     // given a succeeded run with two steps
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     await testRun(
-        loopy,
+        clankhouse,
         async () => {
-            await loopy.step("one", z.string(), async () => "1")
-            await loopy.step("two", z.string(), async () => "2")
+            await clankhouse.step("one", z.string(), async () => "1")
+            await clankhouse.step("two", z.string(), async () => "2")
         },
         { output: z.void() }
     )
-    const runId = await onlyRunId(loopy)
+    const runId = await onlyRunId(clankhouse)
 
     // when streaming the run
-    const items = await Array.fromAsync(loopy.runs.stream(runId))
+    const items = await Array.fromAsync(clankhouse.runs.stream(runId))
 
     // then each step is yielded exactly once, in seq order, in its terminal state
     const steps = items.filter((i) => "kind" in i)
@@ -39,27 +39,27 @@ test("stream on a finished run yields each step once in order and ends", async (
 
 test("stream tails a live run through step transitions until the run ends", async () => {
     // given a run with two gated steps
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const g1 = gate()
     const g2 = gate()
     const done = testRun(
-        loopy,
+        clankhouse,
         async () => {
-            await loopy.step("one", z.string(), async () => {
+            await clankhouse.step("one", z.string(), async () => {
                 await g1.released
                 return "1"
             })
-            await loopy.step("two", z.string(), async () => {
+            await clankhouse.step("two", z.string(), async () => {
                 await g2.released
                 return "2"
             })
         },
         { output: z.void() }
     )
-    const runId = await onlyRunId(loopy)
+    const runId = await onlyRunId(clankhouse)
 
     // when streaming the run
-    const stream = loopy.runs.stream(runId)
+    const stream = clankhouse.runs.stream(runId)
 
     // then the first step is observed as running
     expect((await stream.next()).value).toMatchObject({ name: "one", status: "running" })
@@ -87,18 +87,18 @@ test("stream tails a live run through step transitions until the run ends", asyn
     expect((await stream.next()).done).toBe(true)
 })
 
-test("stream exposes a failed step's LoopyError code", async () => {
+test("stream exposes a failed step's ClankHouseError code", async () => {
     // given a live durable step that will fail with a coded error
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const parked = gate()
-    const done = testRun(loopy, async () =>
-        loopy.step("coded", z.never(), async () => {
+    const done = testRun(clankhouse, async () =>
+        clankhouse.step("coded", z.never(), async () => {
             await parked.released
-            throw new LoopyError("ai_output_invalid", "invalid output")
+            throw new ClankHouseError("ai_output_invalid", "invalid output")
         })
     )
-    const runId = await onlyRunId(loopy)
-    const stream = loopy.runs.stream(runId)
+    const runId = await onlyRunId(clankhouse)
+    const stream = clankhouse.runs.stream(runId)
     expect((await stream.next()).value).toMatchObject({ name: "coded", status: "running" })
 
     // when the step fails while the stream is waiting
@@ -117,21 +117,21 @@ test("stream exposes a failed step's LoopyError code", async () => {
 
 test("stream with fromStepId on a finished run re-yields that step and everything after", async () => {
     // given a succeeded run with three steps
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     await testRun(
-        loopy,
+        clankhouse,
         async () => {
-            await loopy.step("one", z.string(), async () => "1")
-            await loopy.step("two", z.string(), async () => "2")
-            await loopy.step("three", z.string(), async () => "3")
+            await clankhouse.step("one", z.string(), async () => "1")
+            await clankhouse.step("two", z.string(), async () => "2")
+            await clankhouse.step("three", z.string(), async () => "3")
         },
         { output: z.void() }
     )
-    const runId = await onlyRunId(loopy)
-    const run = await loopy.runs.get(runId)
+    const runId = await onlyRunId(clankhouse)
+    const run = await clankhouse.runs.get(runId)
 
     // when streaming from the second step's id
-    const items = await Array.fromAsync(loopy.runs.stream(runId, { fromStepId: run.steps[1]!.id }))
+    const items = await Array.fromAsync(clankhouse.runs.stream(runId, { fromStepId: run.steps[1]!.id }))
 
     // then the from-step is included in its current state along with everything after
     const steps = items.filter((i) => "kind" in i)
@@ -145,14 +145,14 @@ test("stream with fromStepId on a finished run re-yields that step and everythin
 
 test("stream with fromStepId on a live run resumes from the snapshot's last step", async () => {
     // given a run whose first step succeeded and second step is parked
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const parked = gate()
     const reached = gate()
     const done = testRun(
-        loopy,
+        clankhouse,
         async () => {
-            await loopy.step("one", z.string(), async () => "1")
-            await loopy.step("two", z.string(), async () => {
+            await clankhouse.step("one", z.string(), async () => "1")
+            await clankhouse.step("two", z.string(), async () => {
                 reached.release()
                 await parked.released
                 return "2"
@@ -161,11 +161,11 @@ test("stream with fromStepId on a live run resumes from the snapshot's last step
         { output: z.void() }
     )
     await reached.released
-    const runId = await onlyRunId(loopy)
-    const snapshot = await loopy.runs.get(runId)
+    const runId = await onlyRunId(clankhouse)
+    const snapshot = await clankhouse.runs.get(runId)
 
     // when streaming from the first step's id
-    const stream = loopy.runs.stream(runId, { fromStepId: snapshot.steps[0]!.id })
+    const stream = clankhouse.runs.stream(runId, { fromStepId: snapshot.steps[0]!.id })
 
     // then the from-step is re-yielded in its current state
     expect((await stream.next()).value).toMatchObject({ name: "one", status: "succeeded" })
@@ -206,18 +206,18 @@ class ParkingLLM extends BaseLanguageModel {
 
 test("stream yields a running llm step with its sessionId set mid-flight", async () => {
     // given a run with an llm call that parks mid-invocation
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const parked = gate()
     const reached = gate()
     const llm = new ParkingLLM(reached.release, parked.released)
-    const done = testRun(loopy, async () =>
+    const done = testRun(clankhouse, async () =>
         llm.call("summarize", { prompt: "p", output: z.object({ summary: z.string() }) })
     )
     await reached.released
-    const runId = await onlyRunId(loopy)
+    const runId = await onlyRunId(clankhouse)
 
     // when streaming the run while the llm step is parked
-    const stream = loopy.runs.stream(runId)
+    const stream = clankhouse.runs.stream(runId)
     const first = (await stream.next()).value
 
     // then the running llm step already carries its sessionId
@@ -243,19 +243,19 @@ test("stream yields a running llm step with its sessionId set mid-flight", async
 
 test("stream yields a failed step with its error and ends when the run fails", async () => {
     // given a run with a gated step that throws
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const parked = gate()
-    const done = testRun(loopy, async () => {
-        await loopy.step("boom", z.string(), async () => {
+    const done = testRun(clankhouse, async () => {
+        await clankhouse.step("boom", z.string(), async () => {
             await parked.released
             throw new Error("kaboom")
         })
     })
     done.catch(() => {})
-    const runId = await onlyRunId(loopy)
+    const runId = await onlyRunId(clankhouse)
 
     // when streaming the run
-    const stream = loopy.runs.stream(runId)
+    const stream = clankhouse.runs.stream(runId)
 
     // then the step is observed as running
     expect((await stream.next()).value).toMatchObject({ name: "boom", status: "running" })
@@ -276,11 +276,11 @@ test("stream yields a failed step with its error and ends when the run fails", a
 
 test("stream on a missing run throws", async () => {
     // given no run with the given id
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
 
     // when streaming an unknown run id
     // then it throws a not found error
-    await expect(loopy.runs.stream("nope").next()).rejects.toMatchObject({
+    await expect(clankhouse.runs.stream("nope").next()).rejects.toMatchObject({
         message: expect.stringMatching(/not found/),
         code: "workflow_run_not_found"
     })
@@ -288,22 +288,22 @@ test("stream on a missing run throws", async () => {
 
 test("stream with an unknown or foreign fromStepId throws", async () => {
     // given two succeeded runs with one step each
-    const { loopy } = tempLoopy()
-    await testRun(loopy, async () => loopy.step("one", z.string(), async () => "1"), { key: "a" })
-    await testRun(loopy, async () => loopy.step("one", z.string(), async () => "1"), { key: "b" })
-    const runA = await onlyRunId(loopy, "a")
-    const runB = await onlyRunId(loopy, "b")
-    const foreignStepId = (await loopy.runs.get(runB)).steps[0]!.id
+    const { clankhouse } = tempClankHouse()
+    await testRun(clankhouse, async () => clankhouse.step("one", z.string(), async () => "1"), { key: "a" })
+    await testRun(clankhouse, async () => clankhouse.step("one", z.string(), async () => "1"), { key: "b" })
+    const runA = await onlyRunId(clankhouse, "a")
+    const runB = await onlyRunId(clankhouse, "b")
+    const foreignStepId = (await clankhouse.runs.get(runB)).steps[0]!.id
 
     // when streaming with an unknown fromStepId
     // then it throws a step not found error
-    await expect(loopy.runs.stream(runA, { fromStepId: "nope" }).next()).rejects.toMatchObject({
+    await expect(clankhouse.runs.stream(runA, { fromStepId: "nope" }).next()).rejects.toMatchObject({
         message: expect.stringMatching(/Step not found/),
         code: "workflow_step_not_found"
     })
     // and when streaming with another run's step id
     // then it also throws a step not found error
-    await expect(loopy.runs.stream(runA, { fromStepId: foreignStepId }).next()).rejects.toMatchObject({
+    await expect(clankhouse.runs.stream(runA, { fromStepId: foreignStepId }).next()).rejects.toMatchObject({
         message: expect.stringMatching(/Step not found/),
         code: "workflow_step_not_found"
     })
@@ -311,14 +311,14 @@ test("stream with an unknown or foreign fromStepId throws", async () => {
 
 test("stream on an interrupted run after a crash drains persisted steps and ends", async () => {
     // given a run whose second step is parked when the process crashes
-    const { loopy, reopen } = tempLoopy()
+    const { clankhouse, reopen } = tempClankHouse()
     const parked = gate()
     const reached = gate()
     testRun(
-        loopy,
+        clankhouse,
         async () => {
-            await loopy.step("one", z.string(), async () => "1")
-            await loopy.step("two", z.string(), async () => {
+            await clankhouse.step("one", z.string(), async () => "1")
+            await clankhouse.step("two", z.string(), async () => {
                 reached.release()
                 await parked.released
                 return "2"
@@ -327,9 +327,9 @@ test("stream on an interrupted run after a crash drains persisted steps and ends
         { output: z.void() }
     ).catch(() => {})
     await reached.released
-    const runId = await onlyRunId(loopy)
+    const runId = await onlyRunId(clankhouse)
 
-    // when reopening loopy and streaming the run
+    // when reopening clankhouse and streaming the run
     const second = reopen()
     const items = await Array.fromAsync(second.runs.stream(runId))
 
@@ -345,18 +345,18 @@ test("stream on an interrupted run after a crash drains persisted steps and ends
 
 test("stream handles concurrent steps completing out of seq order", async () => {
     // given a run executing two gated steps concurrently
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const g1 = gate()
     const g2 = gate()
     const done = testRun(
-        loopy,
+        clankhouse,
         async () => {
             await Promise.all([
-                loopy.step("one", z.string(), async () => {
+                clankhouse.step("one", z.string(), async () => {
                     await g1.released
                     return "1"
                 }),
-                loopy.step("two", z.string(), async () => {
+                clankhouse.step("two", z.string(), async () => {
                     await g2.released
                     return "2"
                 })
@@ -364,10 +364,10 @@ test("stream handles concurrent steps completing out of seq order", async () => 
         },
         { output: z.void() }
     )
-    const runId = await onlyRunId(loopy)
+    const runId = await onlyRunId(clankhouse)
 
     // when streaming the run
-    const stream = loopy.runs.stream(runId)
+    const stream = clankhouse.runs.stream(runId)
 
     // then both steps are observed as running
     expect((await stream.next()).value).toMatchObject({ name: "one", status: "running" })
@@ -394,18 +394,18 @@ test("stream handles concurrent steps completing out of seq order", async () => 
 
 test("stream keeps tailing an orphaned concurrent step after the run has failed", async () => {
     // given a run whose two concurrent steps are one that throws and one that is gated
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const boom = gate()
     const parked = gate()
     const done = testRun(
-        loopy,
+        clankhouse,
         async () => {
             await Promise.all([
-                loopy.step("boom", z.string(), async () => {
+                clankhouse.step("boom", z.string(), async () => {
                     await boom.released
                     throw new Error("kaboom")
                 }),
-                loopy.step("slow", z.string(), async () => {
+                clankhouse.step("slow", z.string(), async () => {
                     await parked.released
                     return "s"
                 })
@@ -414,10 +414,10 @@ test("stream keeps tailing an orphaned concurrent step after the run has failed"
         { output: z.void() }
     )
     done.catch(() => {})
-    const runId = await onlyRunId(loopy)
+    const runId = await onlyRunId(clankhouse)
 
     // when streaming the run and both steps are observed running
-    const stream = loopy.runs.stream(runId)
+    const stream = clankhouse.runs.stream(runId)
     expect((await stream.next()).value).toMatchObject({ name: "boom", status: "running" })
     expect((await stream.next()).value).toMatchObject({ name: "slow", status: "running" })
 
@@ -446,23 +446,23 @@ test("stream keeps tailing an orphaned concurrent step after the run has failed"
 
 test("stream ends promptly when its abort signal fires while tailing a live run", async () => {
     // given a live run parked on a gated step
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const parked = gate()
     const done = testRun(
-        loopy,
+        clankhouse,
         async () => {
-            await loopy.step("one", z.string(), async () => {
+            await clankhouse.step("one", z.string(), async () => {
                 await parked.released
                 return "1"
             })
         },
         { output: z.void() }
     )
-    const runId = await onlyRunId(loopy)
+    const runId = await onlyRunId(clankhouse)
     const controller = new AbortController()
 
     // when streaming with the abort signal and observing the running step
-    const stream = loopy.runs.stream(runId, { signal: controller.signal })
+    const stream = clankhouse.runs.stream(runId, { signal: controller.signal })
     expect((await stream.next()).value).toMatchObject({ name: "one", status: "running" })
 
     // when the signal aborts while the step is still parked
@@ -479,19 +479,19 @@ test("stream ends promptly when its abort signal fires while tailing a live run"
 
 test("stream observes a failed step being re-executed on resume", async () => {
     // given a crashed run with a succeeded step, a failed-but-caught step, and a parked step
-    const { loopy, reopen } = tempLoopy()
+    const { clankhouse, reopen } = tempClankHouse()
     const parked = gate()
     const reached = gate()
     testRun(
-        loopy,
+        clankhouse,
         async () => {
-            await loopy.step("a", z.string(), async () => "va")
+            await clankhouse.step("a", z.string(), async () => "va")
             try {
-                await loopy.step("b", z.string(), async () => {
+                await clankhouse.step("b", z.string(), async () => {
                     throw new Error("first try")
                 })
             } catch {}
-            await loopy.step("c", z.string(), async () => {
+            await clankhouse.step("c", z.string(), async () => {
                 reached.release()
                 await parked.released
                 return "vc"
@@ -500,9 +500,9 @@ test("stream observes a failed step being re-executed on resume", async () => {
         { output: z.void() }
     ).catch(() => {})
     await reached.released
-    const runId = await onlyRunId(loopy)
+    const runId = await onlyRunId(clankhouse)
 
-    // when resuming the run on a reopened loopy, parked before touching any step
+    // when resuming the run on a reopened clankhouse, parked before touching any step
     const second = reopen()
     const resumeGate = gate()
     const done = testRun(
@@ -546,23 +546,23 @@ test("stream observes a failed step being re-executed on resume", async () => {
 
 test("an aborted stream delivers no run metadata even after the run finishes", async () => {
     // given a live run parked on a gated step
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const parked = gate()
     const done = testRun(
-        loopy,
+        clankhouse,
         async () => {
-            await loopy.step("one", z.string(), async () => {
+            await clankhouse.step("one", z.string(), async () => {
                 await parked.released
                 return "1"
             })
         },
         { output: z.void() }
     )
-    const runId = await onlyRunId(loopy)
+    const runId = await onlyRunId(clankhouse)
     const controller = new AbortController()
 
     // when streaming with the abort signal and observing the running step
-    const stream = loopy.runs.stream(runId, { signal: controller.signal })
+    const stream = clankhouse.runs.stream(runId, { signal: controller.signal })
     expect((await stream.next()).value).toMatchObject({ name: "one", status: "running" })
 
     // when the signal aborts while the step is still parked
@@ -579,19 +579,19 @@ test("an aborted stream delivers no run metadata even after the run finishes", a
 
 test("an aborted stream stops mid-batch and withholds run metadata bundled behind a step", async () => {
     // given a run that has already completed, so its first drain bundles the step and run metadata in one batch
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     await testRun(
-        loopy,
+        clankhouse,
         async () => {
-            await loopy.step("one", z.string(), async () => "1")
+            await clankhouse.step("one", z.string(), async () => "1")
         },
         { output: z.void() }
     )
-    const runId = await onlyRunId(loopy)
+    const runId = await onlyRunId(clankhouse)
     const controller = new AbortController()
 
     // when streaming with the abort signal and pulling the first item of the bundled batch
-    const stream = loopy.runs.stream(runId, { signal: controller.signal })
+    const stream = clankhouse.runs.stream(runId, { signal: controller.signal })
     expect((await stream.next()).value).toMatchObject({ name: "one", status: "succeeded" })
 
     // when the signal aborts before the bundled run metadata is pulled
@@ -603,14 +603,14 @@ test("an aborted stream stops mid-batch and withholds run metadata bundled behin
 
 test("stream reports an interrupted run and keeps tailing when it is resumed mid-stream", async () => {
     // given a run whose second step is parked when the process crashes
-    const { loopy, reopen } = tempLoopy()
+    const { clankhouse, reopen } = tempClankHouse()
     const parked = gate()
     const reached = gate()
     testRun(
-        loopy,
+        clankhouse,
         async () => {
-            await loopy.step("one", z.string(), async () => "1")
-            await loopy.step("two", z.string(), async () => {
+            await clankhouse.step("one", z.string(), async () => "1")
+            await clankhouse.step("two", z.string(), async () => {
                 reached.release()
                 await parked.released
                 return "2"
@@ -619,9 +619,9 @@ test("stream reports an interrupted run and keeps tailing when it is resumed mid
         { output: z.void() }
     ).catch(() => {})
     await reached.released
-    const runId = await onlyRunId(loopy)
+    const runId = await onlyRunId(clankhouse)
 
-    // when reopening loopy and streaming the run
+    // when reopening clankhouse and streaming the run
     const second = reopen()
     const stream = second.runs.stream(runId)
 

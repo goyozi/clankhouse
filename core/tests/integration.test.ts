@@ -2,15 +2,15 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { FakeCodingAgent } from "@loopy/core/ai/fake-agent"
-import { FakeLLM } from "@loopy/core/ai/fake-llm"
-import { GitRepository } from "@loopy/core/git"
-import { Loopy } from "@loopy/core/loopy"
-import { gate, runOutput, tempGitRepo, tempLoopy, testRun } from "@loopy/test-utils"
+import { FakeCodingAgent } from "@clankhouse/core/ai/fake-agent"
+import { FakeLLM } from "@clankhouse/core/ai/fake-llm"
+import { GitRepository } from "@clankhouse/core/git"
+import { ClankHouse } from "@clankhouse/core/clankhouse"
+import { gate, runOutput, tempGitRepo, tempClankHouse, testRun } from "@clankhouse/test-utils"
 
 test("end-to-end: durable workflow with llm, agent, artifact and approval survives crashes and reruns", async () => {
-    // given a durable loopy instance and a git repository
-    const { loopy, reopen } = tempLoopy()
+    // given a durable clankhouse instance and a git repository
+    const { clankhouse, reopen } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
 
@@ -31,7 +31,7 @@ test("end-to-end: durable workflow with llm, agent, artifact and approval surviv
 
     // and a workflow body that plans, drafts via llm, implements via agent, publishes an artifact and waits for approval
     type Hooks = { afterDrafts?: () => Promise<void>; afterApproval?: () => Promise<void> }
-    const makeBody = (l: Loopy, hooks: Hooks) => async () => {
+    const makeBody = (l: ClankHouse, hooks: Hooks) => async () => {
         const files = await l.step("plan", z.array(z.string()), async () => {
             calls.plan++
             return ["alpha", "beta"]
@@ -62,7 +62,7 @@ test("end-to-end: durable workflow with llm, agent, artifact and approval surviv
         })
     }
     const workflowInput = z.object({ key: z.string() })
-    const register = (l: Loopy, hooks: Hooks) =>
+    const register = (l: ClankHouse, hooks: Hooks) =>
         l.registerWorkflow(
             "feature",
             { input: workflowInput, output: z.string(), key: (value) => value.key },
@@ -73,19 +73,19 @@ test("end-to-end: durable workflow with llm, agent, artifact and approval surviv
     const parkA = gate()
     const reachedA = gate()
     // when the first run starts
-    register(loopy, {
+    register(clankhouse, {
         afterDrafts: async () => {
             reachedA.release()
             await parkA.released
         }
     })
-    const runId = loopy.start("feature", { key: "feat-x" })
+    const runId = clankhouse.start("feature", { key: "feat-x" })
     // and it pauses right after drafting, before implementing
     await reachedA.released
     // then only the plan step and the two draft llm calls have run so far
     expect(calls).toEqual({ plan: 1, llm: 2, agent: 0, publish: 0 })
 
-    // given the loopy instance is reopened, simulating a crash and restart
+    // given the clankhouse instance is reopened, simulating a crash and restart
     const second = reopen()
     // and gates to pause the run after approval is granted
     const parkB = gate()
@@ -111,7 +111,7 @@ test("end-to-end: durable workflow with llm, agent, artifact and approval surviv
     // then the agent implement step has run but publish has not yet
     expect(calls).toEqual({ plan: 1, llm: 2, agent: 1, publish: 0 })
 
-    // given the loopy instance is reopened again
+    // given the clankhouse instance is reopened again
     const third = reopen()
     // when the run resumes to completion without further pausing
     register(third, {})
@@ -133,7 +133,7 @@ test("end-to-end: durable workflow with llm, agent, artifact and approval surviv
     expect(run.output).toBe("published by greg")
     // and the agent-implemented files are written to the durable worktree
     const worktreeId = run.steps.find((step) => step.kind === "worktree")!.output!.id
-    const worktreePath = path.join(third.loopyDir, "worktrees", worktreeId, "checkout")
+    const worktreePath = path.join(third.clankhouseDir, "worktrees", worktreeId, "checkout")
     expect(fs.readFileSync(path.join(worktreePath, "alpha.txt"), "utf8")).toBe("content of alpha")
     // and the second drafted file is also present
     expect(fs.readFileSync(path.join(worktreePath, "beta.txt"), "utf8")).toBe("content of beta")
@@ -183,7 +183,7 @@ test("end-to-end: durable workflow with llm, agent, artifact and approval surviv
 
 test("replay preserves ignored install output when the install step is cached", async () => {
     // given a durable worktree whose cached install step creates ignored dependencies
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     repo.write(".gitignore", "node_modules/\n")
     await repo.commitAll("ignore dependencies")
@@ -193,7 +193,7 @@ test("replay preserves ignored install output when the install step is cached", 
     const workflow = async () => {
         const worktree = await repository.worktree({ base: "main" })
         worktreePath = worktree.path
-        await loopy.step("install", z.null(), async () => {
+        await clankhouse.step("install", z.null(), async () => {
             installs++
             fs.mkdirSync(path.join(worktree.path, "node_modules"), { recursive: true })
             fs.writeFileSync(path.join(worktree.path, "node_modules", "installed.txt"), "installed")
@@ -201,12 +201,14 @@ test("replay preserves ignored install output when the install step is cached", 
         })
         return null
     }
-    await testRun(loopy, workflow)
-    const runId = (await loopy.runs.list())[0].id
-    loopy.db.prepare("UPDATE runs SET status = 'interrupted', output = NULL, ended_at = NULL WHERE id = ?").run(runId)
+    await testRun(clankhouse, workflow)
+    const runId = (await clankhouse.runs.list())[0].id
+    clankhouse.db
+        .prepare("UPDATE runs SET status = 'interrupted', output = NULL, ended_at = NULL WHERE id = ?")
+        .run(runId)
 
     // when the workflow replays both durable steps
-    await testRun(loopy, workflow)
+    await testRun(clankhouse, workflow)
 
     // then install remains cached and its ignored output survives worktree cleanup
     expect(installs).toBe(1)

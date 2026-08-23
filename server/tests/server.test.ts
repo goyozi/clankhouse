@@ -6,23 +6,23 @@ import { fileURLToPath } from "node:url"
 import { create } from "@bufbuild/protobuf"
 import { Code, ConnectError, createClient, createHandlerContext, type Interceptor } from "@connectrpc/connect"
 import { createConnectTransport } from "@connectrpc/connect-node"
-import { FakeCodingAgent } from "@loopy/core/ai/fake-agent"
-import { FakeLLM } from "@loopy/core/ai/fake-llm"
-import { GitRepository } from "@loopy/core/git"
-import type { Loopy } from "@loopy/core/loopy"
+import { FakeCodingAgent } from "@clankhouse/core/ai/fake-agent"
+import { FakeLLM } from "@clankhouse/core/ai/fake-llm"
+import { GitRepository } from "@clankhouse/core/git"
+import type { ClankHouse } from "@clankhouse/core/clankhouse"
 import {
     ExecutionStatus,
-    LoopyService,
+    ClankHouseService,
     ReadArtifactRequestSchema,
     StepKind,
     ToolResultStatus,
     ToolSourceKind
-} from "@loopy/server/proto"
-import { runOutput, tempDir, tempGitRepo, tempLoopy, testRun } from "@loopy/test-utils"
+} from "@clankhouse/server/proto"
+import { runOutput, tempDir, tempGitRepo, tempClankHouse, testRun } from "@clankhouse/test-utils"
 import { expect, onTestFinished, test } from "vitest"
 import * as z from "zod"
-import { listen, serve, type LoopyServer } from "../src"
-import { loopyService } from "../src/service"
+import { listen, serve, type ClankHouseServer } from "../src"
+import { clankhouseService } from "../src/service"
 
 const fixtures = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures")
 
@@ -33,9 +33,9 @@ function bearer(apiKey: string): Interceptor {
     }
 }
 
-function rpcClient(server: LoopyServer, apiKey = server.apiKey, nodeOptions?: RequestOptions) {
+function rpcClient(server: ClankHouseServer, apiKey = server.apiKey, nodeOptions?: RequestOptions) {
     return createClient(
-        LoopyService,
+        ClankHouseService,
         createConnectTransport({
             httpVersion: "1.1",
             baseUrl: server.url,
@@ -45,8 +45,8 @@ function rpcClient(server: LoopyServer, apiKey = server.apiKey, nodeOptions?: Re
     )
 }
 
-async function testServer(loopy: Loopy): Promise<LoopyServer> {
-    const server = await listen(loopy, { port: 0 })
+async function testServer(clankhouse: ClankHouse): Promise<ClankHouseServer> {
+    const server = await listen(clankhouse, { port: 0 })
     onTestFinished(() => server.close())
     return server
 }
@@ -69,7 +69,7 @@ function native(value: string | undefined): unknown {
     return value === undefined ? undefined : JSON.parse(value)
 }
 
-function registerApproval(instance: Loopy, value: z.ZodTypeAny): void {
+function registerApproval(instance: ClankHouse, value: z.ZodTypeAny): void {
     instance.registerWorkflow(
         "approval",
         { input: z.object({ id: z.string(), value }), output: z.number(), key: (input) => input.id },
@@ -82,13 +82,13 @@ function registerApproval(instance: Loopy, value: z.ZodTypeAny): void {
 }
 
 async function reopenWithIncompatibleInput(
-    reopen: () => Loopy
-): Promise<{ loopy: Loopy; client: ReturnType<typeof rpcClient> }> {
+    reopen: () => ClankHouse
+): Promise<{ clankhouse: ClankHouse; client: ReturnType<typeof rpcClient> }> {
     const second = reopen()
     registerApproval(second, z.string())
     const server = await listen(second, { port: 0 })
     onTestFinished(() => server.close())
-    return { loopy: second, client: rpcClient(server) }
+    return { clankhouse: second, client: rpcClient(server) }
 }
 
 function incompatibleInputOutcome(outcome: unknown): string {
@@ -119,8 +119,8 @@ async function nextRunningStep(
 }
 
 test("serves a FakeLLM and FakeCodingAgent workflow through the complete RPC surface", async () => {
-    // given a real Loopy instance, Git repository, fake model, fake coding agent and registered workflow
-    const { loopy } = tempLoopy()
+    // given a real ClankHouse instance, Git repository, fake model, fake coding agent and registered workflow
+    const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
     let llmCalls = 0
@@ -137,7 +137,7 @@ test("serves a FakeLLM and FakeCodingAgent workflow through the complete RPC sur
             output: { done: true }
         }
     })
-    loopy.registerWorkflow(
+    clankhouse.registerWorkflow(
         "build",
         {
             input: z.object({ id: z.string(), topic: z.string() }),
@@ -160,16 +160,16 @@ test("serves a FakeLLM and FakeCodingAgent workflow through the complete RPC sur
                 output: z.object({ done: z.boolean() }),
                 worktree
             })
-            const artifact = await loopy.artifacts.writeText("summary", plan.summary, "text/plain")
-            const approval = await loopy.waitFor({
+            const artifact = await clankhouse.artifacts.writeText("summary", plan.summary, "text/plain")
+            const approval = await clankhouse.waitFor({
                 key: `approval:${input.id}`,
                 schema: z.object({ ok: z.boolean() })
             })
-            const result = await loopy.step("publish", z.string(), async () => published)
+            const result = await clankhouse.step("publish", z.string(), async () => published)
             return { summary: plan.summary, approved: approval.ok, artifactId: artifact.id, published: result }
         }
     )
-    const server = await testServer(loopy)
+    const server = await testServer(clankhouse)
     const client = rpcClient(server)
 
     // when discovering and starting the workflow through a real Connect client
@@ -209,11 +209,15 @@ test("serves a FakeLLM and FakeCodingAgent workflow through the complete RPC sur
         StepKind.CUSTOM
     ])
     expect(native(fetched.outputJson)).toMatchObject({ approved: true, published: "v1", summary: "summary:rpc" })
-    const storedRun = loopy.db.prepare("SELECT output FROM runs WHERE id = ?").get(started.runId) as { output: string }
+    const storedRun = clankhouse.db.prepare("SELECT output FROM runs WHERE id = ?").get(started.runId) as {
+        output: string
+    }
     expect(fetched.outputJson).toBe(storedRun.output)
     const storedSteps = new Map(
         (
-            loopy.db.prepare("SELECT id, output FROM steps WHERE run_id = ? ORDER BY seq").all(started.runId) as Array<{
+            clankhouse.db
+                .prepare("SELECT id, output FROM steps WHERE run_id = ? ORDER BY seq")
+                .all(started.runId) as Array<{
                 id: string
                 output: string
             }>
@@ -254,8 +258,8 @@ test("serves a FakeLLM and FakeCodingAgent workflow through the complete RPC sur
 
 test("serves structured session messages, tool calls and tool results", async () => {
     // given a completed session containing every session message variant
-    const { loopy } = tempLoopy()
-    const recorder = loopy.sessions.create({
+    const { clankhouse } = tempClankHouse()
+    const recorder = clankhouse.sessions.create({
         kind: "coding-agent",
         client: "fake-agent",
         provider: "fake",
@@ -295,8 +299,8 @@ test("serves structured session messages, tool calls and tool results", async ()
         id: "web-search-1",
         name: "WebSearch",
         source: { kind: "provider" },
-        input: { query: "loopy", allowed_domains: ["example.com"] },
-        common: { name: "web.search", query: "loopy" }
+        input: { query: "clankhouse", allowed_domains: ["example.com"] },
+        common: { name: "web.search", query: "clankhouse" }
     })
     recorder.addToolCall({
         id: "mcp-1",
@@ -306,7 +310,7 @@ test("serves structured session messages, tool calls and tool results", async ()
     })
     recorder.addToolResult({ toolCallId: "mcp-1", status: "failed", error: "unavailable" })
     recorder.succeed()
-    const server = await testServer(loopy)
+    const server = await testServer(clankhouse)
     const client = rpcClient(server)
 
     // when the session is fetched and watched through Connect
@@ -357,7 +361,7 @@ test("serves structured session messages, tool calls and tool results", async ()
     })
     expect(session.messages[6]?.payload).toMatchObject({
         case: "toolCall",
-        value: { common: { case: "webSearch", value: { query: "loopy" } } }
+        value: { common: { case: "webSearch", value: { query: "clankhouse" } } }
     })
     expect(session.messages[7]?.payload).toMatchObject({
         case: "toolCall",
@@ -373,14 +377,14 @@ test("serves structured session messages, tool calls and tool results", async ()
 
 test("distinguishes absent void schemas and values from present JSON null across protobuf", async () => {
     // given void and null workflows with matching input, output, and durable step schemas
-    const { loopy } = tempLoopy()
-    loopy.registerWorkflow("void-output", { input: z.void(), output: z.void(), key: () => "void" }, async () =>
-        loopy.step("void-step", z.void(), async () => undefined)
+    const { clankhouse } = tempClankHouse()
+    clankhouse.registerWorkflow("void-output", { input: z.void(), output: z.void(), key: () => "void" }, async () =>
+        clankhouse.step("void-step", z.void(), async () => undefined)
     )
-    loopy.registerWorkflow("null-output", { input: z.null(), output: z.null(), key: () => "null" }, async () =>
-        loopy.step("null-step", z.null(), async () => null)
+    clankhouse.registerWorkflow("null-output", { input: z.null(), output: z.null(), key: () => "null" }, async () =>
+        clankhouse.step("null-step", z.null(), async () => null)
     )
-    const server = await testServer(loopy)
+    const server = await testServer(clankhouse)
     const client = rpcClient(server)
 
     // when their schemas and completed runs are read through protobuf
@@ -388,7 +392,7 @@ test("distinguishes absent void schemas and values from present JSON null across
     const nullDefinition = (await client.getWorkflow({ name: "null-output" })).workflow!
     const voidId = (await client.startRun({ workflowName: "void-output" })).runId
     const nullId = (await client.startRun({ workflowName: "null-output", inputJson: "null" })).runId
-    await Promise.all([runOutput(loopy, voidId), runOutput(loopy, nullId)])
+    await Promise.all([runOutput(clankhouse, voidId), runOutput(clankhouse, nullId)])
     const voidRun = (await client.getRun({ runId: voidId })).run!
     const nullRun = (await client.getRun({ runId: nullId })).run!
 
@@ -404,14 +408,14 @@ test("distinguishes absent void schemas and values from present JSON null across
     expect(nullRun.outputJson).toBe("null")
     expect(nullRun.steps[0].outputJson).toBe("null")
     // and protobuf output text exactly matches SQLite presence and contents
-    expect(loopy.db.prepare("SELECT output FROM runs WHERE id = ?").get(voidId)).toEqual({ output: null })
-    expect(loopy.db.prepare("SELECT output FROM runs WHERE id = ?").get(nullId)).toEqual({ output: "null" })
+    expect(clankhouse.db.prepare("SELECT output FROM runs WHERE id = ?").get(voidId)).toEqual({ output: null })
+    expect(clankhouse.db.prepare("SELECT output FROM runs WHERE id = ?").get(nullId)).toEqual({ output: "null" })
 })
 
 test("persists a private credential and authenticates unary and streaming RPCs", async () => {
-    // given a server using a fresh Loopy directory
-    const { loopy } = tempLoopy()
-    const server = await testServer(loopy)
+    // given a server using a fresh ClankHouse directory
+    const { clankhouse } = tempClankHouse()
+    const server = await testServer(clankhouse)
     const credentials = JSON.parse(fs.readFileSync(server.credentialsFile, "utf8")) as {
         version: number
         apiKey: string
@@ -440,40 +444,40 @@ test("persists a private credential and authenticates unary and streaming RPCs",
         await request().catch((error: unknown) => expect(String(error)).not.toContain(server.apiKey))
     }
 
-    // when the server restarts over the same Loopy instance
+    // when the server restarts over the same ClankHouse instance
     const apiKey = server.apiKey
     await server.close()
-    const restarted = await listen(loopy, { port: 0 })
+    const restarted = await listen(clankhouse, { port: 0 })
     onTestFinished(() => restarted.close())
 
-    // then it reuses the credential and the underlying Loopy remains usable
+    // then it reuses the credential and the underlying ClankHouse remains usable
     expect(restarted.apiKey).toBe(apiKey)
-    expect(await loopy.runs.list()).toEqual([])
+    expect(await clankhouse.runs.list()).toEqual([])
 })
 
-test("serve owns process signal handling and the Loopy lifecycle", async () => {
-    // given a fresh Loopy instance and the existing process signal listeners
-    const { loopy } = tempLoopy()
+test("serve owns process signal handling and the ClankHouse lifecycle", async () => {
+    // given a fresh ClankHouse instance and the existing process signal listeners
+    const { clankhouse } = tempClankHouse()
     const existingSigint = process.listeners("SIGINT")
     const existingSigterm = process.listeners("SIGTERM")
 
     // when the high-level server starts
-    const server = await serve(loopy, { port: 0 })
+    const server = await serve(clankhouse, { port: 0 })
     onTestFinished(() => server.close())
 
-    // then it installs one handler for each termination signal and leaves Loopy usable
+    // then it installs one handler for each termination signal and leaves ClankHouse usable
     const sigintHandler = process.listeners("SIGINT").find((listener) => !existingSigint.includes(listener))
     expect(sigintHandler).toBeDefined()
     expect(process.listeners("SIGTERM").filter((listener) => !existingSigterm.includes(listener))).toHaveLength(1)
-    expect(loopy.closed).toBe(false)
-    expect(loopy.db.open).toBe(true)
+    expect(clankhouse.closed).toBe(false)
+    expect(clankhouse.db.open).toBe(true)
 
     // when close is called explicitly twice
     await Promise.all([server.close(), server.close()])
 
     // then transport and database cleanup happen once and both signal handlers are removed
-    expect(loopy.closed).toBe(true)
-    expect(loopy.db.open).toBe(false)
+    expect(clankhouse.closed).toBe(true)
+    expect(clankhouse.db.open).toBe(false)
     expect(process.listeners("SIGINT")).toEqual(existingSigint)
     expect(process.listeners("SIGTERM")).toEqual(existingSigterm)
 })
@@ -482,9 +486,9 @@ test.skipIf(process.platform === "win32")(
     "a served process shuts down and terminates on SIGINT while work keeps it alive",
     async () => {
         // given a real server process with an active run stream and a pending timer holding its event loop open
-        const dir = tempDir("loopy-signal-")
+        const dir = tempDir("clankhouse-signal-")
         const child = spawn(process.execPath, ["--import", "tsx", path.join(fixtures, "serve-signal.ts")], {
-            env: { ...process.env, LOOPY_DIR: dir },
+            env: { ...process.env, CLANKHOUSE_DIR: dir },
             stdio: ["ignore", "pipe", "pipe"]
         })
         onTestFinished(() => {
@@ -497,7 +501,7 @@ test.skipIf(process.platform === "win32")(
             .object({ url: z.string(), apiKey: z.string(), runId: z.string() })
             .parse(JSON.parse(await firstLine(child.stdout!)))
         const client = createClient(
-            LoopyService,
+            ClankHouseService,
             createConnectTransport({ httpVersion: "1.1", baseUrl: started.url, interceptors: [bearer(started.apiKey)] })
         )
         const runStream = client.watchRun({ runId: started.runId })[Symbol.asyncIterator]()
@@ -516,9 +520,9 @@ test.skipIf(process.platform === "win32")(
 
 test("close returns without waiting out the keep-alive timeout of an abandoned stream", async () => {
     // given a run watched through a stream the client stops consuming without cancelling
-    const { loopy } = tempLoopy()
-    registerApproval(loopy, z.number())
-    const server = await testServer(loopy)
+    const { clankhouse } = tempClankHouse()
+    registerApproval(clankhouse, z.number())
+    const server = await testServer(clankhouse)
     const client = rpcClient(server)
     const started = await client.startRun({ workflowName: "approval", inputJson: json({ id: "a", value: 1 }) })
     await nextRunningStep(client.watchRun({ runId: started.runId })[Symbol.asyncIterator](), "wait:approve:a")
@@ -532,45 +536,45 @@ test("close returns without waiting out the keep-alive timeout of an abandoned s
     expect(closingTook).toBeLessThan(2000)
 })
 
-test("serve closes its Loopy instance when startup fails", async () => {
-    // given a fresh Loopy instance
-    const { loopy } = tempLoopy()
+test("serve closes its ClankHouse instance when startup fails", async () => {
+    // given a fresh ClankHouse instance
+    const { clankhouse } = tempClankHouse()
 
     // when the high-level server is started with an invalid address
-    await expect(serve(loopy, { host: "", port: 0 })).rejects.toThrow(/host must not be empty/)
+    await expect(serve(clankhouse, { host: "", port: 0 })).rejects.toThrow(/host must not be empty/)
 
     // then the instance it took ownership of is closed
-    expect(loopy.closed).toBe(true)
-    expect(loopy.db.open).toBe(false)
+    expect(clankhouse.closed).toBe(true)
+    expect(clankhouse.db.open).toBe(false)
 })
 
 test("rejects malformed credential files without replacing them", async () => {
     // given an existing malformed credential file
-    const { loopy } = tempLoopy()
-    const credentialsFile = path.join(loopy.loopyDir, "credentials.json")
+    const { clankhouse } = tempClankHouse()
+    const credentialsFile = path.join(clankhouse.clankhouseDir, "credentials.json")
     fs.writeFileSync(credentialsFile, "not-json")
     fs.chmodSync(credentialsFile, 0o644)
 
     // when starting a server
     // then startup fails without replacing the file contents
-    await expect(listen(loopy, { port: 0 })).rejects.toThrow(/malformed/)
+    await expect(listen(clankhouse, { port: 0 })).rejects.toThrow(/malformed/)
     expect(fs.readFileSync(credentialsFile, "utf8")).toBe("not-json")
     // and on POSIX the credential file is still restricted to its owner
     if (process.platform !== "win32") expect(fs.statSync(credentialsFile).mode & 0o777).toBe(0o600)
 })
 
 test("resumes an interrupted run through a restarted server", async () => {
-    // given a workflow waiting for an event on one Loopy process
-    const { loopy, reopen } = tempLoopy()
-    const register = (instance: Loopy) =>
+    // given a workflow waiting for an event on one ClankHouse process
+    const { clankhouse, reopen } = tempClankHouse()
+    const register = (instance: ClankHouse) =>
         instance.registerWorkflow(
             "approval",
             { input: z.null(), output: z.number(), key: () => "approval-key" },
             async () =>
                 (await instance.waitFor({ key: "resume-approval", schema: z.object({ value: z.number() }) })).value
         )
-    register(loopy)
-    const firstServer = await testServer(loopy)
+    register(clankhouse)
+    const firstServer = await testServer(clankhouse)
     const firstClient = rpcClient(firstServer)
     const started = await firstClient.startRun({ workflowName: "approval", inputJson: "null" })
     const firstWatch = firstClient.watchRun({ runId: started.runId })[Symbol.asyncIterator]()
@@ -578,7 +582,7 @@ test("resumes an interrupted run through a restarted server", async () => {
     const apiKey = firstServer.apiKey
     await firstServer.close()
 
-    // when a new Loopy instance and server resume the persisted run
+    // when a new ClankHouse instance and server resume the persisted run
     const second = reopen()
     register(second)
     const secondServer = await listen(second, { port: 0 })
@@ -600,9 +604,9 @@ test("resumes an interrupted run through a restarted server", async () => {
 
 test("startRun reports input persisted under an incompatible schema as a failed precondition", async () => {
     // given an interrupted run persisted under a numeric input schema
-    const { loopy, reopen } = tempLoopy()
-    registerApproval(loopy, z.number())
-    const firstServer = await testServer(loopy)
+    const { clankhouse, reopen } = tempClankHouse()
+    registerApproval(clankhouse, z.number())
+    const firstServer = await testServer(clankhouse)
     const firstClient = rpcClient(firstServer)
     const started = await firstClient.startRun({ workflowName: "approval", inputJson: json({ id: "a", value: 1 }) })
     await nextRunningStep(firstClient.watchRun({ runId: started.runId })[Symbol.asyncIterator](), "wait:approve:a")
@@ -623,16 +627,16 @@ test("startRun reports input persisted under an incompatible schema as a failed 
 
 test("resumeRun reports input persisted under an incompatible schema as a failed precondition", async () => {
     // given an interrupted run persisted under a numeric input schema
-    const { loopy, reopen } = tempLoopy()
-    registerApproval(loopy, z.number())
-    const firstServer = await testServer(loopy)
+    const { clankhouse, reopen } = tempClankHouse()
+    registerApproval(clankhouse, z.number())
+    const firstServer = await testServer(clankhouse)
     const firstClient = rpcClient(firstServer)
     const started = await firstClient.startRun({ workflowName: "approval", inputJson: json({ id: "a", value: 1 }) })
     await nextRunningStep(firstClient.watchRun({ runId: started.runId })[Symbol.asyncIterator](), "wait:approve:a")
     await firstServer.close()
 
     // when the workflow is re-registered with a string-valued schema and the run is resumed
-    const { loopy: second, client } = await reopenWithIncompatibleInput(reopen)
+    const { clankhouse: second, client } = await reopenWithIncompatibleInput(reopen)
     const outcome = await client.resumeRun({ runId: started.runId }).catch((error: unknown) => error)
 
     // then the persisted input is named as the failed precondition
@@ -645,18 +649,18 @@ test("resumeRun reports input persisted under an incompatible schema as a failed
 
 test("rerunRun reports input persisted under an incompatible schema as a failed precondition", async () => {
     // given a succeeded run persisted under a numeric input schema
-    const { loopy, reopen } = tempLoopy()
-    registerApproval(loopy, z.number())
-    const firstServer = await testServer(loopy)
+    const { clankhouse, reopen } = tempClankHouse()
+    registerApproval(clankhouse, z.number())
+    const firstServer = await testServer(clankhouse)
     const firstClient = rpcClient(firstServer)
     const started = await firstClient.startRun({ workflowName: "approval", inputJson: json({ id: "a", value: 1 }) })
     await nextRunningStep(firstClient.watchRun({ runId: started.runId })[Symbol.asyncIterator](), "wait:approve:a")
     await firstClient.emitEvent({ key: "approve:a", inputJson: json({ value: 7 }) })
-    await runOutput(loopy, started.runId)
+    await runOutput(clankhouse, started.runId)
     await firstServer.close()
 
     // when the workflow is re-registered with a string-valued schema and the run is rerun from its first step
-    const { loopy: second, client } = await reopenWithIncompatibleInput(reopen)
+    const { clankhouse: second, client } = await reopenWithIncompatibleInput(reopen)
     const outcome = await client
         .rerunRun({ runId: started.runId, fromStepKey: "record" })
         .catch((error: unknown) => error)
@@ -670,17 +674,17 @@ test("rerunRun reports input persisted under an incompatible schema as a failed 
 })
 
 test("requires TLS for public binds and serves a real HTTPS Connect request", async () => {
-    // given a fresh Loopy instance and a test certificate
-    const { loopy } = tempLoopy()
+    // given a fresh ClankHouse instance and a test certificate
+    const { clankhouse } = tempClankHouse()
     const key = fs.readFileSync(path.join(fixtures, "localhost-key.pem"))
     const cert = fs.readFileSync(path.join(fixtures, "localhost-cert.pem"))
 
     // when binding publicly without TLS
     // then startup is rejected before listening
-    await expect(listen(loopy, { host: "0.0.0.0", port: 0 })).rejects.toThrow(/TLS is required/)
+    await expect(listen(clankhouse, { host: "0.0.0.0", port: 0 })).rejects.toThrow(/TLS is required/)
 
     // when binding publicly with a valid certificate
-    const server = await listen(loopy, { host: "0.0.0.0", port: 0, tls: { key, cert } })
+    const server = await listen(clankhouse, { host: "0.0.0.0", port: 0, tls: { key, cert } })
     onTestFinished(() => server.close())
     const client = rpcClient({ ...server, url: `https://127.0.0.1:${server.port}` }, server.apiKey, { ca: cert })
 
@@ -690,13 +694,13 @@ test("requires TLS for public binds and serves a real HTTPS Connect request", as
 
 test("maps invalid requests to stable Connect errors", async () => {
     // given a workflow with a validated input
-    const { loopy } = tempLoopy()
-    loopy.registerWorkflow(
+    const { clankhouse } = tempClankHouse()
+    clankhouse.registerWorkflow(
         "validated",
         { input: z.object({ value: z.number() }), output: z.number(), key: () => "validated" },
         async (input) => input.value
     )
-    const server = await testServer(loopy)
+    const server = await testServer(clankhouse)
     const client = rpcClient(server)
 
     // when requests contain bad input or filters
@@ -718,28 +722,28 @@ test("maps invalid requests to stable Connect errors", async () => {
     await expect(client.listRuns({ limit: 0 })).rejects.toMatchObject({ code: Code.InvalidArgument })
 })
 
-test("maps workflow lifecycle LoopyError codes to stable Connect errors", async () => {
+test("maps workflow lifecycle ClankHouseError codes to stable Connect errors", async () => {
     // given workflows with failed, succeeded, rerun and active lifecycle states
-    const { loopy, reopen } = tempLoopy()
+    const { clankhouse, reopen } = tempClankHouse()
     let shouldFail = true
-    loopy.registerWorkflow(
+    clankhouse.registerWorkflow(
         "lifecycle",
         { input: z.object({ id: z.string() }), output: z.string(), key: (input) => input.id },
         async () =>
-            loopy.step("compute", z.string(), async () => {
+            clankhouse.step("compute", z.string(), async () => {
                 if (shouldFail) throw new Error("boom")
                 return "done"
             })
     )
-    loopy.registerWorkflow(
+    clankhouse.registerWorkflow(
         "waiting",
         { input: z.null(), output: z.number(), key: () => "waiting" },
-        async () => (await loopy.waitFor({ key: "lifecycle-go", schema: z.object({ value: z.number() }) })).value
+        async () => (await clankhouse.waitFor({ key: "lifecycle-go", schema: z.object({ value: z.number() }) })).value
     )
-    const server = await testServer(loopy)
+    const server = await testServer(clankhouse)
     const client = rpcClient(server)
     const failedId = (await client.startRun({ workflowName: "lifecycle", inputJson: json({ id: "failed" }) })).runId
-    await expect(runOutput(loopy, failedId)).rejects.toThrow("boom")
+    await expect(runOutput(clankhouse, failedId)).rejects.toThrow("boom")
 
     // when starting a failed key and resuming missing or terminal runs
     // then the matching lifecycle categories are returned
@@ -752,7 +756,7 @@ test("maps workflow lifecycle LoopyError codes to stable Connect errors", async 
     shouldFail = false
     const succeededId = (await client.startRun({ workflowName: "lifecycle", inputJson: json({ id: "succeeded" }) }))
         .runId
-    expect(await runOutput(loopy, succeededId)).toBe("done")
+    expect(await runOutput(clankhouse, succeededId)).toBe("done")
     await expect(client.resumeRun({ runId: succeededId })).rejects.toMatchObject({
         code: Code.FailedPrecondition
     })
@@ -780,7 +784,7 @@ test("maps workflow lifecycle LoopyError codes to stable Connect errors", async 
     // when an older attempt is resumed or rerun
     shouldFail = false
     const latestId = (await client.rerunRun({ runId: failedId, fromStepKey: "compute" })).runId
-    expect(await runOutput(loopy, latestId)).toBe("done")
+    expect(await runOutput(clankhouse, latestId)).toBe("done")
     // then only the latest attempt remains eligible
     await expect(client.resumeRun({ runId: failedId })).rejects.toMatchObject({ code: Code.FailedPrecondition })
     await expect(client.rerunRun({ runId: failedId, fromStepKey: "compute" })).rejects.toMatchObject({
@@ -806,8 +810,8 @@ test("maps workflow lifecycle LoopyError codes to stable Connect errors", async 
 
 test("maps coded resource lookup failures without inspecting messages", async () => {
     // given a real server and a completed session with one message
-    const { loopy } = tempLoopy()
-    const recorder = loopy.sessions.create({
+    const { clankhouse } = tempClankHouse()
+    const recorder = clankhouse.sessions.create({
         kind: "llm",
         client: "fake-llm",
         provider: "fake",
@@ -815,7 +819,7 @@ test("maps coded resource lookup failures without inspecting messages", async ()
     })
     recorder.addMessage("assistant", "done")
     recorder.succeed()
-    const server = await testServer(loopy)
+    const server = await testServer(clankhouse)
     const client = rpcClient(server)
 
     // when missing runs, artifacts, sessions and session messages are requested
@@ -842,10 +846,10 @@ test("maps coded resource lookup failures without inspecting messages", async ()
 
 test("maps a missing artifact backing file to not found", async () => {
     // given an artifact whose persisted file has been deleted
-    const { loopy } = tempLoopy()
-    const artifact = await testRun(loopy, async () => loopy.artifacts.writeText("report", "hello"))
-    fs.unlinkSync(path.join(loopy.loopyDir, artifact.file))
-    const server = await testServer(loopy)
+    const { clankhouse } = tempClankHouse()
+    const artifact = await testRun(clankhouse, async () => clankhouse.artifacts.writeText("report", "hello"))
+    fs.unlinkSync(path.join(clankhouse.clankhouseDir, artifact.file))
+    const server = await testServer(clankhouse)
     const client = rpcClient(server)
 
     // when its content is requested through the server
@@ -857,9 +861,9 @@ test("maps a missing artifact backing file to not found", async () => {
 
 test("cancels an artifact stream when its response generator returns early", async () => {
     // given an artifact stream and a request context that has not been aborted
-    const { loopy } = tempLoopy()
+    const { clankhouse } = tempClankHouse()
     let canceled = false
-    loopy.artifacts.read = async () => ({
+    clankhouse.artifacts.read = async () => ({
         stream: new ReadableStream<Uint8Array>({
             start(controller) {
                 controller.enqueue(new Uint8Array([1]))
@@ -870,16 +874,16 @@ test("cancels an artifact stream when its response generator returns early", asy
         })
     })
     const context = createHandlerContext({
-        service: LoopyService,
-        method: LoopyService.method.readArtifact,
+        service: ClankHouseService,
+        method: ClankHouseService.method.readArtifact,
         protocolName: "connect",
         requestMethod: "POST",
-        url: "http://localhost/loopy.server.v1.LoopyService/ReadArtifact"
+        url: "http://localhost/clankhouse.server.v1.ClankHouseService/ReadArtifact"
     })
 
     // when the response generator returns after its first chunk
     const request = create(ReadArtifactRequestSchema, { artifactId: "artifact" })
-    const stream = loopyService(loopy).readArtifact(request, context)[Symbol.asyncIterator]()
+    const stream = clankhouseService(clankhouse).readArtifact(request, context)[Symbol.asyncIterator]()
     await stream.next()
     await stream.return?.()
 
@@ -888,18 +892,18 @@ test("cancels an artifact stream when its response generator returns early", asy
     expect(canceled).toBe(true)
 })
 
-test("exposes persisted LoopyError codes on runs and steps", async () => {
+test("exposes persisted ClankHouseError codes on runs and steps", async () => {
     // given a workflow whose durable step fails with a semantic core error
-    const { loopy } = tempLoopy()
-    loopy.registerWorkflow("coded", { input: z.null(), output: z.void(), key: () => "coded" }, async () =>
-        loopy.step("coded", z.void(), async () => loopy.waitForAny([]))
+    const { clankhouse } = tempClankHouse()
+    clankhouse.registerWorkflow("coded", { input: z.null(), output: z.void(), key: () => "coded" }, async () =>
+        clankhouse.step("coded", z.void(), async () => clankhouse.waitForAny([]))
     )
-    const server = await testServer(loopy)
+    const server = await testServer(clankhouse)
     const client = rpcClient(server)
 
     // when the failed run is fetched through protobuf
     const runId = (await client.startRun({ workflowName: "coded", inputJson: "null" })).runId
-    await expect(runOutput(loopy, runId)).rejects.toThrow("at least one event source")
+    await expect(runOutput(clankhouse, runId)).rejects.toThrow("at least one event source")
     const run = (await client.getRun({ runId })).run!
 
     // then the string code is exposed beside both persisted error messages
@@ -915,8 +919,8 @@ test("exposes persisted LoopyError codes on runs and steps", async () => {
 
 test("does not classify an ordinary error from message text", async () => {
     // given a registered workflow whose key function throws text matching a lifecycle error
-    const { loopy } = tempLoopy()
-    loopy.registerWorkflow(
+    const { clankhouse } = tempClankHouse()
+    clankhouse.registerWorkflow(
         "spoof",
         {
             input: z.null(),
@@ -927,7 +931,7 @@ test("does not classify an ordinary error from message text", async () => {
         },
         async () => undefined
     )
-    const server = await testServer(loopy)
+    const server = await testServer(clankhouse)
     const client = rpcClient(server)
 
     // when the ordinary error crosses the RPC boundary
@@ -937,15 +941,15 @@ test("does not classify an ordinary error from message text", async () => {
     })
 })
 
-test("closing a server rejects active streams without closing Loopy", async () => {
+test("closing a server rejects active streams without closing ClankHouse", async () => {
     // given a live run, session, artifact and active Connect streams
-    const { loopy } = tempLoopy()
-    loopy.registerWorkflow(
+    const { clankhouse } = tempClankHouse()
+    clankhouse.registerWorkflow(
         "waiting",
         { input: z.null(), output: z.number(), key: () => "waiting" },
-        async () => (await loopy.waitFor({ key: "never", schema: z.object({ value: z.number() }) })).value
+        async () => (await clankhouse.waitFor({ key: "never", schema: z.object({ value: z.number() }) })).value
     )
-    const recorder = loopy.sessions.create({
+    const recorder = clankhouse.sessions.create({
         kind: "llm",
         client: "fake-llm",
         provider: "fake",
@@ -953,7 +957,7 @@ test("closing a server rejects active streams without closing Loopy", async () =
     })
     recorder.addMessage("assistant", "working")
     let artifactCanceled = false
-    loopy.artifacts.read = async () => ({
+    clankhouse.artifacts.read = async () => ({
         stream: new ReadableStream<Uint8Array>({
             start(controller) {
                 controller.enqueue(new Uint8Array([1]))
@@ -963,7 +967,7 @@ test("closing a server rejects active streams without closing Loopy", async () =
             }
         })
     })
-    const server = await listen(loopy, { port: 0 })
+    const server = await listen(clankhouse, { port: 0 })
     onTestFinished(() => server.close())
     const client = rpcClient(server)
     const started = await client.startRun({ workflowName: "waiting", inputJson: "null" })
@@ -981,13 +985,13 @@ test("closing a server rejects active streams without closing Loopy", async () =
     await Promise.all([server.close(), server.close()])
     const outcomes = await Promise.all(pending)
 
-    // then every stream reports shutdown and the supplied Loopy database remains open
+    // then every stream reports shutdown and the supplied ClankHouse database remains open
     expect(outcomes).toHaveLength(3)
     for (const outcome of outcomes) {
         expect(outcome).toBeInstanceOf(ConnectError)
         expect(outcome).toMatchObject({ code: Code.Unavailable })
     }
     expect(artifactCanceled).toBe(true)
-    expect((await loopy.runs.get(started.runId)).status).toBe("running")
-    expect((await loopy.sessions.get(recorder.id)).status).toBe("running")
+    expect((await clankhouse.runs.get(started.runId)).status).toBe("running")
+    expect((await clankhouse.sessions.get(recorder.id)).status).toBe("running")
 })
