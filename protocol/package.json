@@ -1,6 +1,6 @@
 {
     "name": "@clankhouse/protocol",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "description": "Protocol Buffers definitions for ClankHouse clients and servers",
     "type": "module",
     "main": "./src/index.ts",
