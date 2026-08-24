@@ -1,11 +1,11 @@
-import { toArtifact, type Artifact } from "./artifacts"
-import * as sql from "./db"
-import { ClankHouseError } from "./errors"
-import type { ClankHouseErrorCode } from "./errors"
-import { observableStatus, type ActiveSets } from "./runtime"
-import type { Db, ListRunsFilter, RunRow, StepRow } from "./db"
-import type { WorktreeReference } from "./git"
-import { watch, type Notifier } from "./watch"
+import { toArtifact, type Artifact } from "./artifacts.js"
+import * as sql from "./db.js"
+import { ClankHouseError } from "./errors.js"
+import type { ClankHouseErrorCode } from "./errors.js"
+import { observableStatus, type ActiveSets } from "./runtime.js"
+import type { Db, ListRunsFilter, RunRow, StepRow } from "./db.js"
+import type { WorktreeReference } from "./git/index.js"
+import { watch, type Notifier } from "./watch.js"
 
 export class WorkflowRuns {
     private readonly db: Db

@@ -1,4 +1,4 @@
 import type { ServiceImpl } from "@connectrpc/connect"
-import { ClankHouseService } from "../gen/clankhouse/server/v1/server_pb"
+import { ClankHouseService } from "@clankhouse/protocol"
 
 export type ClankHouseServiceImplementation = ServiceImpl<typeof ClankHouseService>

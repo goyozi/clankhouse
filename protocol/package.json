@@ -1,0 +1,54 @@
+{
+    "name": "@clankhouse/protocol",
+    "version": "0.0.1",
+    "description": "Protocol Buffers definitions for ClankHouse clients and servers",
+    "type": "module",
+    "main": "./src/index.ts",
+    "types": "./src/index.ts",
+    "files": [
+        "dist",
+        "proto",
+        "buf.yaml"
+    ],
+    "exports": {
+        ".": "./src/index.ts",
+        "./proto/*": "./proto/*"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/goyozi/clankhouse.git",
+        "directory": "protocol"
+    },
+    "publishConfig": {
+        "access": "public",
+        "main": "./dist/index.js",
+        "types": "./dist/index.d.ts",
+        "exports": {
+            ".": {
+                "types": "./dist/index.d.ts",
+                "import": "./dist/index.js"
+            },
+            "./proto/*": "./proto/*"
+        }
+    },
+    "license": "MIT",
+    "engines": {
+        "node": ">=22.19.0"
+    },
+    "scripts": {
+        "build": "tsc -p tsconfig.build.json",
+        "prepack": "pnpm build",
+        "typecheck": "tsc -p tsconfig.json --noEmit",
+        "proto:generate": "buf generate && prettier --write src/gen",
+        "proto:lint": "buf lint",
+        "proto:check": "buf lint && buf generate && prettier --write src/gen && git diff --exit-code -- src/gen"
+    },
+    "dependencies": {
+        "@bufbuild/protobuf": "^2.12.1"
+    },
+    "devDependencies": {
+        "@bufbuild/buf": "^1.71.0",
+        "@bufbuild/protoc-gen-es": "^2.12.1",
+        "typescript": "^6.0.3"
+    }
+}

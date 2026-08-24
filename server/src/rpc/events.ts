@@ -1,7 +1,7 @@
 import { Code, ConnectError } from "@connectrpc/connect"
 import type { ClankHouse } from "@clankhouse/core/clankhouse"
-import { parseJson, required, toConnectError } from "./errors"
-import type { ClankHouseServiceImplementation } from "./types"
+import { parseJson, required, toConnectError } from "./errors.js"
+import type { ClankHouseServiceImplementation } from "./types.js"
 
 type EventHandlers = Pick<ClankHouseServiceImplementation, "emitEvent">
 

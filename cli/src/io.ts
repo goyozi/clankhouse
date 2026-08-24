@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto"
 import { link, lstat, open, readFile, unlink, type FileHandle } from "node:fs/promises"
 import * as path from "node:path"
-import { CliError } from "./errors"
+import { CliError } from "./errors.js"
 
 export async function writeText(stream: NodeJS.WritableStream, text: string): Promise<void> {
     await writeChunk(stream, text)

@@ -1,0 +1,27 @@
+{
+    "$schema": "https://unpkg.com/@changesets/config/schema.json",
+    "changelog": "@changesets/cli/changelog",
+    "commit": false,
+    "fixed": [
+        [
+            "@clankhouse/anthropic",
+            "@clankhouse/claude",
+            "@clankhouse/cli",
+            "@clankhouse/codex",
+            "@clankhouse/core",
+            "@clankhouse/openai",
+            "@clankhouse/pi",
+            "@clankhouse/protocol",
+            "@clankhouse/server"
+        ]
+    ],
+    "linked": [],
+    "access": "public",
+    "baseBranch": "main",
+    "updateInternalDependencies": "patch",
+    "ignore": [],
+    "privatePackages": {
+        "version": false,
+        "tag": false
+    }
+}

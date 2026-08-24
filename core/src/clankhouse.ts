@@ -1,17 +1,17 @@
 import * as z from "zod"
 import { mkdirSync } from "node:fs"
 import * as path from "node:path"
-import { openDatabase, type Db } from "./db"
-import { resolveClankHouseDir } from "./util"
-import { WorkflowRuns } from "./runs"
-import { Artifacts } from "./artifacts"
-import { AISessions } from "./ai/sessions"
-import type { ActiveSets } from "./runtime"
-import { Engine } from "./engine"
-import { Events, type EventSource, type EventSourceResult } from "./events"
-import { Notifier } from "./watch"
-import { Workflows, type RerunOptions, type WorkflowOptions } from "./workflows"
-import { gcWorktrees, type WorktreeGcResult } from "./git"
+import { openDatabase, type Db } from "./db.js"
+import { resolveClankHouseDir } from "./util.js"
+import { WorkflowRuns } from "./runs.js"
+import { Artifacts } from "./artifacts.js"
+import { AISessions } from "./ai/sessions.js"
+import type { ActiveSets } from "./runtime.js"
+import { Engine } from "./engine.js"
+import { Events, type EventSource, type EventSourceResult } from "./events.js"
+import { Notifier } from "./watch.js"
+import { Workflows, type RerunOptions, type WorkflowOptions } from "./workflows.js"
+import { gcWorktrees, type WorktreeGcResult } from "./git/index.js"
 
 export class ClankHouse {
     readonly clankhouseDir: string
@@ -150,4 +150,4 @@ export class ClankHouse {
     }
 }
 
-export type { EventSource, EventSourceHandle, EventSourceListener, EventSourceResult } from "./events"
+export type { EventSource, EventSourceHandle, EventSourceListener, EventSourceResult } from "./events.js"

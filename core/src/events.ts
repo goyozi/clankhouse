@@ -1,11 +1,11 @@
 import * as z from "zod"
-import { runContext } from "./context"
-import * as sql from "./db"
-import type { Db } from "./db"
-import type { Engine } from "./engine"
-import { ClankHouseError } from "./errors"
-import { jsonSchema } from "./json-schema"
-import { newId, nowIso } from "./util"
+import { runContext } from "./context.js"
+import * as sql from "./db.js"
+import type { Db } from "./db.js"
+import type { Engine } from "./engine.js"
+import { ClankHouseError } from "./errors.js"
+import { jsonSchema } from "./json-schema.js"
+import { newId, nowIso } from "./util.js"
 
 export type EventSourceHandle = {
     stop(): void

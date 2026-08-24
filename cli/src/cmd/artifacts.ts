@@ -5,11 +5,11 @@ import {
     ReadArtifactResponseSchema,
     type Artifact,
     type GetArtifactResponse
-} from "@clankhouse/server/proto"
+} from "@clankhouse/protocol"
 import type { Command } from "commander"
-import { copyWithoutClobber, writeBytes } from "../io"
-import { indent } from "../output"
-import type { Runtime } from "../runtime"
+import { copyWithoutClobber, writeBytes } from "../io.js"
+import { indent } from "../output.js"
+import type { Runtime } from "../runtime.js"
 
 export function registerArtifacts(program: Command, runtime: Runtime): void {
     const artifacts = program.command("artifacts").description("Inspect workflow artifacts")

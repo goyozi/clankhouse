@@ -1,11 +1,11 @@
 import { mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises"
 import * as path from "node:path"
 import * as z from "zod"
-import { requireContext } from "../context"
-import { ClankHouseError } from "../errors"
-import { exists, isNodeError, newId } from "../util"
-import * as git from "./client"
-import { captureState, restoreCapturedState, Worktree } from "./worktree"
+import { requireContext } from "../context.js"
+import { ClankHouseError } from "../errors.js"
+import { exists, isNodeError, newId } from "../util.js"
+import * as git from "./client.js"
+import { captureState, restoreCapturedState, Worktree } from "./worktree.js"
 
 const CandidateIdSchema = z.string().regex(/^[0-9A-Za-z]{21}$/)
 const GitObjectIdSchema = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/)

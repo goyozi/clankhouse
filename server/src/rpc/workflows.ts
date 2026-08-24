@@ -2,8 +2,8 @@ import { Code, ConnectError } from "@connectrpc/connect"
 import { formatZodError } from "@clankhouse/core/errors"
 import type { ClankHouse } from "@clankhouse/core/clankhouse"
 import * as z from "zod"
-import { notFound, parseJson, required, toConnectError } from "./errors"
-import type { ClankHouseServiceImplementation } from "./types"
+import { notFound, parseJson, required, toConnectError } from "./errors.js"
+import type { ClankHouseServiceImplementation } from "./types.js"
 
 type WorkflowHandlers = Pick<ClankHouseServiceImplementation, "listWorkflows" | "getWorkflow" | "startRun">
 

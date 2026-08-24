@@ -1,12 +1,12 @@
 import * as z from "zod"
-import { requireContext } from "../context"
-import { ClankHouseError } from "../errors"
-import type { Worktree } from "../git"
-import { uniqueName } from "../util"
-import type { CodingAgent, CodingRunOptions } from "./coding-agent"
-import { prepareInstructedOutput } from "./instructed-output"
-import { renderPrompt } from "./prompt"
-import type { SessionRecorder } from "./sessions"
+import { requireContext } from "../context.js"
+import { ClankHouseError } from "../errors.js"
+import type { Worktree } from "../git/index.js"
+import { uniqueName } from "../util.js"
+import type { CodingAgent, CodingRunOptions } from "./coding-agent.js"
+import { prepareInstructedOutput } from "./instructed-output.js"
+import { renderPrompt } from "./prompt.js"
+import type { SessionRecorder } from "./sessions.js"
 
 export type CodingAgentInvocation = {
     stepName: string

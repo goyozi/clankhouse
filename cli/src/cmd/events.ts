@@ -1,7 +1,7 @@
-import { EmitEventResponseSchema } from "@clankhouse/server/proto"
+import { EmitEventResponseSchema } from "@clankhouse/protocol"
 import type { Command } from "commander"
-import { readJsonInput } from "../io"
-import type { Runtime } from "../runtime"
+import { readJsonInput } from "../io.js"
+import type { Runtime } from "../runtime.js"
 
 export function registerEvents(program: Command, runtime: Runtime): void {
     const events = program.command("events").description("Emit workflow events")

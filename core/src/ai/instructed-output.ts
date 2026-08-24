@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
 import * as z from "zod"
-import { ClankHouseError } from "../errors"
-import { jsonSchema } from "../json-schema"
+import { ClankHouseError } from "../errors.js"
+import { jsonSchema } from "../json-schema.js"
 
 export type InstructedOutputMode = "coding-agent" | "llm"
 

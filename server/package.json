@@ -1,31 +1,56 @@
 {
     "name": "@clankhouse/server",
-    "version": "1.0.0",
+    "version": "0.0.1",
+    "description": "Connect RPC server for ClankHouse workflows",
     "type": "module",
     "main": "./src/index.ts",
+    "types": "./src/index.ts",
+    "files": [
+        "dist"
+    ],
     "exports": {
-        ".": "./src/index.ts",
-        "./proto": "./src/gen/clankhouse/server/v1/server_pb.ts"
+        ".": "./src/index.ts"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/goyozi/clankhouse.git",
+        "directory": "server"
+    },
+    "publishConfig": {
+        "access": "public",
+        "main": "./dist/index.js",
+        "types": "./dist/index.d.ts",
+        "exports": {
+            ".": {
+                "types": "./dist/index.d.ts",
+                "import": "./dist/index.js"
+            }
+        }
+    },
+    "license": "MIT",
+    "engines": {
+        "node": ">=22.19.0"
     },
     "scripts": {
+        "build": "tsc -p tsconfig.build.json",
+        "prepack": "pnpm build",
         "test": "vitest run --config vitest.config.ts",
-        "typecheck": "tsc -p tsconfig.json --noEmit",
-        "proto:generate": "buf generate && prettier --write src/gen",
-        "proto:lint": "buf lint",
-        "proto:check": "buf lint && buf generate && prettier --write src/gen && git diff --exit-code -- src/gen"
+        "typecheck": "tsc -p tsconfig.json --noEmit"
     },
     "dependencies": {
         "@bufbuild/protobuf": "^2.12.1",
+        "@clankhouse/protocol": "workspace:*",
         "@connectrpc/connect": "^2.1.2",
         "@connectrpc/connect-node": "^2.1.2",
-        "@clankhouse/core": "workspace:*",
         "zod": "catalog:"
     },
     "devDependencies": {
-        "@bufbuild/buf": "^1.71.0",
-        "@bufbuild/protoc-gen-es": "^2.12.1",
+        "@clankhouse/core": "workspace:*",
         "@clankhouse/test-utils": "workspace:*",
         "tsx": "^4.23.0",
         "typescript": "^6.0.3"
+    },
+    "peerDependencies": {
+        "@clankhouse/core": "workspace:^"
     }
 }

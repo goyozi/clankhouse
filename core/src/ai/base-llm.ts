@@ -1,9 +1,9 @@
 import * as z from "zod"
-import { requireContext } from "../context"
-import { prepareInstructedOutput } from "./instructed-output"
-import type { LanguageModel, ModelCallOptions } from "./llm"
-import { renderPrompt } from "./prompt"
-import type { SessionRecorder } from "./sessions"
+import { requireContext } from "../context.js"
+import { prepareInstructedOutput } from "./instructed-output.js"
+import type { LanguageModel, ModelCallOptions } from "./llm.js"
+import { renderPrompt } from "./prompt.js"
+import type { SessionRecorder } from "./sessions.js"
 
 export type LanguageModelInvocation = {
     stepName: string

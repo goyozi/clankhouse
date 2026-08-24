@@ -3,10 +3,10 @@ import {
     ListWorkflowsResponseSchema,
     type GetWorkflowResponse,
     type ListWorkflowsResponse
-} from "@clankhouse/server/proto"
+} from "@clankhouse/protocol"
 import type { Command } from "commander"
-import { indent, prettyJson } from "../output"
-import type { Runtime } from "../runtime"
+import { indent, prettyJson } from "../output.js"
+import type { Runtime } from "../runtime.js"
 
 export function registerWorkflows(program: Command, runtime: Runtime): void {
     const workflows = program.command("workflows").description("Inspect registered workflows")

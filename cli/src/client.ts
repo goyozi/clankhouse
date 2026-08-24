@@ -3,8 +3,8 @@ import * as os from "node:os"
 import * as path from "node:path"
 import { createClient, type Client, type Interceptor } from "@connectrpc/connect"
 import { createConnectTransport } from "@connectrpc/connect-node"
-import { ClankHouseService } from "@clankhouse/server/proto"
-import { CliError } from "./errors"
+import { ClankHouseService } from "@clankhouse/protocol"
+import { CliError } from "./errors.js"
 
 export type ClankHouseClient = Client<typeof ClankHouseService>
 

@@ -1,8 +1,8 @@
 import { Code, ConnectError } from "@connectrpc/connect"
 import type { ClankHouse } from "@clankhouse/core/clankhouse"
-import { toSession, toSessionMessage } from "../mappers"
-import { notFound, required, throwIfAborted, toConnectError } from "./errors"
-import type { ClankHouseServiceImplementation } from "./types"
+import { toSession, toSessionMessage } from "../mappers.js"
+import { notFound, required, throwIfAborted, toConnectError } from "./errors.js"
+import type { ClankHouseServiceImplementation } from "./types.js"
 
 type SessionHandlers = Pick<ClankHouseServiceImplementation, "getSession" | "watchSession">
 

@@ -1,7 +1,7 @@
 import { toJsonString, type DescMessage, type MessageShape } from "@bufbuild/protobuf"
 import { timestampDate } from "@bufbuild/protobuf/wkt"
-import { ExecutionStatus } from "@clankhouse/server/proto"
-import { writeText } from "./io"
+import { ExecutionStatus } from "@clankhouse/protocol"
+import { writeText } from "./io.js"
 
 export type ErrorOutput = {
     code: string

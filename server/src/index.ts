@@ -4,11 +4,11 @@ import { Code, ConnectError } from "@connectrpc/connect"
 import { connectNodeAdapter } from "@connectrpc/connect-node"
 import { clankhouse as defaultClankHouse } from "@clankhouse/core"
 import type { ClankHouse } from "@clankhouse/core/clankhouse"
-import { bearerAuth } from "./auth"
-import { resolveCredentials } from "./credentials"
-import { ClankHouseService } from "./gen/clankhouse/server/v1/server_pb"
-import { listen as bindServer } from "./listen"
-import { clankhouseService } from "./service"
+import { ClankHouseService } from "@clankhouse/protocol"
+import { bearerAuth } from "./auth.js"
+import { resolveCredentials } from "./credentials.js"
+import { listen as bindServer } from "./listen.js"
+import { clankhouseService } from "./service.js"
 
 const IDLE_SWEEP_MS = 10
 const CLOSE_GRACE_MS = 1000
@@ -190,5 +190,3 @@ function closeHttpServer(server: http.Server | https.Server, shutdown: AbortCont
         clearTimeout(force)
     })
 }
-
-export { ClankHouseService } from "./gen/clankhouse/server/v1/server_pb"

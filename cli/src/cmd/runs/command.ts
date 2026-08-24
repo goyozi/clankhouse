@@ -18,14 +18,14 @@ import {
     type WatchRunResponse,
     type WatchSessionResponse,
     type WorkflowRun
-} from "@clankhouse/server/proto"
+} from "@clankhouse/protocol"
 import { InvalidArgumentError, type Command } from "commander"
-import type { ClankHouseClient } from "../../client"
-import { CliError } from "../../errors"
-import { collectIncludes, includes, type IncludeOptions } from "../../includes"
-import { readJsonInput } from "../../io"
-import type { Output } from "../../output"
-import type { Runtime } from "../../runtime"
+import type { ClankHouseClient } from "../../client.js"
+import { CliError } from "../../errors.js"
+import { collectIncludes, includes, type IncludeOptions } from "../../includes.js"
+import { readJsonInput } from "../../io.js"
+import type { Output } from "../../output.js"
+import type { Runtime } from "../../runtime.js"
 import {
     formatRun,
     formatRunActivityHeader,
@@ -34,7 +34,7 @@ import {
     formatRuns,
     formatSessionErrorPrefix,
     RunActivityFormatter
-} from "./output"
+} from "./output.js"
 
 type RunInclude = "sessions" | "tool-io" | "all"
 

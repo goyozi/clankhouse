@@ -1,8 +1,8 @@
-import { GetSessionResponseSchema, WatchSessionResponseSchema } from "@clankhouse/server/proto"
+import { GetSessionResponseSchema, WatchSessionResponseSchema } from "@clankhouse/protocol"
 import type { Command } from "commander"
-import { collectIncludes, includes, type IncludeOptions } from "../../includes"
-import type { Runtime } from "../../runtime"
-import { formatSession, formatSessionMessageLines, formatSessionWatchHeader } from "./output"
+import { collectIncludes, includes, type IncludeOptions } from "../../includes.js"
+import type { Runtime } from "../../runtime.js"
+import { formatSession, formatSessionMessageLines, formatSessionWatchHeader } from "./output.js"
 
 type SessionInclude = "tool-io" | "all"
 type SessionOptions = IncludeOptions<SessionInclude>

@@ -1,13 +1,13 @@
 import * as z from "zod"
-import type { ClankHouse } from "./clankhouse"
-import type { Engine } from "./engine"
-import type { ActiveSets } from "./runtime"
-import * as sql from "./db"
-import type { Db, RunRow, StepRow } from "./db"
-import type { Artifacts } from "./artifacts"
-import { formatZodError, ClankHouseError } from "./errors"
-import { jsonSchema } from "./json-schema"
-import { newId, nowIso } from "./util"
+import type { ClankHouse } from "./clankhouse.js"
+import type { Engine } from "./engine.js"
+import type { ActiveSets } from "./runtime.js"
+import * as sql from "./db.js"
+import type { Db, RunRow, StepRow } from "./db.js"
+import type { Artifacts } from "./artifacts.js"
+import { formatZodError, ClankHouseError } from "./errors.js"
+import { jsonSchema } from "./json-schema.js"
+import { newId, nowIso } from "./util.js"
 
 export class Workflows {
     private readonly clankhouse: ClankHouse

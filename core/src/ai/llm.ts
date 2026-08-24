@@ -1,6 +1,6 @@
 import * as z from "zod"
 
-import { Prompt } from "./prompt"
+import { Prompt } from "./prompt.js"
 
 export type ModelCallOptions<T extends z.ZodTypeAny> = {
     prompt: Prompt

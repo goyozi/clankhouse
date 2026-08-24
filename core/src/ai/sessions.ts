@@ -1,11 +1,11 @@
 import { realpathSync } from "node:fs"
 import * as path from "node:path"
-import * as sql from "../db"
-import type { Db, SessionMessageRow } from "../db"
-import { ClankHouseError } from "../errors"
-import { observableStatus, type ActiveSets } from "../runtime"
-import { newId, nowIso } from "../util"
-import { Notifier, watch } from "../watch"
+import * as sql from "../db.js"
+import type { Db, SessionMessageRow } from "../db.js"
+import { ClankHouseError } from "../errors.js"
+import { observableStatus, type ActiveSets } from "../runtime.js"
+import { newId, nowIso } from "../util.js"
+import { Notifier, watch } from "../watch.js"
 
 export class AISessions {
     private readonly db: Db

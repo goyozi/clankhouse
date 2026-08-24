@@ -1,15 +1,15 @@
 import * as z from "zod"
-import type { ClankHouse } from "./clankhouse"
-import { requireContext, runContext, type RunContext } from "./context"
-import * as sql from "./db"
-import type { Db, RunRow, StepColumn, StepKind, StepRow } from "./db"
-import type { ActiveSets } from "./runtime"
-import type { Notifier } from "./watch"
-import { ClankHouseError } from "./errors"
-import { errorMessage, newId, nowIso } from "./util"
-import { jsonSchema, type SchemaIo } from "./json-schema"
+import type { ClankHouse } from "./clankhouse.js"
+import { requireContext, runContext, type RunContext } from "./context.js"
+import * as sql from "./db.js"
+import type { Db, RunRow, StepColumn, StepKind, StepRow } from "./db.js"
+import type { ActiveSets } from "./runtime.js"
+import type { Notifier } from "./watch.js"
+import { ClankHouseError } from "./errors.js"
+import { errorMessage, newId, nowIso } from "./util.js"
+import { jsonSchema, type SchemaIo } from "./json-schema.js"
 
-export type { StepColumn } from "./db"
+export type { StepColumn } from "./db.js"
 
 export type StepHandle = {
     readonly stepId: string

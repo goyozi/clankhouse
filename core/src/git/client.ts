@@ -1,5 +1,5 @@
 import * as path from "node:path"
-import { execGit, execGitRaw, mustGit, mustGitRaw, type ProcessOutput } from "./exec"
+import { execGit, execGitRaw, mustGit, mustGitRaw, type ProcessOutput } from "./exec.js"
 
 const PATH_CHUNK_SIZE = 256
 

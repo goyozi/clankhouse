@@ -6,6 +6,7 @@ packages:
   - openai
   - anthropic
   - test-utils
+  - protocol
   - server
   - cli
   - design

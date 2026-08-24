@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks"
-import type { ClankHouse } from "./clankhouse"
-import { ClankHouseError } from "./errors"
+import type { ClankHouse } from "./clankhouse.js"
+import { ClankHouseError } from "./errors.js"
 
 export type RunContext = {
     clankhouse: ClankHouse

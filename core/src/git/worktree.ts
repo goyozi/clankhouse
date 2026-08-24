@@ -14,9 +14,9 @@ import {
 import { createHash } from "node:crypto"
 import * as os from "node:os"
 import * as path from "node:path"
-import { ClankHouseError } from "../errors"
-import { exists, isNodeError, newId } from "../util"
-import * as git from "./client"
+import { ClankHouseError } from "../errors.js"
+import { exists, isNodeError, newId } from "../util.js"
+import * as git from "./client.js"
 
 const SNAPSHOT_FORMAT = Buffer.from("clankhouse-snapshot-v1")
 const RESCUE_REF_PREFIX = "refs/clankhouse/restore"

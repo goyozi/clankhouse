@@ -1,4 +1,4 @@
-import { BaseLanguageModel, type LanguageModelInvocation } from "./base-llm"
+import { BaseLanguageModel, type LanguageModelInvocation } from "./base-llm.js"
 
 export class FakeLLM extends BaseLanguageModel {
     readonly client = "fake-llm"

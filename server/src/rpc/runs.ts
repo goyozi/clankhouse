@@ -1,10 +1,10 @@
 import { Code, ConnectError } from "@connectrpc/connect"
 import type { ClankHouse } from "@clankhouse/core/clankhouse"
 import type { ListWorkflowOptions, ObservableRunStatus } from "@clankhouse/core/runs"
-import { ExecutionStatus, type ListRunsRequest } from "../gen/clankhouse/server/v1/server_pb"
-import { toRunMetadata, toStep, toWorkflowRun } from "../mappers"
-import { notFound, required, throwIfAborted, toConnectError } from "./errors"
-import type { ClankHouseServiceImplementation } from "./types"
+import { ExecutionStatus, type ListRunsRequest } from "@clankhouse/protocol"
+import { toRunMetadata, toStep, toWorkflowRun } from "../mappers.js"
+import { notFound, required, throwIfAborted, toConnectError } from "./errors.js"
+import type { ClankHouseServiceImplementation } from "./types.js"
 
 type RunHandlers = Pick<ClankHouseServiceImplementation, "listRuns" | "getRun" | "watchRun" | "resumeRun" | "rerunRun">
 

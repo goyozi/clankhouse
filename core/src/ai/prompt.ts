@@ -2,7 +2,7 @@ import { readFile, stat } from "node:fs/promises"
 import * as path from "node:path"
 import { fileURLToPath } from "node:url"
 import Handlebars from "handlebars"
-import { exists } from "../util"
+import { exists } from "../util.js"
 
 /**
  * Prompt can be passed directly or read from a file.

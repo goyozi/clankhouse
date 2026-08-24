@@ -1,6 +1,6 @@
 import * as z from "zod"
-import { ClankHouseError } from "./errors"
-import { errorMessage } from "./util"
+import { ClankHouseError } from "./errors.js"
+import { errorMessage } from "./util.js"
 
 export type SchemaIo = "input" | "output"
 

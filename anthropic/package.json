@@ -1,21 +1,51 @@
 {
     "name": "@clankhouse/anthropic",
-    "version": "1.0.0",
+    "version": "0.0.1",
+    "description": "Anthropic language-model adapter for ClankHouse",
     "type": "module",
     "main": "./src/index.ts",
+    "types": "./src/index.ts",
+    "files": [
+        "dist"
+    ],
     "exports": {
         ".": "./src/index.ts"
     },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/goyozi/clankhouse.git",
+        "directory": "anthropic"
+    },
+    "publishConfig": {
+        "access": "public",
+        "main": "./dist/index.js",
+        "types": "./dist/index.d.ts",
+        "exports": {
+            ".": {
+                "types": "./dist/index.d.ts",
+                "import": "./dist/index.js"
+            }
+        }
+    },
+    "license": "MIT",
+    "engines": {
+        "node": ">=22.19.0"
+    },
     "scripts": {
+        "build": "tsc -p tsconfig.build.json",
+        "prepack": "pnpm build",
         "test": "vitest run --config vitest.config.ts",
         "typecheck": "tsc -p tsconfig.json --noEmit"
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.115.0",
-        "@clankhouse/core": "workspace:*",
         "zod": "catalog:"
     },
     "devDependencies": {
+        "@clankhouse/core": "workspace:*",
         "@clankhouse/test-utils": "workspace:*"
+    },
+    "peerDependencies": {
+        "@clankhouse/core": "workspace:^"
     }
 }

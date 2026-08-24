@@ -1,4 +1,4 @@
-import type { PersistedStatus } from "./db"
+import type { PersistedStatus } from "./db.js"
 
 export type ActiveSets = {
     runs: Map<string, { promise: Promise<unknown> }>

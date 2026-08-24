@@ -24,7 +24,7 @@ import {
     StartRunResponseSchema,
     WatchRunResponseSchema,
     WatchSessionResponseSchema
-} from "@clankhouse/server/proto"
+} from "@clankhouse/protocol"
 import { listen, type ClankHouseServer } from "@clankhouse/server"
 import { gate, runOutput, tempDir, tempGitRepo, tempClankHouse, testRun, waitForRun } from "@clankhouse/test-utils"
 import { expect, onTestFinished, test } from "vitest"

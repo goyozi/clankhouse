@@ -4,12 +4,12 @@ import { mkdir, open, readFile, writeFile } from "node:fs/promises"
 import * as path from "node:path"
 import { Readable } from "node:stream"
 import { pipeline } from "node:stream/promises"
-import { requireContext } from "./context"
-import * as sql from "./db"
-import type { ArtifactRow, Db, StepRow } from "./db"
-import type { Engine } from "./engine"
-import { ClankHouseError } from "./errors"
-import { isNodeError, newId, nowIso, uniqueName } from "./util"
+import { requireContext } from "./context.js"
+import * as sql from "./db.js"
+import type { ArtifactRow, Db, StepRow } from "./db.js"
+import type { Engine } from "./engine.js"
+import { ClankHouseError } from "./errors.js"
+import { isNodeError, newId, nowIso, uniqueName } from "./util.js"
 
 export const ArtifactSchema = z.object({
     id: z.string(),

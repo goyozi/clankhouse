@@ -1,10 +1,10 @@
 import * as z from "zod"
-import { ClankHouse } from "./clankhouse"
-import type { EventSource, EventSourceResult } from "./events"
-import type { RerunOptions, WorkflowOptions, Workflows } from "./workflows"
-import type { WorkflowRuns } from "./runs"
-import type { Artifacts } from "./artifacts"
-import type { AISessions } from "./ai/sessions"
+import { ClankHouse } from "./clankhouse.js"
+import type { EventSource, EventSourceResult } from "./events.js"
+import type { RerunOptions, WorkflowOptions, Workflows } from "./workflows.js"
+import type { WorkflowRuns } from "./runs.js"
+import type { Artifacts } from "./artifacts.js"
+import type { AISessions } from "./ai/sessions.js"
 
 let instance: ClankHouse | undefined
 
@@ -82,8 +82,8 @@ export function waitForAny<const S extends readonly EventSource[]>(sources: S): 
     return clankhouse().waitForAny(sources)
 }
 
-export type { RerunOptions, WorkflowOptions } from "./workflows"
-export type { EventSource, EventSourceHandle, EventSourceListener, EventSourceResult } from "./events"
-export { fileCreated, fileCreatedIn } from "./files"
-export { ClankHouseError } from "./errors"
-export type { ClankHouseErrorCode } from "./errors"
+export type { RerunOptions, WorkflowOptions } from "./workflows.js"
+export type { EventSource, EventSourceHandle, EventSourceListener, EventSourceResult } from "./events.js"
+export { fileCreated, fileCreatedIn } from "./files.js"
+export { ClankHouseError } from "./errors.js"
+export type { ClankHouseErrorCode } from "./errors.js"

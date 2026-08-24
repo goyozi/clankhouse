@@ -1,5 +1,5 @@
 import Database from "better-sqlite3"
-import type { ClankHouseErrorCode } from "./errors"
+import type { ClankHouseErrorCode } from "./errors.js"
 
 export type Db = Database.Database
 type Statement = Database.Statement

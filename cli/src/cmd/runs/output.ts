@@ -9,10 +9,10 @@ import {
     type SessionMessage,
     type Step,
     type WorkflowRun
-} from "@clankhouse/server/proto"
-import { executionStatus, executionTiming, indent, prettyJson, table, timestamp } from "../../output"
-import { formatArtifactValue } from "../artifacts"
-import { formatAlignedSessionMessage, formatSessionMessage, type SessionFormatOptions } from "../sessions/output"
+} from "@clankhouse/protocol"
+import { executionStatus, executionTiming, indent, prettyJson, table, timestamp } from "../../output.js"
+import { formatArtifactValue } from "../artifacts.js"
+import { formatAlignedSessionMessage, formatSessionMessage, type SessionFormatOptions } from "../sessions/output.js"
 
 export function formatRunId(runId: string): string {
     return `${runId}\n`

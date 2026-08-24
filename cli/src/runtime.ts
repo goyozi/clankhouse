@@ -1,8 +1,8 @@
 import { type DescMessage, type MessageShape } from "@bufbuild/protobuf"
 import type { Command } from "commander"
-import { connect, type ClankHouseClient } from "./client"
-import { publicError } from "./errors"
-import { Output, type ErrorOutputOptions, writeErrorOutput } from "./output"
+import { connect, type ClankHouseClient } from "./client.js"
+import { publicError } from "./errors.js"
+import { Output, type ErrorOutputOptions, writeErrorOutput } from "./output.js"
 
 export type RuntimeOptions = {
     stdin: NodeJS.ReadableStream

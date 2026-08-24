@@ -1,13 +1,13 @@
 import { CommanderError, Command } from "commander"
-import { registerArtifacts } from "./cmd/artifacts"
-import { registerEvents } from "./cmd/events"
-import { registerRuns } from "./cmd/runs/command"
-import { registerSessions } from "./cmd/sessions/command"
-import { registerWorkflows } from "./cmd/workflows"
-import { publicError } from "./errors"
-import { isBrokenPipe, writeText } from "./io"
-import { writeErrorOutput } from "./output"
-import { Runtime } from "./runtime"
+import { registerArtifacts } from "./cmd/artifacts.js"
+import { registerEvents } from "./cmd/events.js"
+import { registerRuns } from "./cmd/runs/command.js"
+import { registerSessions } from "./cmd/sessions/command.js"
+import { registerWorkflows } from "./cmd/workflows.js"
+import { publicError } from "./errors.js"
+import { isBrokenPipe, writeText } from "./io.js"
+import { writeErrorOutput } from "./output.js"
+import { Runtime } from "./runtime.js"
 
 export type CliOptions = {
     stdin?: NodeJS.ReadableStream

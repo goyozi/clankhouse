@@ -1,7 +1,7 @@
 import * as z from "zod"
 
-import { Worktree } from "../git"
-import { Prompt } from "./prompt"
+import { Worktree } from "../git/index.js"
+import { Prompt } from "./prompt.js"
 
 export type CodingRunOptions<T extends z.ZodTypeAny> = {
     prompt: Prompt

@@ -1,9 +1,9 @@
 import { lstat, readdir, rm } from "node:fs/promises"
 import * as path from "node:path"
-import type { Db } from "../db"
-import * as sql from "../db"
-import { ClankHouseError } from "../errors"
-import { exists } from "../util"
+import type { Db } from "../db.js"
+import * as sql from "../db.js"
+import { ClankHouseError } from "../errors.js"
+import { exists } from "../util.js"
 import {
     candidateCheckoutPath,
     isWorktreeRegistered,
@@ -11,9 +11,9 @@ import {
     readCandidateManifest,
     resolveCandidate,
     type ManagedCandidate
-} from "./repository"
-import * as git from "./client"
-import { removeStaleRescueRefs } from "./worktree"
+} from "./repository.js"
+import * as git from "./client.js"
+import { removeStaleRescueRefs } from "./worktree.js"
 
 const WORKTREE_GC_MIN_AGE_MS = 14 * 24 * 60 * 60 * 1000
 

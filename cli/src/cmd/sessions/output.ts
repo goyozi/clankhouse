@@ -7,8 +7,8 @@ import {
     type Session,
     type SessionMessage,
     type SessionToolCall
-} from "@clankhouse/server/proto"
-import { executionStatus, executionTiming, indent } from "../../output"
+} from "@clankhouse/protocol"
+import { executionStatus, executionTiming, indent } from "../../output.js"
 
 export type SessionFormatOptions = {
     includeToolIo?: boolean

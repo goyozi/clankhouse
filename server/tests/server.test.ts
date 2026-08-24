@@ -17,7 +17,7 @@ import {
     StepKind,
     ToolResultStatus,
     ToolSourceKind
-} from "@clankhouse/server/proto"
+} from "@clankhouse/protocol"
 import { runOutput, tempDir, tempGitRepo, tempClankHouse, testRun } from "@clankhouse/test-utils"
 import { expect, onTestFinished, test } from "vitest"
 import * as z from "zod"

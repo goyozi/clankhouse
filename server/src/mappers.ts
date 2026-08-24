@@ -30,7 +30,7 @@ import {
     ToolResultStatus,
     ToolSourceKind,
     WorkflowRunSchema
-} from "./gen/clankhouse/server/v1/server_pb"
+} from "@clankhouse/protocol"
 
 export function toRunMetadata(row: CoreRunMetadata): MessageInitShape<typeof RunMetadataSchema> {
     return {

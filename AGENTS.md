@@ -20,6 +20,10 @@ server:
 
 - serving workflows via Connect RPC
 
+protocol:
+
+- Protocol Buffers schema and generated TypeScript descriptors shared by clients and servers
+
 cli:
 
 - CLI for communicating with the server

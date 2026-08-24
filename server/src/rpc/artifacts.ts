@@ -1,7 +1,7 @@
 import type { ClankHouse } from "@clankhouse/core/clankhouse"
-import { toArtifact } from "../mappers"
-import { notFound, required, throwIfAborted, toConnectError } from "./errors"
-import type { ClankHouseServiceImplementation } from "./types"
+import { toArtifact } from "../mappers.js"
+import { notFound, required, throwIfAborted, toConnectError } from "./errors.js"
+import type { ClankHouseServiceImplementation } from "./types.js"
 
 type ArtifactHandlers = Pick<ClankHouseServiceImplementation, "getArtifact" | "readArtifact">
 

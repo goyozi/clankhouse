@@ -2,8 +2,8 @@ import { statSync, watch, type FSWatcher } from "node:fs"
 import { readdir, stat } from "node:fs/promises"
 import * as path from "node:path"
 import * as z from "zod"
-import type { EventSource, EventSourceHandle, EventSourceListener } from "./events"
-import { isNodeError } from "./util"
+import type { EventSource, EventSourceHandle, EventSourceListener } from "./events.js"
+import { isNodeError } from "./util.js"
 
 const fileCreatedEvent = z.object({ path: z.string(), filename: z.string() })
 
