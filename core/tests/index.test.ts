@@ -2,6 +2,7 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as z from "zod"
 import { expect, test, vi } from "vitest"
+import type { EventSourceListener } from "@clankhouse/core/events"
 import { gate, runOutput, tempDir } from "@clankhouse/test-utils"
 
 function withClankHouseDir<T>(prefix: string, body: (dir: string) => Promise<T>): Promise<T> {
@@ -87,6 +88,35 @@ test("top-level workflow functions delegate to the singleton clankhouse instance
         // then it returns a new run ID whose attempt succeeds
         expect(rerunId).not.toBe(runId)
         expect(await runOutput(instance, rerunId)).toBe(4)
+
+        // given a second workflow registered through the top-level API and an active source
+        const triggerRef = mod.registerWorkflow(
+            "index-trigger",
+            { input: z.string(), output: z.string(), key: (input) => input },
+            async (input) => input.toUpperCase()
+        )
+        let listener: EventSourceListener<string> | undefined
+        let stops = 0
+
+        // when a trigger is added and its source emits
+        const trigger = mod.addTrigger(
+            {
+                key: "index-trigger",
+                schema: z.string(),
+                start(value) {
+                    listener = value
+                    return { stop: () => stops++ }
+                }
+            },
+            triggerRef
+        )
+        listener?.emit("triggered")
+
+        // then the top-level functions use the singleton instance and return a stoppable handle
+        const triggeredRun = (await instance.runs.list({ workflowName: "index-trigger", key: "triggered" }))[0]
+        expect(await runOutput(instance, triggeredRun.id)).toBe("TRIGGERED")
+        trigger.stop()
+        expect(stops).toBe(1)
         instance.close()
     })
 })

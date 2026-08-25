@@ -29,7 +29,7 @@ export class Workflows {
         name: string,
         options: WorkflowOptions<I, O>,
         workflowFn: (input: z.infer<I>) => Promise<z.infer<O>>
-    ): void {
+    ): WorkflowRef<z.input<I>> {
         if (this.registered.has(name)) {
             throw new ClankHouseError("workflow_already_registered", `Workflow "${name}" is already registered`)
         }
@@ -45,15 +45,20 @@ export class Workflows {
             role: `Workflow "${name}" output schema`,
             allowTopLevelVoid: true
         })
-        this.registered.set(name, { options, fn: workflowFn, inputSchema, outputSchema })
+        const registration = Symbol(name)
+        this.registered.set(name, { options, fn: workflowFn, inputSchema, outputSchema, registration })
+        return { name, [workflowRegistration]: registration } as WorkflowRef<z.input<I>>
     }
 
     list(): WorkflowSummary[] {
         return [...this.registered.keys()].sort().map((name) => ({ name }))
     }
 
-    get(name: string): WorkflowDefinition {
-        const registered = this.requireRegistered(name)
+    get(name: string): WorkflowDefinition
+    get<Input>(workflow: WorkflowRef<Input>): WorkflowDefinition
+    get(target: string | WorkflowRef<any>): WorkflowDefinition {
+        const name = workflowName(target)
+        const registered = this.requireRegistered(target)
         return {
             name,
             ...(registered.inputSchema !== undefined ? { inputSchema: registered.inputSchema } : {}),
@@ -61,8 +66,11 @@ export class Workflows {
         }
     }
 
-    start(name: string, input?: any): string {
-        const registered = this.requireRegistered(name)
+    start(name: string, input?: any): string
+    start<Input>(workflow: WorkflowRef<Input>, input: Input): string
+    start(target: string | WorkflowRef<any>, input?: any): string {
+        const name = workflowName(target)
+        const registered = this.requireRegistered(target)
         const parsed = registered.options.input.parse(input)
         const inputJson = JSON.stringify(input)
         const plan = this.resolveStart({
@@ -143,8 +151,15 @@ export class Workflows {
         return runRow.input === null ? undefined : JSON.parse(runRow.input)
     }
 
-    private requireRegistered(name: string): RegisteredWorkflow {
+    private requireRegistered(target: string | WorkflowRef<any>): RegisteredWorkflow {
+        const name = workflowName(target)
         const registered = this.registered.get(name)
+        if (typeof target !== "string" && target[workflowRegistration] !== registered?.registration) {
+            throw new ClankHouseError(
+                "workflow_reference_foreign",
+                `Workflow reference "${name}" belongs to another ClankHouse instance`
+            )
+        }
         if (!registered) {
             throw new ClankHouseError("workflow_not_registered", `Workflow "${name}" is not registered`)
         }
@@ -251,17 +266,31 @@ export class Workflows {
     }
 }
 
+function workflowName(target: string | WorkflowRef<any>): string {
+    return typeof target === "string" ? target : target.name
+}
+
 type RegisteredWorkflow = {
     options: { input: z.ZodTypeAny; output: z.ZodTypeAny; key: (input: any) => string }
     fn: (input: any) => Promise<any>
     inputSchema?: z.core.JSONSchema.JSONSchema
     outputSchema?: z.core.JSONSchema.JSONSchema
+    registration: symbol
 }
 
 export type WorkflowOptions<I extends z.ZodTypeAny, O extends z.ZodTypeAny> = {
     input: I
     output: O
     key: (input: z.infer<I>) => string
+}
+
+const workflowRegistration = Symbol("workflowRegistration")
+declare const workflowInput: unique symbol
+
+export type WorkflowRef<Input> = {
+    readonly name: string
+    readonly [workflowRegistration]: symbol
+    readonly [workflowInput]: (input: Input) => Input
 }
 
 export type RerunOptions = { from: string }

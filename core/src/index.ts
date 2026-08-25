@@ -1,7 +1,8 @@
 import * as z from "zod"
 import { ClankHouse } from "./clankhouse.js"
 import type { EventSource, EventSourceResult } from "./events.js"
-import type { RerunOptions, WorkflowOptions, Workflows } from "./workflows.js"
+import type { TriggerArguments, TriggerHandle } from "./triggers.js"
+import type { RerunOptions, WorkflowOptions, WorkflowRef, Workflows } from "./workflows.js"
 import type { WorkflowRuns } from "./runs.js"
 import type { Artifacts } from "./artifacts.js"
 import type { AISessions } from "./ai/sessions.js"
@@ -33,8 +34,16 @@ export function registerWorkflow<I extends z.ZodTypeAny, O extends z.ZodTypeAny>
     name: string,
     options: WorkflowOptions<I, O>,
     workflowFn: (input: z.infer<I>) => Promise<z.infer<O>>
-) {
-    clankhouse().registerWorkflow(name, options, workflowFn)
+): WorkflowRef<z.input<I>> {
+    return clankhouse().registerWorkflow(name, options, workflowFn)
+}
+
+export function addTrigger<S extends z.ZodTypeAny, Input>(
+    source: EventSource<S>,
+    workflow: WorkflowRef<Input>,
+    ...options: TriggerArguments<z.output<S>, Input>
+): TriggerHandle {
+    return clankhouse().addTrigger(source, workflow, ...options)
 }
 
 export function start(name: string, input?: any): string {
@@ -82,8 +91,10 @@ export function waitForAny<const S extends readonly EventSource[]>(sources: S): 
     return clankhouse().waitForAny(sources)
 }
 
-export type { RerunOptions, WorkflowOptions } from "./workflows.js"
+export type { RerunOptions, WorkflowOptions, WorkflowRef } from "./workflows.js"
 export type { EventSource, EventSourceHandle, EventSourceListener, EventSourceResult } from "./events.js"
+export type { TriggerErrorHandler, TriggerHandle, TriggerOptions } from "./triggers.js"
+export type { ClankHouseOptions } from "./clankhouse.js"
 export { fileCreated, fileCreatedIn } from "./files.js"
 export { ClankHouseError } from "./errors.js"
 export type { ClankHouseErrorCode } from "./errors.js"

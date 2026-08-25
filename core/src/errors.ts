@@ -1,8 +1,10 @@
 import type * as z from "zod"
 
 export type ClankHouseErrorCode =
+    | "clankhouse_closed"
     | "workflow_already_registered"
     | "workflow_not_registered"
+    | "workflow_reference_foreign"
     | "workflow_input_incompatible"
     | "schema_not_json_compatible"
     | "workflow_run_not_found"
@@ -14,6 +16,7 @@ export type ClankHouseErrorCode =
     | "workflow_step_duplicate"
     | "workflow_context_required"
     | "event_sources_empty"
+    | "event_source_not_startable"
     | "event_schema_validation_failed"
     | "event_wait_already_registered"
     | "event_payload_required"

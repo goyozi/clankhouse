@@ -9,9 +9,15 @@ import { AISessions } from "./ai/sessions.js"
 import type { ActiveSets } from "./runtime.js"
 import { Engine } from "./engine.js"
 import { Events, type EventSource, type EventSourceResult } from "./events.js"
+import { ClankHouseError } from "./errors.js"
 import { Notifier } from "./watch.js"
-import { Workflows, type RerunOptions, type WorkflowOptions } from "./workflows.js"
+import { Triggers, type TriggerArguments, type TriggerErrorHandler, type TriggerHandle } from "./triggers.js"
+import { Workflows, type RerunOptions, type WorkflowOptions, type WorkflowRef } from "./workflows.js"
 import { gcWorktrees, type WorktreeGcResult } from "./git/index.js"
+
+export type ClankHouseOptions = {
+    onTriggerError?: TriggerErrorHandler
+}
 
 export class ClankHouse {
     readonly clankhouseDir: string
@@ -22,6 +28,7 @@ export class ClankHouse {
     readonly db: Db
     readonly engine: Engine
     readonly events: Events
+    private readonly triggers: Triggers
     private isClosed = false
 
     /**
@@ -30,7 +37,7 @@ export class ClankHouse {
      *
      * @see gc
      */
-    constructor(clankhouseDir?: string) {
+    constructor(clankhouseDir?: string, options: ClankHouseOptions = {}) {
         this.clankhouseDir = resolveClankHouseDir(clankhouseDir)
         mkdirSync(this.clankhouseDir, { recursive: true, mode: 0o700 })
         this.db = openDatabase(path.join(this.clankhouseDir, "clankhouse.db"))
@@ -39,6 +46,7 @@ export class ClankHouse {
         this.engine = new Engine(this.db, active, notifier)
         this.artifacts = new Artifacts(this.clankhouseDir, this.db, this.engine)
         this.workflows = new Workflows(this, this.db, this.engine, active, this.artifacts)
+        this.triggers = new Triggers(this.workflows, options.onTriggerError)
         this.events = new Events(this.db, this.engine)
         this.runs = new WorkflowRuns(this.db, active, notifier)
         this.sessions = new AISessions(this.db, active)
@@ -51,6 +59,7 @@ export class ClankHouse {
     close(): void {
         if (this.isClosed) return
         this.isClosed = true
+        this.triggers.close()
         this.events.close()
         this.db.close()
     }
@@ -59,8 +68,19 @@ export class ClankHouse {
         name: string,
         options: WorkflowOptions<I, O>,
         workflowFn: (input: z.infer<I>) => Promise<z.infer<O>>
-    ): void {
-        this.workflows.register(name, options, workflowFn)
+    ): WorkflowRef<z.input<I>> {
+        return this.workflows.register(name, options, workflowFn)
+    }
+
+    addTrigger<S extends z.ZodTypeAny, Input>(
+        source: EventSource<S>,
+        workflow: WorkflowRef<Input>,
+        ...options: TriggerArguments<z.output<S>, Input>
+    ): TriggerHandle {
+        if (this.isClosed) {
+            throw new ClankHouseError("clankhouse_closed", "Cannot add a trigger to a closed ClankHouse instance")
+        }
+        return this.triggers.add(source, workflow, ...options)
     }
 
     /**
@@ -151,3 +171,5 @@ export class ClankHouse {
 }
 
 export type { EventSource, EventSourceHandle, EventSourceListener, EventSourceResult } from "./events.js"
+export type { TriggerErrorHandler, TriggerHandle, TriggerOptions } from "./triggers.js"
+export type { WorkflowRef } from "./workflows.js"

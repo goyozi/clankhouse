@@ -7,6 +7,15 @@ import { isNodeError } from "./util.js"
 
 const fileCreatedEvent = z.object({ path: z.string(), filename: z.string() })
 
+/**
+ * Event source for observing a specific file being created.
+ *
+ * Fires immediately if file exists upon event source creation.
+ *
+ * Detection is based on periodic directory snapshots assisted by filesystem notifications. Changes between
+ * snapshots may be coalesced, so deleting and re-creating the file may not emit another event if its absence
+ * was not observed.
+ */
 export function fileCreated(target: string): EventSource<typeof fileCreatedEvent> {
     const absolutePath = path.resolve(target)
     const directory = path.dirname(absolutePath)
@@ -17,11 +26,20 @@ export function fileCreated(target: string): EventSource<typeof fileCreatedEvent
         start: (listener) =>
             watchDirectory(directory, listener, async () => {
                 const stats = await optionalStat(absolutePath)
-                return stats?.isFile() ? { path: absolutePath, filename } : undefined
+                return stats?.isFile() ? [{ path: absolutePath, filename }] : []
             })
     }
 }
 
+/**
+ * Event source for observing matching files being created in a given directory.
+ *
+ * Fires immediately if matching files exist upon event source creation.
+ *
+ * Detection is based on periodic directory snapshots assisted by filesystem notifications. Changes between
+ * snapshots may be coalesced, so deleting and re-creating a path may not emit another event if its absence
+ * was not observed.
+ */
 export function fileCreatedIn(
     directory: string,
     options: { matching?: string } = {}
@@ -35,14 +53,15 @@ export function fileCreatedIn(
             watchDirectory(absoluteDirectory, listener, async () => {
                 const entries = await readdir(absoluteDirectory, { withFileTypes: true })
                 entries.sort((left, right) => compareNames(left.name, right.name))
+                const events: Array<{ path: string; filename: string }> = []
                 for (const entry of entries) {
                     if (!entry.isFile() && !entry.isSymbolicLink()) continue
                     if (matching !== undefined && !path.matchesGlob(entry.name, matching)) continue
                     const absolutePath = path.join(absoluteDirectory, entry.name)
                     const stats = await optionalStat(absolutePath)
-                    if (stats?.isFile()) return { path: absolutePath, filename: entry.name }
+                    if (stats?.isFile()) events.push({ path: absolutePath, filename: entry.name })
                 }
-                return undefined
+                return events
             })
     }
 }
@@ -50,9 +69,10 @@ export function fileCreatedIn(
 function watchDirectory(
     directory: string,
     listener: EventSourceListener<{ path: string; filename: string }>,
-    find: () => Promise<{ path: string; filename: string } | undefined>
+    find: () => Promise<Array<{ path: string; filename: string }>>
 ): EventSourceHandle {
     requireDirectory(directory)
+    let observed = new Set<string>()
     let active = true
     let scanning = false
     let pending = false
@@ -85,11 +105,14 @@ function watchDirectory(
         void (async () => {
             while (active) {
                 pending = false
-                const event = await find()
-                if (event) {
-                    if (active) listener.emit(event)
-                    return
+                const events = await find()
+                const present = new Set(events.map((event) => event.path))
+                for (const event of events) {
+                    if (!active) return
+                    if (observed.has(event.path)) continue
+                    listener.emit(event)
                 }
+                observed = present
                 if (!pending) return
             }
         })()

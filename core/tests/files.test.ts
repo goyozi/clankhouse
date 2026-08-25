@@ -1,6 +1,6 @@
 import * as fs from "node:fs"
 import * as path from "node:path"
-import { expect, test } from "vitest"
+import { expect, onTestFinished, test } from "vitest"
 import { fileCreated, fileCreatedIn } from "@clankhouse/core/files"
 import { gate, tempDir, tempClankHouse, testRun } from "@clankhouse/test-utils"
 
@@ -118,6 +118,106 @@ test("fileCreatedIn detects a newly created matching direct file", async () => {
 
     // then the wait resolves with its absolute path and basename
     expect(await promise).toEqual({ path: target, filename: "created.md" })
+})
+
+test("file sources emit newly observed paths while retaining present paths", async () => {
+    // given target and directory sources watching the same initially empty directory
+    const directory = tempDir("clankhouse-file-created-multiple-")
+    const first = path.join(directory, "a.md")
+    const second = path.join(directory, "b.md")
+    const third = path.join(directory, "c.md")
+    const targetEvents: Array<{ path: string; filename: string }> = []
+    const directoryEvents: Array<{ path: string; filename: string }> = []
+    const failures: unknown[] = []
+    const targetCreated = gate()
+    const directoryCreated = gate()
+    const directorySecond = gate()
+    const directoryThird = gate()
+    const fail = (error: unknown) => {
+        failures.push(error)
+        targetCreated.release()
+        directoryCreated.release()
+        directorySecond.release()
+        directoryThird.release()
+    }
+    const targetHandle = fileCreated(first).start!({
+        emit(event) {
+            targetEvents.push(event)
+            if (targetEvents.length === 1) targetCreated.release()
+        },
+        fail
+    })
+    const directoryHandle = fileCreatedIn(directory, { matching: "*.md" }).start!({
+        emit(event) {
+            directoryEvents.push(event)
+            if (directoryEvents.length === 1) directoryCreated.release()
+            if (directoryEvents.length === 2) directorySecond.release()
+            if (directoryEvents.length === 3) directoryThird.release()
+        },
+        fail
+    })
+    onTestFinished(() => {
+        targetHandle.stop()
+        directoryHandle.stop()
+    })
+
+    // when three matching files are created across separate observations
+    fs.writeFileSync(first, "first")
+    await Promise.all([targetCreated.released, directoryCreated.released])
+    fs.writeFileSync(second, "second")
+    await directorySecond.released
+    fs.writeFileSync(third, "third")
+    await directoryThird.released
+
+    // then each source emits newly observed paths without repeating paths that remained present
+    expect(failures).toEqual([])
+    expect(targetEvents).toEqual([{ path: first, filename: "a.md" }])
+    expect(directoryEvents).toEqual([
+        { path: first, filename: "a.md" },
+        { path: second, filename: "b.md" },
+        { path: third, filename: "c.md" }
+    ])
+})
+
+test("fileCreatedIn may coalesce or observe a delete and re-create between scans", async () => {
+    // given a source that has observed an existing file
+    const directory = tempDir("clankhouse-file-created-coalesced-")
+    const recreated = path.join(directory, "a.md")
+    const later = path.join(directory, "b.md")
+    fs.writeFileSync(recreated, "first")
+    const events: Array<{ path: string; filename: string }> = []
+    const failures: unknown[] = []
+    const initialObserved = gate()
+    const laterObserved = gate()
+    const handle = fileCreatedIn(directory, { matching: "*.md" }).start!({
+        emit(event) {
+            events.push(event)
+            if (event.path === recreated) initialObserved.release()
+            if (event.path === later) laterObserved.release()
+        },
+        fail(error) {
+            failures.push(error)
+            initialObserved.release()
+            laterObserved.release()
+        }
+    })
+    onTestFinished(() => handle.stop())
+    await initialObserved.released
+
+    // when the observed file is deleted and re-created synchronously before another change
+    fs.unlinkSync(recreated)
+    fs.writeFileSync(recreated, "second")
+    fs.writeFileSync(later, "later")
+    await laterObserved.released
+
+    // then the recreation may be coalesced or emitted again when its absence was observed
+    expect(failures).toEqual([])
+    const recreatedEvent = { path: recreated, filename: "a.md" }
+    const laterEvent = { path: later, filename: "b.md" }
+    expect([
+        [recreatedEvent, laterEvent],
+        [recreatedEvent, recreatedEvent, laterEvent]
+    ]).toContainEqual(events)
 })
 
 test("file sources require watched paths to resolve to directories", async () => {
