@@ -1,6 +1,6 @@
 {
     "name": "@clankhouse/cli",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "description": "Command-line client for ClankHouse servers",
     "type": "module",
     "main": "./src/index.ts",

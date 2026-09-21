@@ -1,6 +1,6 @@
 {
     "name": "@clankhouse/server",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "description": "Connect RPC server for ClankHouse workflows",
     "type": "module",
     "main": "./src/index.ts",

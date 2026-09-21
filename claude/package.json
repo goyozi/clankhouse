@@ -1,6 +1,6 @@
 {
     "name": "@clankhouse/claude",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "description": "Claude coding-agent adapter for ClankHouse",
     "type": "module",
     "main": "./src/index.ts",
