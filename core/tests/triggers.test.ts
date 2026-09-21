@@ -1,7 +1,8 @@
 import * as z from "zod"
 import { expect, expectTypeOf, onTestFinished, test, vi } from "vitest"
 import { ClankHouse } from "@clankhouse/core/clankhouse"
-import type { EventSource, EventSourceListener } from "@clankhouse/core/events"
+import { addTrigger } from "@clankhouse/core"
+import type { ActiveEventSource, ApiEventSource, EventSourceListener } from "@clankhouse/core/events"
 import {
     Triggers,
     type TriggerArguments,
@@ -22,7 +23,7 @@ function controlledSource<T extends z.ZodTypeAny>(key: string, schema: T) {
     let listener: EventSourceListener<z.input<T>> | undefined
     let starts = 0
     let stops = 0
-    const source: EventSource<T> = {
+    const source: ActiveEventSource<T> = {
         key,
         schema,
         start(value) {
@@ -150,16 +151,22 @@ test("trigger APIs retain workflow input compatibility and mapper inference", ()
     const exportedTriggers = new Triggers(clankhouse.workflows)
     const exportedCompatibleAdd = exportedTriggers.add<typeof input, { id: string; value: number }>
     const exportedIncompatibleAdd = exportedTriggers.add<z.ZodString, { id: string; value: number }>
+    expectTypeOf(clankhouse.addTrigger<typeof input, { id: string; value: number }>).toEqualTypeOf<
+        typeof exportedCompatibleAdd
+    >()
+    expectTypeOf(addTrigger<typeof input, { id: string; value: number }>).toEqualTypeOf<typeof exportedCompatibleAdd>()
+    expectTypeOf<ApiEventSource<typeof input>>().not.toExtend<Parameters<typeof exportedCompatibleAdd>[0]>()
+    expectTypeOf<ActiveEventSource<typeof input>>().not.toExtend<ApiEventSource<typeof input>>()
     expectTypeOf(exportedCompatibleAdd).parameters.toEqualTypeOf<
         [
-            source: EventSource<typeof input>,
+            source: ActiveEventSource<typeof input>,
             workflow: WorkflowRef<{ id: string; value: number }>,
             options?: TriggerOptions<{ id: string; value: number }, { id: string; value: number }>
         ]
     >()
     expectTypeOf(exportedIncompatibleAdd).parameters.toEqualTypeOf<
         [
-            source: EventSource<z.ZodString>,
+            source: ActiveEventSource<z.ZodString>,
             workflow: WorkflowRef<{ id: string; value: number }>,
             options: TriggerOptions<string, { id: string; value: number }> & {
                 eventToInput: (event: string) => { id: string; value: number }
@@ -344,7 +351,11 @@ test("addTrigger distinguishes foreign workflow references while validating befo
     // when a workflow name is missing or triggers target a foreign ref, passive source, or failing source
     const unregistered = () => clankhouse.workflows.get("missing-trigger")
     const wrongInstance = () => clankhouse.addTrigger(active.source, foreign)
-    const passive = () => clankhouse.addTrigger({ key: "passive", schema: z.number() }, local)
+    const passive = () =>
+        clankhouse.addTrigger(
+            { key: "passive", schema: z.number() } as unknown as ActiveEventSource<z.ZodNumber>,
+            local
+        )
     const startup = () =>
         clankhouse.addTrigger(
             {

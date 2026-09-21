@@ -9,6 +9,7 @@ import { newId, nowIso } from "./util.js"
 
 export type EventSourceHandle = {
     stop(): void
+    check?(): Promise<void>
 }
 
 export type EventSourceListener<T> = {
@@ -16,11 +17,19 @@ export type EventSourceListener<T> = {
     fail(error: unknown): void
 }
 
-export type EventSource<T extends z.ZodTypeAny = z.ZodTypeAny> = {
+export type ApiEventSource<T extends z.ZodTypeAny = z.ZodTypeAny> = {
     key: string
     schema: T
-    start?(listener: EventSourceListener<z.input<T>>): EventSourceHandle
+    start?: never
 }
+
+export type ActiveEventSource<T extends z.ZodTypeAny = z.ZodTypeAny> = {
+    key: string
+    schema: T
+    start(listener: EventSourceListener<z.input<T>>): EventSourceHandle
+}
+
+export type EventSource<T extends z.ZodTypeAny = z.ZodTypeAny> = ApiEventSource<T> | ActiveEventSource<T>
 
 export type EventSourceResult<S extends EventSource> = S extends {
     key: infer K extends string
@@ -165,7 +174,7 @@ export class Events {
     private start(waiter: Waiter, sources: readonly EventSource[]): void {
         for (const source of sources) {
             if (!waiter.active) return
-            if (!source.start) continue
+            if (typeof source.start !== "function") continue
             const handle = source.start({
                 emit: (event) => {
                     if (!waiter.active) return

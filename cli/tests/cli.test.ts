@@ -850,8 +850,12 @@ test("included session failures do not stop the primary run watch", async () => 
         { input: z.null(), output: z.string(), key: () => "session-watch-error" },
         async () => {
             await llm.call("prepare", { prompt: "watch", output: z.object({ reply: z.string() }) })
-            return (await clankhouse.waitFor({ key: "session-watch-done", schema: z.object({ value: z.string() }) }))
-                .value
+            return (
+                await clankhouse.waitFor({
+                    key: "session-watch-done",
+                    schema: z.object({ value: z.string() })
+                })
+            ).value
         }
     )
     const server = await testServer(clankhouse)

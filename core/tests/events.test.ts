@@ -122,6 +122,40 @@ test("waitForAny infers a keyed union of source outputs", async () => {
     expect(await promise).toEqual({ key: "typed-text", event: "ready" })
 })
 
+test.each(["api", "active"] as const)("waitForAny accepts a mixed set resolved by the %s source", async (kind) => {
+    // given an API source and an active source in the same wait
+    const { clankhouse } = tempClankHouse()
+    const started = gate()
+    let listener: EventSourceListener<string> | undefined
+    let stops = 0
+    const promise = testRun(clankhouse, async () =>
+        clankhouse.waitForAny([
+            { key: "manual", schema: z.number() },
+            {
+                key: "observed",
+                schema: z.string(),
+                start(value) {
+                    listener = value
+                    started.release()
+                    return { stop: () => stops++ }
+                }
+            }
+        ])
+    )
+    await started.released
+
+    // when one of the sources supplies an event
+    if (kind === "api") await clankhouse.emit("manual", 7)
+    else listener?.emit("ready")
+
+    // then the result retains both typed variants and the active source is stopped
+    expectTypeOf(promise).toEqualTypeOf<
+        Promise<{ key: "manual"; event: number } | { key: "observed"; event: string }>
+    >()
+    expect(await promise).toEqual(kind === "api" ? { key: "manual", event: 7 } : { key: "observed", event: "ready" })
+    expect(stops).toBe(1)
+})
+
 test("waitForAny requires at least one source", async () => {
     // given a fresh clankhouse instance
     const { clankhouse } = tempClankHouse()
@@ -368,7 +402,10 @@ test("an event payload preserves an ISO datetime string for the waiter", async (
     const at = "2026-07-07T12:00:00.000Z"
     const promise = testRun(clankhouse, async () => {
         waiting.release()
-        const event = await clankhouse.waitFor({ key: "scheduled", schema: z.object({ at: z.iso.datetime() }) })
+        const event = await clankhouse.waitFor({
+            key: "scheduled",
+            schema: z.object({ at: z.iso.datetime() })
+        })
         return event.at
     })
     await waiting.released

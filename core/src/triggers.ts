@@ -1,6 +1,6 @@
 import * as z from "zod"
 import { ClankHouseError } from "./errors.js"
-import type { EventSource, EventSourceHandle, EventSourceListener } from "./events.js"
+import type { ActiveEventSource, EventSourceHandle } from "./events.js"
 import type { WorkflowRef, Workflows } from "./workflows.js"
 
 export type TriggerHandle = {
@@ -24,10 +24,6 @@ type ActiveTrigger = {
     sourceHandle?: EventSourceHandle
 }
 
-type StartableEventSource<S extends z.ZodTypeAny> = EventSource<S> & {
-    start(listener: EventSourceListener<z.input<S>>): EventSourceHandle
-}
-
 export class Triggers {
     private readonly workflows: Workflows
     private readonly onError: TriggerErrorHandler
@@ -39,12 +35,17 @@ export class Triggers {
     }
 
     add<S extends z.ZodTypeAny, Input>(
-        source: EventSource<S>,
+        source: ActiveEventSource<S>,
         workflow: WorkflowRef<Input>,
         ...[options]: TriggerArguments<z.output<S>, Input>
     ): TriggerHandle {
         this.workflows.get(workflow)
-        this.requireStartable(source)
+        if (typeof source.start !== "function") {
+            throw new ClankHouseError(
+                "event_source_not_startable",
+                `Event source "${source.key}" cannot be used as a trigger because it is not an active source with a start function`
+            )
+        }
         const triggerOptions = options as TriggerOptions<z.output<S>, Input> | undefined
         const trigger = this.activate()
 
@@ -61,16 +62,6 @@ export class Triggers {
         for (const trigger of [...this.active]) this.stop(trigger)
     }
 
-    private requireStartable<S extends z.ZodTypeAny>(
-        source: EventSource<S>
-    ): asserts source is StartableEventSource<S> {
-        if (source.start) return
-        throw new ClankHouseError(
-            "event_source_not_startable",
-            `Event source "${source.key}" cannot be used as a trigger because it has no start function`
-        )
-    }
-
     private activate(): ActiveTrigger {
         const trigger: ActiveTrigger = {
             active: true,
@@ -82,7 +73,7 @@ export class Triggers {
 
     private start<S extends z.ZodTypeAny, Input>(
         trigger: ActiveTrigger,
-        source: StartableEventSource<S>,
+        source: ActiveEventSource<S>,
         workflow: WorkflowRef<Input>,
         options?: TriggerOptions<z.output<S>, Input>
     ): void {
@@ -96,7 +87,7 @@ export class Triggers {
 
     private emit<S extends z.ZodTypeAny, Input>(
         trigger: ActiveTrigger,
-        source: EventSource<S>,
+        source: ActiveEventSource<S>,
         workflow: WorkflowRef<Input>,
         options: TriggerOptions<z.output<S>, Input> | undefined,
         event: z.input<S>
@@ -111,7 +102,7 @@ export class Triggers {
         }
     }
 
-    private parseEvent<S extends z.ZodTypeAny>(source: EventSource<S>, event: z.input<S>): z.output<S> {
+    private parseEvent<S extends z.ZodTypeAny>(source: ActiveEventSource<S>, event: z.input<S>): z.output<S> {
         try {
             return source.schema.parse(event)
         } catch (error) {

@@ -1,6 +1,6 @@
 import * as z from "zod"
 import { ClankHouse } from "./clankhouse.js"
-import type { EventSource, EventSourceResult } from "./events.js"
+import type { ActiveEventSource, EventSource, EventSourceResult } from "./events.js"
 import type { TriggerArguments, TriggerHandle } from "./triggers.js"
 import type { RerunOptions, WorkflowOptions, WorkflowRef, Workflows } from "./workflows.js"
 import type { WorkflowRuns } from "./runs.js"
@@ -39,7 +39,7 @@ export function registerWorkflow<I extends z.ZodTypeAny, O extends z.ZodTypeAny>
 }
 
 export function addTrigger<S extends z.ZodTypeAny, Input>(
-    source: EventSource<S>,
+    source: ActiveEventSource<S>,
     workflow: WorkflowRef<Input>,
     ...options: TriggerArguments<z.output<S>, Input>
 ): TriggerHandle {
@@ -92,7 +92,14 @@ export function waitForAny<const S extends readonly EventSource[]>(sources: S): 
 }
 
 export type { RerunOptions, WorkflowOptions, WorkflowRef } from "./workflows.js"
-export type { EventSource, EventSourceHandle, EventSourceListener, EventSourceResult } from "./events.js"
+export type {
+    ActiveEventSource,
+    ApiEventSource,
+    EventSource,
+    EventSourceHandle,
+    EventSourceListener,
+    EventSourceResult
+} from "./events.js"
 export type { TriggerErrorHandler, TriggerHandle, TriggerOptions } from "./triggers.js"
 export type { ClankHouseOptions } from "./clankhouse.js"
 export { fileCreated, fileCreatedIn } from "./files.js"

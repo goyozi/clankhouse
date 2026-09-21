@@ -2,29 +2,32 @@ import { statSync, watch, type FSWatcher } from "node:fs"
 import { readdir, stat } from "node:fs/promises"
 import * as path from "node:path"
 import * as z from "zod"
-import type { EventSource, EventSourceHandle, EventSourceListener } from "./events.js"
+import type { ActiveEventSource, EventSourceHandle, EventSourceListener } from "./events.js"
 import { isNodeError } from "./util.js"
 
 const fileCreatedEvent = z.object({ path: z.string(), filename: z.string() })
+type InitialFileEvents = "all" | "first" | "none"
 
 /**
  * Event source for observing a specific file being created.
- *
- * Fires immediately if file exists upon event source creation.
  *
  * Detection is based on periodic directory snapshots assisted by filesystem notifications. Changes between
  * snapshots may be coalesced, so deleting and re-creating the file may not emit another event if its absence
  * was not observed.
  */
-export function fileCreated(target: string): EventSource<typeof fileCreatedEvent> {
+export function fileCreated(
+    target: string,
+    options: { initial?: InitialFileEvents } = {}
+): ActiveEventSource<typeof fileCreatedEvent> {
     const absolutePath = path.resolve(target)
     const directory = path.dirname(absolutePath)
     const filename = path.basename(absolutePath)
+    const initial = options.initial ?? "all"
     return {
-        key: sourceKey("created", [absolutePath]),
+        key: sourceKey("created", [absolutePath, initial]),
         schema: fileCreatedEvent,
         start: (listener) =>
-            watchDirectory(directory, listener, async () => {
+            watchDirectory(directory, initial, listener, async () => {
                 const stats = await optionalStat(absolutePath)
                 return stats?.isFile() ? [{ path: absolutePath, filename }] : []
             })
@@ -34,23 +37,22 @@ export function fileCreated(target: string): EventSource<typeof fileCreatedEvent
 /**
  * Event source for observing matching files being created in a given directory.
  *
- * Fires immediately if matching files exist upon event source creation.
- *
  * Detection is based on periodic directory snapshots assisted by filesystem notifications. Changes between
  * snapshots may be coalesced, so deleting and re-creating a path may not emit another event if its absence
  * was not observed.
  */
 export function fileCreatedIn(
     directory: string,
-    options: { matching?: string } = {}
-): EventSource<typeof fileCreatedEvent> {
+    options: { matching?: string; initial?: InitialFileEvents } = {}
+): ActiveEventSource<typeof fileCreatedEvent> {
     const absoluteDirectory = path.resolve(directory)
     const matching = options.matching
+    const initial = options.initial ?? "all"
     return {
-        key: sourceKey("created-in", [absoluteDirectory, matching ?? null]),
+        key: sourceKey("created-in", [absoluteDirectory, matching ?? null, initial]),
         schema: fileCreatedEvent,
         start: (listener) =>
-            watchDirectory(absoluteDirectory, listener, async () => {
+            watchDirectory(absoluteDirectory, initial, listener, async () => {
                 const entries = await readdir(absoluteDirectory, { withFileTypes: true })
                 entries.sort((left, right) => compareNames(left.name, right.name))
                 const events: Array<{ path: string; filename: string }> = []
@@ -68,14 +70,16 @@ export function fileCreatedIn(
 
 function watchDirectory(
     directory: string,
+    initial: InitialFileEvents,
     listener: EventSourceListener<{ path: string; filename: string }>,
     find: () => Promise<Array<{ path: string; filename: string }>>
 ): EventSourceHandle {
     requireDirectory(directory)
     let observed = new Set<string>()
+    let initialized = false
     let active = true
     let scanning = false
-    let pending = false
+    let pending: Array<{ resolve: () => void; reject: (error: unknown) => void }> = []
     let watcher: FSWatcher | undefined
 
     const stop = () => {
@@ -84,52 +88,75 @@ function watchDirectory(
         clearInterval(interval)
         watcher?.removeListener("error", watchFailed)
         watcher?.close()
+        for (const request of pending) request.resolve()
+        pending = []
     }
     const fail = (error: unknown) => {
-        if (active) listener.fail(error)
+        if (!active) return
+        try {
+            listener.fail(error)
+        } catch {}
     }
     const watchFailed = () => {
         if (!active) return
         watcher?.removeListener("error", watchFailed)
         watcher?.close()
         watcher = undefined
-        scan()
+        scheduleScan()
     }
-    const scan = () => {
-        if (!active) return
-        if (scanning) {
-            pending = true
-            return
-        }
+    const check = (): Promise<void> => {
+        if (!active) return Promise.resolve()
+        const promise = new Promise<void>((resolve, reject) => pending.push({ resolve, reject }))
+        startScanning()
+        return promise
+    }
+    const scheduleScan = () => {
+        void check().catch(() => {})
+    }
+    const startScanning = () => {
+        if (!active || scanning) return
         scanning = true
         void (async () => {
-            while (active) {
-                pending = false
-                const events = await find()
-                const present = new Set(events.map((event) => event.path))
-                for (const event of events) {
-                    if (!active) return
-                    if (observed.has(event.path)) continue
-                    listener.emit(event)
+            while (active && pending.length > 0) {
+                const requests = pending
+                pending = []
+                try {
+                    const events = await find()
+                    const present = new Set(events.map((event) => event.path))
+                    const emitted = initialized
+                        ? events.filter((event) => !observed.has(event.path))
+                        : initial === "all"
+                          ? events
+                          : initial === "first"
+                            ? events.slice(0, 1)
+                            : []
+                    observed = present
+                    for (const event of emitted) observed.delete(event.path)
+                    initialized = true
+                    for (const event of emitted) {
+                        if (!active) break
+                        listener.emit(event)
+                        observed.add(event.path)
+                    }
+                    for (const request of requests) request.resolve()
+                } catch (error) {
+                    for (const request of requests) request.reject(error)
+                    fail(error)
                 }
-                observed = present
-                if (!pending) return
             }
-        })()
-            .catch(fail)
-            .finally(() => {
-                scanning = false
-                if (active && pending) scan()
-            })
+        })().finally(() => {
+            scanning = false
+            if (active && pending.length > 0) startScanning()
+        })
     }
 
     try {
-        watcher = watch(directory, scan)
+        watcher = watch(directory, scheduleScan)
         watcher.on("error", watchFailed)
     } catch {}
-    const interval = setInterval(scan, 1_000)
-    scan()
-    return { stop }
+    const interval = setInterval(scheduleScan, 1_000)
+    scheduleScan()
+    return { stop, check }
 }
 
 function requireDirectory(directory: string): void {

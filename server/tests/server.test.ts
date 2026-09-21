@@ -75,8 +75,12 @@ function registerApproval(instance: ClankHouse, value: z.ZodTypeAny): void {
         { input: z.object({ id: z.string(), value }), output: z.number(), key: (input) => input.id },
         async (input) => {
             await instance.step("record", z.number(), async () => 1)
-            return (await instance.waitFor({ key: `approve:${input.id}`, schema: z.object({ value: z.number() }) }))
-                .value
+            return (
+                await instance.waitFor({
+                    key: `approve:${input.id}`,
+                    schema: z.object({ value: z.number() })
+                })
+            ).value
         }
     )
 }
@@ -571,7 +575,12 @@ test("resumes an interrupted run through a restarted server", async () => {
             "approval",
             { input: z.null(), output: z.number(), key: () => "approval-key" },
             async () =>
-                (await instance.waitFor({ key: "resume-approval", schema: z.object({ value: z.number() }) })).value
+                (
+                    await instance.waitFor({
+                        key: "resume-approval",
+                        schema: z.object({ value: z.number() })
+                    })
+                ).value
         )
     register(clankhouse)
     const firstServer = await testServer(clankhouse)

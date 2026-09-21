@@ -8,7 +8,7 @@ import { Artifacts } from "./artifacts.js"
 import { AISessions } from "./ai/sessions.js"
 import type { ActiveSets } from "./runtime.js"
 import { Engine } from "./engine.js"
-import { Events, type EventSource, type EventSourceResult } from "./events.js"
+import { Events, type ActiveEventSource, type EventSource, type EventSourceResult } from "./events.js"
 import { ClankHouseError } from "./errors.js"
 import { Notifier } from "./watch.js"
 import { Triggers, type TriggerArguments, type TriggerErrorHandler, type TriggerHandle } from "./triggers.js"
@@ -73,7 +73,7 @@ export class ClankHouse {
     }
 
     addTrigger<S extends z.ZodTypeAny, Input>(
-        source: EventSource<S>,
+        source: ActiveEventSource<S>,
         workflow: WorkflowRef<Input>,
         ...options: TriggerArguments<z.output<S>, Input>
     ): TriggerHandle {
@@ -170,6 +170,13 @@ export class ClankHouse {
     }
 }
 
-export type { EventSource, EventSourceHandle, EventSourceListener, EventSourceResult } from "./events.js"
+export type {
+    ActiveEventSource,
+    ApiEventSource,
+    EventSource,
+    EventSourceHandle,
+    EventSourceListener,
+    EventSourceResult
+} from "./events.js"
 export type { TriggerErrorHandler, TriggerHandle, TriggerOptions } from "./triggers.js"
 export type { WorkflowRef } from "./workflows.js"
