@@ -1,6 +1,6 @@
 {
     "name": "@clankhouse/pi",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "description": "Pi coding-agent adapter for ClankHouse",
     "type": "module",
     "main": "./src/index.ts",

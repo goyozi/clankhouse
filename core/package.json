@@ -1,6 +1,6 @@
 {
     "name": "@clankhouse/core",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "description": "Durable local-first workflow runtime for ClankHouse",
     "type": "module",
     "main": "./src/index.ts",
