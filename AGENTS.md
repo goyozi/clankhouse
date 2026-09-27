@@ -52,6 +52,21 @@ design:
 
 - web page for CLI output design
 
+## Operating Assumptions
+
+- one user, one ClankHouse process per directory; runs take minutes to hours
+- gc runs occasionally (e.g. daily) with age thresholds measured in days
+- prefer simple, idempotent designs over in-memory coordination; a new tracking mechanism, table, lock, or
+  crash-safety protocol needs a realistic scenario under these assumptions to justify it
+
+## Known Gaps
+
+Don't design around these unless the task targets them:
+
+- a run can be marked failed while its parallel branches are still executing steps (`Promise.all` rejects early)
+- multiple processes sharing one ClankHouse directory are not coordinated
+- references into another run (artifacts, worktrees) are weak and may dangle after that run is deleted
+
 ## Testing
 
 - use real temp files / directories / git repositories
