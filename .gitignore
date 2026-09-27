@@ -5,3 +5,4 @@ scratchpad/
 .idea/
 *.tsbuildinfo
 .DS_Store
+/factory/
