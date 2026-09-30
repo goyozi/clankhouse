@@ -14,6 +14,22 @@ import { Notifier } from "./watch.js"
 import { Triggers, type TriggerArguments, type TriggerErrorHandler, type TriggerHandle } from "./triggers.js"
 import { Workflows, type RerunOptions, type WorkflowOptions, type WorkflowRef } from "./workflows.js"
 import { gcWorktrees, type WorktreeGcResult } from "./git/index.js"
+import { gcRuns, type RunGcResult } from "./gc.js"
+
+export type GcOptions = {
+    /**
+     * Minimum age (in whole days, at least 1) of collected runs, worktrees and restore refs. Defaults to 14.
+     */
+    minAgeDays?: number
+    /**
+     * Whether finished runs older than `minAgeDays` are soft deleted. Defaults to true.
+     */
+    deleteRuns?: boolean
+}
+
+export type GcResult = { runs: RunGcResult; worktrees: WorktreeGcResult }
+
+const DAY_MS = 24 * 60 * 60 * 1000
 
 export type ClankHouseOptions = {
     onTriggerError?: TriggerErrorHandler
@@ -29,6 +45,7 @@ export class ClankHouse {
     readonly engine: Engine
     readonly events: Events
     private readonly triggers: Triggers
+    private readonly active: ActiveSets
     private isClosed = false
 
     /**
@@ -43,6 +60,7 @@ export class ClankHouse {
         this.db = openDatabase(path.join(this.clankhouseDir, "clankhouse.db"))
         const notifier = new Notifier()
         const active: ActiveSets = { runs: new Map(), steps: new Set(), sessions: new Set() }
+        this.active = active
         this.engine = new Engine(this.db, active, notifier)
         this.artifacts = new Artifacts(this.clankhouseDir, this.db, this.engine)
         this.workflows = new Workflows(this, this.db, this.engine, active, this.artifacts)
@@ -159,14 +177,27 @@ export class ClankHouse {
     }
 
     /**
-     * Cleans up dangling (unassigned) worktrees older than 14 days.
+     * Soft deletes succeeded and failed runs that ended more than `minAgeDays` ago and are not running,
+     * then cleans up dangling (unassigned) worktrees older than `minAgeDays`.
+     * Deleted runs keep a tombstone: they are hidden from listings, a succeeded key stays a no-op for `start()`
+     * and `run()` throws `workflow_run_deleted`. Artifact references inside run or step inputs/outputs may dangle.
      * Limitations:
-     * - Does not (yet) clean up old runs and user/agent snapshot refs.
+     * - Does not (yet) clean up user/agent snapshot refs.
      * - Concurrent GC invocations are not supported.
      * - Unexpected Git metadata inconsistencies require manual repair.
      */
-    async gc(): Promise<{ worktrees: WorktreeGcResult }> {
-        return { worktrees: await gcWorktrees(this.clankhouseDir, this.db) }
+    async gc(options: GcOptions = {}): Promise<GcResult> {
+        const minAgeDays = options.minAgeDays ?? 14
+        if (!Number.isInteger(minAgeDays) || minAgeDays < 1) {
+            throw new RangeError(`minAgeDays must be an integer of at least 1, received ${minAgeDays}`)
+        }
+        const minAgeMs = minAgeDays * DAY_MS
+        const runs =
+            (options.deleteRuns ?? true)
+                ? await gcRuns(this.clankhouseDir, this.db, this.active, new Date(Date.now() - minAgeMs))
+                : { deleted: 0 }
+        const worktrees = await gcWorktrees(this.clankhouseDir, this.db, minAgeMs)
+        return { runs, worktrees }
     }
 }
 

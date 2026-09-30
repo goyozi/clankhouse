@@ -39,7 +39,7 @@ test("gc removes unreachable candidates and retains durable worktrees", async ()
     const result = await clankhouse.gc()
 
     // then only the unreachable checkout and its seed ref are removed
-    expect(result).toEqual({ worktrees: { removed: 1, paths: [paths[0]] } })
+    expect(result).toEqual({ runs: { deleted: 0 }, worktrees: { removed: 1, paths: [paths[0]] } })
     expect(fs.existsSync(paths[0])).toBe(false)
     expect(fs.existsSync(paths[1])).toBe(true)
     await expect(runGit(repo.path, ["rev-parse", "--verify", orphanSeedRef])).rejects.toThrow()
@@ -82,11 +82,12 @@ test("gc retains young unregistered candidates until they reach the minimum age"
     const youngResult = await clankhouse.gc()
 
     // then it leaves the candidate untouched
-    expect(youngResult).toEqual({ worktrees: { removed: 0, paths: [] } })
+    expect(youngResult).toEqual({ runs: { deleted: 0 }, worktrees: { removed: 0, paths: [] } })
     expect(fs.existsSync(candidateRoot)).toBe(true)
     // and once old enough it is removed regardless of the partial manifest
     ageCandidate(candidateRoot)
     expect(await clankhouse.gc()).toEqual({
+        runs: { deleted: 0 },
         worktrees: { removed: 1, paths: [path.join(candidateRoot, "checkout")] }
     })
     expect(fs.existsSync(candidateRoot)).toBe(false)
@@ -118,6 +119,7 @@ test("gc does not let an unregistered candidate manifest target a durable worktr
 
     // then it removes only that candidate without acting on the manifest target
     expect(result).toEqual({
+        runs: { deleted: 0 },
         worktrees: { removed: 1, paths: [path.join(candidateRoot, "checkout")] }
     })
     expect(fs.existsSync(candidateRoot)).toBe(false)
@@ -158,6 +160,7 @@ test("gc removes old unregistered candidates regardless of their contents or met
 
     // then every unregistered candidate is removed
     expect(result).toEqual({
+        runs: { deleted: 0 },
         worktrees: {
             removed: 3,
             paths: [corruptRoot, missingRoot, removableRoot].map((root) => path.join(root, "checkout"))
@@ -350,7 +353,7 @@ test("gc retains candidate metadata when seed-ref deletion fails", async () => {
     // and a later eligible sweep completes after the lock is removed
     fs.rmSync(seedLock)
     ageCandidate(candidateRoot)
-    expect(await clankhouse.gc()).toEqual({ worktrees: { removed: 1, paths: [worktree.path] } })
+    expect(await clankhouse.gc()).toEqual({ runs: { deleted: 0 }, worktrees: { removed: 1, paths: [worktree.path] } })
 })
 
 test("gc rejects a moved seed ref before removing candidate state", async () => {

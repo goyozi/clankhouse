@@ -101,7 +101,7 @@ export type {
     EventSourceResult
 } from "./events.js"
 export type { TriggerErrorHandler, TriggerHandle, TriggerOptions } from "./triggers.js"
-export type { ClankHouseOptions } from "./clankhouse.js"
+export type { ClankHouseOptions, GcOptions, GcResult } from "./clankhouse.js"
 export { fileCreated, fileCreatedIn } from "./files.js"
 export { ClankHouseError } from "./errors.js"
 export type { ClankHouseErrorCode } from "./errors.js"

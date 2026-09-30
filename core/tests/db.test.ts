@@ -15,6 +15,7 @@ function runRow(overrides: Partial<RunRow> & Pick<RunRow, "id">): RunRow {
         status: "succeeded",
         started_at: "2026-01-01T00:00:00.000Z",
         ended_at: null,
+        gc_state: null,
         ...overrides
     }
 }
@@ -142,6 +143,7 @@ test("resetStep clears output, error, timestamps, and execution metadata", () =>
     sql.insertRun(clankhouse.db, runRow({ id: "r" }))
     sql.insertSession(clankhouse.db, {
         id: "sess-1",
+        run_id: "r",
         kind: "coding-agent",
         client: "fake-agent",
         provider: "fake",

@@ -18,7 +18,7 @@ import {
     ToolResultStatus,
     ToolSourceKind
 } from "@clankhouse/protocol"
-import { runOutput, tempDir, tempGitRepo, tempClankHouse, testRun } from "@clankhouse/test-utils"
+import { runOutput, tempDir, tempGitRepo, tempClankHouse, testRun, testSession } from "@clankhouse/test-utils"
 import { expect, onTestFinished, test } from "vitest"
 import * as z from "zod"
 import { listen, serve, type ClankHouseServer } from "../src"
@@ -263,7 +263,7 @@ test("serves a FakeLLM and FakeCodingAgent workflow through the complete RPC sur
 test("serves structured session messages, tool calls and tool results", async () => {
     // given a completed session containing every session message variant
     const { clankhouse } = tempClankHouse()
-    const recorder = clankhouse.sessions.create({
+    const recorder = await testSession(clankhouse, {
         kind: "coding-agent",
         client: "fake-agent",
         provider: "fake",
@@ -820,7 +820,7 @@ test("maps workflow lifecycle ClankHouseError codes to stable Connect errors", a
 test("maps coded resource lookup failures without inspecting messages", async () => {
     // given a real server and a completed session with one message
     const { clankhouse } = tempClankHouse()
-    const recorder = clankhouse.sessions.create({
+    const recorder = await testSession(clankhouse, {
         kind: "llm",
         client: "fake-llm",
         provider: "fake",
@@ -958,7 +958,7 @@ test("closing a server rejects active streams without closing ClankHouse", async
         { input: z.null(), output: z.number(), key: () => "waiting" },
         async () => (await clankhouse.waitFor({ key: "never", schema: z.object({ value: z.number() }) })).value
     )
-    const recorder = clankhouse.sessions.create({
+    const recorder = await testSession(clankhouse, {
         kind: "llm",
         client: "fake-llm",
         provider: "fake",

@@ -1,5 +1,6 @@
 import { realpathSync } from "node:fs"
 import * as path from "node:path"
+import { requireContext } from "../context.js"
 import * as sql from "../db.js"
 import type { Db, SessionMessageRow } from "../db.js"
 import { ClankHouseError } from "../errors.js"
@@ -72,6 +73,7 @@ export class AISessions {
         const filesRoot = options.filesRoot === undefined ? undefined : canonicalPath(options.filesRoot)
         sql.insertSession(db, {
             id,
+            run_id: requireContext().runId,
             kind: options.kind,
             client: options.client,
             provider: options.provider,
@@ -127,6 +129,16 @@ export class AISessions {
             }
         }
     }
+}
+
+export function cloneSession(db: Db, sessionId: string, runId: string): string {
+    const source = sql.findSessionById(db, sessionId)!
+    const id = newId()
+    sql.copySession(db, { ...source, id, run_id: runId })
+    for (const message of sql.findSessionMessages(db, sessionId)) {
+        sql.insertSessionMessage(db, { ...message, id: newId(), session_id: id })
+    }
+    return id
 }
 
 function toMessage(row: SessionMessageRow): AISessionMessage {

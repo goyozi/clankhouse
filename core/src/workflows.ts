@@ -5,6 +5,7 @@ import type { ActiveSets } from "./runtime.js"
 import * as sql from "./db.js"
 import type { Db, RunRow, StepRow } from "./db.js"
 import type { Artifacts } from "./artifacts.js"
+import { cloneSession } from "./ai/sessions.js"
 import { formatZodError, ClankHouseError } from "./errors.js"
 import { jsonSchema } from "./json-schema.js"
 import { newId, nowIso } from "./util.js"
@@ -118,6 +119,7 @@ export class Workflows {
             allowTopLevelVoid: true
         })
         const plan = this.resolveStart({ workflowName: name, value: key, input: null })
+        if (plan.runRow.gc_state !== null) throw runDeleted(plan.runRow)
         switch (plan.type) {
             case "noopRunning":
                 return this.active.runs.get(plan.runRow.id)!.promise as Promise<z.infer<T>>
@@ -169,6 +171,7 @@ export class Workflows {
     private requireRun(id: string): RunRow {
         const row = sql.findRunById(this.db, id)
         if (!row) throw new ClankHouseError("workflow_run_not_found", `Workflow run not found: ${id}`)
+        if (row.gc_state !== null) throw runDeleted(row)
         return row
     }
 
@@ -182,6 +185,7 @@ export class Workflows {
             case "interrupted":
                 return { type: "execute", runRow: sourceRun, isNew: false }
             case "failed":
+                if (sourceRun.gc_state !== null) throw runDeleted(sourceRun)
                 throw new ClankHouseError(
                     "workflow_run_failed",
                     `Run "${target.value}" has failed; rerun it from a step to start a new attempt`
@@ -247,23 +251,33 @@ export class Workflows {
             error_code: null,
             status: "interrupted",
             started_at: nowIso(),
-            ended_at: null
+            ended_at: null,
+            gc_state: null
         }
         sql.insertRun(this.db, row)
         return row
     }
 
     private reuseSteps(previousRunId: string, fromSeq: number, runRow: RunRow): void {
-        for (const step of sql.findStepsBefore(this.db, previousRunId, fromSeq)) {
-            if (step.status === "succeeded") this.reuseSucceededStep(step, runRow)
-            else sql.copyStep(this.db, { ...step, id: newId(), run_id: runRow.id })
-        }
+        for (const step of sql.findStepsBefore(this.db, previousRunId, fromSeq)) this.reuseStep(step, runRow)
     }
 
-    private reuseSucceededStep(step: StepRow, runRow: RunRow): void {
+    private reuseStep(step: StepRow, runRow: RunRow): void {
         const { artifactId, output } = this.artifacts.cloneStepArtifact(step, runRow.id)
-        sql.copyStep(this.db, { ...step, id: newId(), run_id: runRow.id, artifact_id: artifactId, output })
+        const sessionId = step.session_id === null ? null : cloneSession(this.db, step.session_id, runRow.id)
+        sql.copyStep(this.db, {
+            ...step,
+            id: newId(),
+            run_id: runRow.id,
+            artifact_id: artifactId,
+            session_id: sessionId,
+            output
+        })
     }
+}
+
+function runDeleted(row: RunRow): ClankHouseError {
+    return new ClankHouseError("workflow_run_deleted", `Run "${row.key}" (${row.id}) has been deleted`)
 }
 
 function workflowName(target: string | WorkflowRef<any>): string {

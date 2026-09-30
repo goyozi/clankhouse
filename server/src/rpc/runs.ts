@@ -54,6 +54,7 @@ export function runHandlers(clankhouse: ClankHouse): RunHandlers {
             } catch (error) {
                 throw toConnectError(error, {
                     workflow_run_not_found: () => notFound("Workflow run", request.runId),
+                    workflow_run_deleted: () => notFound("Workflow run", request.runId),
                     workflow_run_not_resumable: Code.FailedPrecondition,
                     workflow_run_not_latest: Code.FailedPrecondition,
                     workflow_not_registered: Code.FailedPrecondition,
@@ -69,6 +70,7 @@ export function runHandlers(clankhouse: ClankHouse): RunHandlers {
             } catch (error) {
                 throw toConnectError(error, {
                     workflow_run_not_found: () => notFound("Workflow run", request.runId),
+                    workflow_run_deleted: () => notFound("Workflow run", request.runId),
                     workflow_step_not_found: () =>
                         new ConnectError("from_step_key does not identify a step in the run", Code.InvalidArgument),
                     workflow_run_in_progress: Code.FailedPrecondition,

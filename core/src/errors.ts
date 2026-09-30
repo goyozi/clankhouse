@@ -8,6 +8,7 @@ export type ClankHouseErrorCode =
     | "workflow_input_incompatible"
     | "schema_not_json_compatible"
     | "workflow_run_not_found"
+    | "workflow_run_deleted"
     | "workflow_run_failed"
     | "workflow_run_not_resumable"
     | "workflow_run_in_progress"

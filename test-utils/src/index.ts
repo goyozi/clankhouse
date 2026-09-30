@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process"
+import { randomUUID } from "node:crypto"
 import * as fs from "node:fs"
 import * as os from "node:os"
 import * as path from "node:path"
@@ -6,7 +7,7 @@ import { promisify } from "node:util"
 import { onTestFinished } from "vitest"
 import { ClankHouse } from "@clankhouse/core/clankhouse"
 import type { WorkflowRun } from "@clankhouse/core/runs"
-import type { AISessionMessage } from "@clankhouse/core/ai/sessions"
+import type { AISessionMessage, SessionRecorder } from "@clankhouse/core/ai/sessions"
 import * as z from "zod"
 
 const execFileAsync = promisify(execFile)
@@ -88,6 +89,22 @@ export function testRun<O>(
 ): Promise<O> {
     const output = opts.output ?? (z.json() as unknown as z.ZodType<O>)
     return clankhouse.run("test-workflow", opts.key ?? "test-key", output, body)
+}
+
+export async function testSession(
+    clankhouse: ClankHouse,
+    options: Parameters<ClankHouse["sessions"]["create"]>[0]
+): Promise<SessionRecorder> {
+    let recorder!: SessionRecorder
+    await testRun(
+        clankhouse,
+        async () => {
+            recorder = clankhouse.sessions.create(options)
+            return null
+        },
+        { key: `session-${randomUUID()}` }
+    )
+    return recorder
 }
 
 export async function waitForRun(clankhouse: ClankHouse, runId: string): Promise<WorkflowRun> {

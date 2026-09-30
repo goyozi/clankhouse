@@ -49,7 +49,8 @@ export class WorkflowRuns {
 
     async get(id: string): Promise<WorkflowRun> {
         const row = sql.findRunById(this.db, id)
-        if (!row) throw new ClankHouseError("workflow_run_not_found", `Workflow run not found: ${id}`)
+        if (!row || row.gc_state !== null)
+            throw new ClankHouseError("workflow_run_not_found", `Workflow run not found: ${id}`)
         const stepRows = sql.findStepsByRun(this.db, id)
         const artifactRows = sql.findArtifactsByRun(this.db, id)
         return {
@@ -76,7 +77,8 @@ export class WorkflowRuns {
         runId: string,
         options?: { fromStepId?: string; signal?: AbortSignal }
     ): AsyncGenerator<RunStreamItem, void, void> {
-        if (!sql.findRunById(this.db, runId)) {
+        const row = sql.findRunById(this.db, runId)
+        if (!row || row.gc_state !== null) {
             throw new ClankHouseError("workflow_run_not_found", `Workflow run not found: ${runId}`)
         }
         const seen = new Map<string, string>()

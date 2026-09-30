@@ -4,7 +4,7 @@ import * as z from "zod"
 import { expect, test } from "vitest"
 import { BaseLanguageModel, type LanguageModelInvocation } from "@clankhouse/core/ai/base-llm"
 import type { AISessionMessage } from "@clankhouse/core/ai/sessions"
-import { gate, tempDir, tempClankHouse, testRun } from "@clankhouse/test-utils"
+import { gate, tempDir, tempClankHouse, testRun, testSession } from "@clankhouse/test-utils"
 
 function textMessage(message: AISessionMessage): Extract<AISessionMessage, { type: "message" }> {
     if (message.type !== "message") throw new Error(`Expected message, received ${message.type}`)
@@ -21,7 +21,7 @@ test("session filesRoot normalizes common tool paths", async () => {
 
     // when recording change and search calls against the worktree root
     const { clankhouse } = tempClankHouse()
-    const recorder = clankhouse.sessions.create({
+    const recorder = await testSession(clankhouse, {
         kind: "coding-agent",
         client: "fake-agent",
         provider: "fake",
@@ -75,7 +75,7 @@ test("session filesRoot recognizes canonical paths beneath a symlinked worktree"
 
     // when recording the canonical target against the symlinked root
     const { clankhouse } = tempClankHouse()
-    const recorder = clankhouse.sessions.create({
+    const recorder = await testSession(clankhouse, {
         kind: "coding-agent",
         client: "fake-agent",
         provider: "fake",
@@ -102,7 +102,7 @@ test("session filesRoot recognizes canonical paths beneath a symlinked worktree"
 test("sessions without filesRoot preserve recorded file targets", async () => {
     // given a session without a files root
     const { clankhouse } = tempClankHouse()
-    const recorder = clankhouse.sessions.create({ kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
+    const recorder = await testSession(clankhouse, { kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
 
     // when recording a non-normalized file target
     recorder.addToolCall({
@@ -125,7 +125,7 @@ test("sessions without filesRoot preserve recorded file targets", async () => {
 test("tool calls normalize an absent input to JSON null", async () => {
     // given an active session
     const { clankhouse } = tempClankHouse()
-    const recorder = clankhouse.sessions.create({
+    const recorder = await testSession(clankhouse, {
         kind: "coding-agent",
         client: "fake-agent",
         provider: "fake",
@@ -147,7 +147,7 @@ test("tool calls normalize an absent input to JSON null", async () => {
 test("common tool arguments and raw inputs round-trip", async () => {
     // given one call for every common tool and one non-common tool
     const { clankhouse } = tempClankHouse()
-    const recorder = clankhouse.sessions.create({ kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
+    const recorder = await testSession(clankhouse, { kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
     const calls = [
         {
             id: "read",
@@ -207,7 +207,7 @@ test("common tool arguments and raw inputs round-trip", async () => {
 test("get returns ordered session messages and stream yields them in order", async () => {
     // given a session with messages and paired tool activity that has succeeded
     const { clankhouse } = tempClankHouse()
-    const recorder = clankhouse.sessions.create({ kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
+    const recorder = await testSession(clankhouse, { kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
     recorder.addMessage("system", "sys")
     recorder.addMessage("user", "hi")
     recorder.addMessage("reasoning", "think")
@@ -258,7 +258,7 @@ test("get returns ordered session messages and stream yields them in order", asy
 test("stream with afterMessageId replays only later messages of an ended session", async () => {
     // given a succeeded session with three messages
     const { clankhouse } = tempClankHouse()
-    const recorder = clankhouse.sessions.create({ kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
+    const recorder = await testSession(clankhouse, { kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
     recorder.addMessage("system", "sys")
     recorder.addMessage("user", "hi")
     recorder.addMessage("assistant", "hello")
@@ -277,7 +277,7 @@ test("stream with afterMessageId replays only later messages of an ended session
 test("stream tails an active session until it ends", async () => {
     // given an active session with one message
     const { clankhouse } = tempClankHouse()
-    const recorder = clankhouse.sessions.create({ kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
+    const recorder = await testSession(clankhouse, { kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
     recorder.addMessage("user", "one")
 
     // when streaming the session
@@ -303,7 +303,7 @@ test("stream tails an active session until it ends", async () => {
 test("stream with afterMessageId on an active session yields only new messages", async () => {
     // given an active session with two messages
     const { clankhouse } = tempClankHouse()
-    const recorder = clankhouse.sessions.create({ kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
+    const recorder = await testSession(clankhouse, { kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
     recorder.addMessage("user", "one")
     recorder.addMessage("assistant", "two")
     const session = await clankhouse.sessions.get(recorder.id)
@@ -341,10 +341,10 @@ test("stream on a missing session throws", async () => {
 test("stream with an unknown or foreign afterMessageId throws", async () => {
     // given a succeeded session and a message belonging to another session
     const { clankhouse } = tempClankHouse()
-    const recorder = clankhouse.sessions.create({ kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
+    const recorder = await testSession(clankhouse, { kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
     recorder.addMessage("user", "hi")
     recorder.succeed()
-    const other = clankhouse.sessions.create({ kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
+    const other = await testSession(clankhouse, { kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
     other.addMessage("user", "elsewhere")
     other.succeed()
     const foreignId = (await clankhouse.sessions.get(other.id)).messages[0]!.id
@@ -366,7 +366,7 @@ test("stream with an unknown or foreign afterMessageId throws", async () => {
 test("breaking out of a stream deregisters the listener without breaking the recorder", async () => {
     // given an active session with one message
     const { clankhouse } = tempClankHouse()
-    const recorder = clankhouse.sessions.create({ kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
+    const recorder = await testSession(clankhouse, { kind: "llm", client: "fake-llm", provider: "fake", model: "m" })
     recorder.addMessage("user", "one")
 
     // when breaking out of the stream after the first message

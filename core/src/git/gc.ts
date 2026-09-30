@@ -15,20 +15,18 @@ import {
 import * as git from "./client.js"
 import { removeStaleRescueRefs } from "./worktree.js"
 
-const WORKTREE_GC_MIN_AGE_MS = 14 * 24 * 60 * 60 * 1000
-
 /**
  * Collects ClankHouse-managed worktree candidates not referenced by any succeeded worktree step and at least
- * fourteen days old. Reachability is validated before deletion; malformed durable rows fail the sweep closed.
+ * `minAgeMs` old. Reachability is validated before deletion; malformed durable rows fail the sweep closed.
  * Valid seed refs are deleted only when they still target their recorded object, and a missing seed ref is
- * treated as already cleaned up by an earlier interrupted sweep. Temporary restore refs older than fourteen
- * days are removed from repositories discoverable through valid candidate manifests. Calls for the same ClankHouse
+ * treated as already cleaned up by an earlier interrupted sweep. Temporary restore refs older than `minAgeMs`
+ * are removed from repositories discoverable through valid candidate manifests. Calls for the same ClankHouse
  * directory must not overlap. Old unreachable candidates with invalid manifests are removed as filesystem
  * state without attempting to repair undiscoverable Git metadata, while inconsistencies in discoverable Git
- * metadata abort the sweep for manual repair. This does not delete runs or user or agent snapshot refs, and
+ * metadata abort the sweep for manual repair. This does not delete user or agent snapshot refs, and
  * it does not compact Git objects.
  */
-export async function gcWorktrees(clankhouseDir: string, db: Db): Promise<WorktreeGcResult> {
+export async function gcWorktrees(clankhouseDir: string, db: Db, minAgeMs: number): Promise<WorktreeGcResult> {
     const worktreesRoot = path.join(clankhouseDir, "worktrees")
     const reachable = reachableWorktrees(db)
     if (!(await exists(worktreesRoot))) return { removed: 0, paths: [] }
@@ -41,7 +39,7 @@ export async function gcWorktrees(clankhouseDir: string, db: Db): Promise<Worktr
         const manifest = await readCandidateManifest(candidateRoot)
         if (manifest !== undefined) repositories.add(manifest.repositoryPath)
         if (reachable.has(id)) continue
-        if (Date.now() - candidateStats.mtimeMs < WORKTREE_GC_MIN_AGE_MS) continue
+        if (Date.now() - candidateStats.mtimeMs < minAgeMs) continue
         if (manifest !== undefined) await removeGitState(resolveCandidate(clankhouseDir, id, manifest))
         await rm(candidateRoot, { recursive: true, force: true })
         removed.push(candidateCheckoutPath(clankhouseDir, id))
@@ -49,7 +47,7 @@ export async function gcWorktrees(clankhouseDir: string, db: Db): Promise<Worktr
     for (const repositoryPath of [...repositories].sort()) {
         if (!(await exists(repositoryPath))) continue
         try {
-            await removeStaleRescueRefs(repositoryPath, Date.now() - WORKTREE_GC_MIN_AGE_MS)
+            await removeStaleRescueRefs(repositoryPath, Date.now() - minAgeMs)
         } catch (error) {
             throw gcFailure(`Could not remove stale restore refs from ${repositoryPath}`, error)
         }

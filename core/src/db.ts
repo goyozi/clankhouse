@@ -72,10 +72,12 @@ CREATE TABLE IF NOT EXISTS runs (
     status        TEXT NOT NULL CHECK (status IN ('interrupted','succeeded','failed')),
     started_at    TEXT NOT NULL,
     ended_at      TEXT,
+    gc_state      TEXT CHECK (gc_state IN ('deleting','deleted')),
     UNIQUE (workflow_name, key, attempt)
 );
 CREATE INDEX IF NOT EXISTS idx_runs_key ON runs(key);
 CREATE INDEX IF NOT EXISTS idx_runs_workflow_name ON runs(workflow_name);
+CREATE INDEX IF NOT EXISTS idx_runs_gc_state ON runs(gc_state);
 `
 
 export type RunRow = {
@@ -90,7 +92,10 @@ export type RunRow = {
     status: PersistedStatus
     started_at: string
     ended_at: string | null
+    gc_state: RunGcState | null
 }
+
+export type RunGcState = "deleting" | "deleted"
 
 export type ListRunsFilter = {
     key?: string
@@ -105,6 +110,9 @@ type RunStatements = {
     findById: Statement
     succeed: Statement
     fail: Statement
+    findGcCandidates: Statement
+    findByGcState: Statement
+    setGcState: Statement
 }
 
 function prepareRunStatements(db: Db): RunStatements {
@@ -117,7 +125,12 @@ function prepareRunStatements(db: Db): RunStatements {
         ),
         findById: db.prepare("SELECT * FROM runs WHERE id = ?"),
         succeed: db.prepare("UPDATE runs SET status = 'succeeded', output = ?, ended_at = ? WHERE id = ?"),
-        fail: db.prepare("UPDATE runs SET status = 'failed', error = ?, error_code = ?, ended_at = ? WHERE id = ?")
+        fail: db.prepare("UPDATE runs SET status = 'failed', error = ?, error_code = ?, ended_at = ? WHERE id = ?"),
+        findGcCandidates: db.prepare(
+            "SELECT id FROM runs WHERE gc_state IS NULL AND status IN ('succeeded','failed') AND ended_at < ? ORDER BY id"
+        ),
+        findByGcState: db.prepare("SELECT id FROM runs WHERE gc_state = ? ORDER BY id"),
+        setGcState: db.prepare("UPDATE runs SET gc_state = ? WHERE id = ?")
     }
 }
 
@@ -155,8 +168,28 @@ export function failRun(
     statements(db).runs.fail.run(error, errorCode, endedAt, id)
 }
 
+export function findRunGcCandidates(db: Db, endedBefore: string): string[] {
+    return (statements(db).runs.findGcCandidates.all(endedBefore) as { id: string }[]).map((row) => row.id)
+}
+
+export function findRunsByGcState(db: Db, state: RunGcState): string[] {
+    return (statements(db).runs.findByGcState.all(state) as { id: string }[]).map((row) => row.id)
+}
+
+export function setRunGcState(db: Db, id: string, state: RunGcState): void {
+    statements(db).runs.setGcState.run(state, id)
+}
+
+export function deleteRunData(db: Db, runId: string): void {
+    db.prepare("DELETE FROM events WHERE consumed_by IN (SELECT id FROM steps WHERE run_id = ?)").run(runId)
+    db.prepare("DELETE FROM steps WHERE run_id = ?").run(runId)
+    db.prepare("DELETE FROM session_messages WHERE session_id IN (SELECT id FROM sessions WHERE run_id = ?)").run(runId)
+    db.prepare("DELETE FROM sessions WHERE run_id = ?").run(runId)
+    db.prepare("DELETE FROM artifacts WHERE run_id = ?").run(runId)
+}
+
 export function listRuns(db: Db, filter: ListRunsFilter): RunRow[] {
-    const clauses: string[] = []
+    const clauses: string[] = ["gc_state IS NULL"]
     const params: (string | number)[] = []
     if (filter.key !== undefined) {
         clauses.push("key = ?")
@@ -170,7 +203,7 @@ export function listRuns(db: Db, filter: ListRunsFilter): RunRow[] {
         clauses.push(`status IN (${filter.statuses.map(() => "?").join(", ")})`)
         params.push(...filter.statuses)
     }
-    const where = clauses.length > 0 ? ` WHERE ${clauses.join(" AND ")}` : ""
+    const where = ` WHERE ${clauses.join(" AND ")}`
     let limit = ""
     if (filter.lastN !== undefined) {
         limit = " LIMIT ?"
@@ -432,6 +465,7 @@ export function deleteDuplicateArtifacts(db: Db, runId: string, file: string, ke
 const SESSIONS_DDL = `
 CREATE TABLE IF NOT EXISTS sessions (
     id         TEXT PRIMARY KEY,
+    run_id     TEXT NOT NULL REFERENCES runs(id),
     kind       TEXT NOT NULL CHECK (kind IN ('llm','coding-agent')),
     client     TEXT NOT NULL,
     provider   TEXT NOT NULL,
@@ -440,6 +474,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     started_at TEXT NOT NULL,
     ended_at   TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_sessions_run_id ON sessions(run_id);
 
 CREATE TABLE IF NOT EXISTS session_messages (
     id         TEXT PRIMARY KEY,
@@ -454,6 +489,7 @@ CREATE TABLE IF NOT EXISTS session_messages (
 
 export type SessionRow = {
     id: string
+    run_id: string
     kind: "llm" | "coding-agent"
     client: string
     provider: string
@@ -472,10 +508,11 @@ export type SessionMessageRow = {
     created_at: string
 }
 
-export type NewSessionRow = Pick<SessionRow, "id" | "kind" | "client" | "provider" | "model" | "started_at">
+export type NewSessionRow = Pick<SessionRow, "id" | "run_id" | "kind" | "client" | "provider" | "model" | "started_at">
 
 type SessionStatements = {
     insert: Statement
+    copy: Statement
     findById: Statement
     succeed: Statement
     fail: Statement
@@ -487,7 +524,10 @@ type SessionStatements = {
 function prepareSessionStatements(db: Db): SessionStatements {
     return {
         insert: db.prepare(
-            "INSERT INTO sessions (id, kind, client, provider, model, status, started_at) VALUES (?, ?, ?, ?, ?, 'interrupted', ?)"
+            "INSERT INTO sessions (id, run_id, kind, client, provider, model, status, started_at) VALUES (?, ?, ?, ?, ?, ?, 'interrupted', ?)"
+        ),
+        copy: db.prepare(
+            "INSERT INTO sessions (id, run_id, kind, client, provider, model, status, started_at, ended_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
         ),
         findById: db.prepare("SELECT * FROM sessions WHERE id = ?"),
         succeed: db.prepare("UPDATE sessions SET status = 'succeeded', ended_at = ? WHERE id = ?"),
@@ -501,7 +541,29 @@ function prepareSessionStatements(db: Db): SessionStatements {
 }
 
 export function insertSession(db: Db, row: NewSessionRow): void {
-    statements(db).sessions.insert.run(row.id, row.kind, row.client, row.provider, row.model, row.started_at)
+    statements(db).sessions.insert.run(
+        row.id,
+        row.run_id,
+        row.kind,
+        row.client,
+        row.provider,
+        row.model,
+        row.started_at
+    )
+}
+
+export function copySession(db: Db, row: SessionRow): void {
+    statements(db).sessions.copy.run(
+        row.id,
+        row.run_id,
+        row.kind,
+        row.client,
+        row.provider,
+        row.model,
+        row.status,
+        row.started_at,
+        row.ended_at
+    )
 }
 
 export function findSessionById(db: Db, id: string): SessionRow | undefined {

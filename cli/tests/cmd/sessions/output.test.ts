@@ -4,7 +4,7 @@ import { timestampFromDate } from "@bufbuild/protobuf/wkt"
 import type { ClankHouse } from "@clankhouse/core/clankhouse"
 import { listen, type ClankHouseServer } from "@clankhouse/server"
 import { SessionMessageSchema, ToolResultStatus } from "@clankhouse/protocol"
-import { tempClankHouse } from "@clankhouse/test-utils"
+import { tempClankHouse, testSession } from "@clankhouse/test-utils"
 import { expect, onTestFinished, test } from "vitest"
 import { runCli } from "../../../src"
 import { formatSessionMessage } from "../../../src/cmd/sessions/output"
@@ -101,7 +101,7 @@ function twoDigits(value: number): string {
 test("sessions get command output matches designs", async () => {
     // given completed detailed and empty sessions
     const { clankhouse } = tempClankHouse()
-    const detailedRecorder = clankhouse.sessions.create({
+    const detailedRecorder = await testSession(clankhouse, {
         kind: "coding-agent",
         client: "fixture-agent",
         provider: "fixture-provider",
@@ -127,14 +127,14 @@ test("sessions get command output matches designs", async () => {
     detailedRecorder.addToolResult({ toolCallId: "call-2", status: "failed", error: "unavailable" })
     detailedRecorder.addMessage("reasoning", "The evidence is sufficient.")
     detailedRecorder.succeed()
-    const emptyRecorder = clankhouse.sessions.create({
+    const emptyRecorder = await testSession(clankhouse, {
         kind: "llm",
         client: "fixture-llm",
         provider: "fixture-provider",
         model: "fixture-model"
     })
     emptyRecorder.succeed()
-    const hiddenRecorder = clankhouse.sessions.create({
+    const hiddenRecorder = await testSession(clankhouse, {
         kind: "llm",
         client: "fixture-llm",
         provider: "fixture-provider",
@@ -232,7 +232,7 @@ Messages
 test("sessions watch command output matches streaming designs", async () => {
     // given a running session with existing history
     const { clankhouse } = tempClankHouse()
-    const recorder = clankhouse.sessions.create({
+    const recorder = await testSession(clankhouse, {
         kind: "coding-agent",
         client: "fixture-agent",
         provider: "fixture-provider",
@@ -303,7 +303,7 @@ Messages
 test("session tool summaries cover common tools, source fallbacks, escaping, and truncation", async () => {
     // given a completed session containing every common tool kind and fallback source
     const { clankhouse } = tempClankHouse()
-    const recorder = clankhouse.sessions.create({
+    const recorder = await testSession(clankhouse, {
         kind: "coding-agent",
         client: "fixture-agent",
         provider: "fixture-provider",
@@ -406,7 +406,12 @@ test("compact tool results preserve unspecified status", () => {
 test("session include validation reports command-specific resources", async () => {
     // given a completed session
     const { clankhouse } = tempClankHouse()
-    const recorder = clankhouse.sessions.create({ kind: "llm", client: "fixture", provider: "fixture", model: "model" })
+    const recorder = await testSession(clankhouse, {
+        kind: "llm",
+        client: "fixture",
+        provider: "fixture",
+        model: "model"
+    })
     recorder.succeed()
     const env = serverEnv(await testServer(clankhouse))
 
