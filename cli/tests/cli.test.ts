@@ -960,6 +960,94 @@ test("resume reconnects to an interrupted run and prints only its run ID", async
     expect(await second.runs.get(runId)).toMatchObject({ status: "succeeded", output: 7 })
 })
 
+test("ps lists only running runs and excludes interrupted ones", async () => {
+    // given an interrupted run left behind by a closed server
+    const { clankhouse, reopen } = tempClankHouse()
+    const register = (instance: ClankHouse) =>
+        instance.registerWorkflow(
+            "wait",
+            { input: z.string(), output: z.string(), key: (input) => input },
+            async (input) => (await instance.waitFor({ key: `event:${input}`, schema: z.string() })) + input
+        )
+    register(clankhouse)
+    const firstServer = await listen(clankhouse, { port: 0 })
+    const interrupted = await runCliCommand(["runs", "start", "wait", "--input", "-", "--json"], {
+        env: serverEnv(firstServer),
+        input: JSON.stringify("interrupted")
+    })
+    const interruptedId = fromJsonString(StartRunResponseSchema, lines(interrupted.stdout)[0]!).runId
+    await waitForStep(clankhouse, interruptedId, "wait:event:interrupted")
+    await firstServer.close()
+    // and a replacement server with one running and one succeeded run
+    const second = reopen()
+    register(second)
+    const env = serverEnv(await testServer(second))
+    const running = await runCliCommand(["runs", "start", "wait", "--input", "-", "--json"], {
+        env,
+        input: JSON.stringify("running")
+    })
+    const runningId = fromJsonString(StartRunResponseSchema, lines(running.stdout)[0]!).runId
+    await waitForStep(second, runningId, "wait:event:running")
+    const done = await runCliCommand(["runs", "start", "wait", "--input", "-", "--json"], {
+        env,
+        input: JSON.stringify("done")
+    })
+    const doneId = fromJsonString(StartRunResponseSchema, lines(done.stdout)[0]!).runId
+    await waitForStep(second, doneId, "wait:event:done")
+    await runCliCommand(["events", "emit", "event:done", "--input", "-", "--json"], {
+        env,
+        input: JSON.stringify("ok")
+    })
+    await waitForRun(second, doneId)
+
+    // when running runs are listed
+    const ps = await runCliCommand(["ps", "--json"], { env })
+    const filtered = await runCliCommand(["ps", "--workflow", "other", "--json"], { env })
+
+    // then only the running run is included
+    expect(ps.code).toBe(0)
+    expect(fromJsonString(ListRunsResponseSchema, lines(ps.stdout)[0]!).runs).toMatchObject([
+        { id: runningId, status: ExecutionStatus.RUNNING }
+    ])
+    // and the shared filters still apply
+    expect(fromJsonString(ListRunsResponseSchema, lines(filtered.stdout)[0]!).runs).toEqual([])
+})
+
+test("ps rejects the status option", async () => {
+    // given a real server
+    const { clankhouse } = tempClankHouse()
+    const env = serverEnv(await testServer(clankhouse))
+
+    // when ps is called with a status filter
+    const result = await runCliCommand(["ps", "--status", "failed"], { env })
+
+    // then the option is reported as unknown
+    expect(result.code).toBe(2)
+    expect(result.stderr).toContain("unknown option '--status'")
+})
+
+test("lists at most 20 runs by default unless a limit is given", async () => {
+    // given 21 completed runs
+    const { clankhouse } = tempClankHouse()
+    clankhouse.registerWorkflow(
+        "quick",
+        { input: z.number(), output: z.number(), key: (input) => `quick-${input}` },
+        async (input) => input
+    )
+    for (let index = 0; index < 21; index++) {
+        await waitForRun(clankhouse, clankhouse.start("quick", index))
+    }
+    const env = serverEnv(await testServer(clankhouse))
+
+    // when runs are listed with and without an explicit limit
+    const defaulted = await runCliCommand(["runs", "list", "--json"], { env })
+    const explicit = await runCliCommand(["runs", "list", "--limit", "21", "--json"], { env })
+
+    // then the default limit is 20 and --limit overrides it
+    expect(fromJsonString(ListRunsResponseSchema, lines(defaulted.stdout)[0]!).runs).toHaveLength(20)
+    expect(fromJsonString(ListRunsResponseSchema, lines(explicit.stdout)[0]!).runs).toHaveLength(21)
+})
+
 test("reports structured failures and reflects failed watched runs in the exit status", async () => {
     // given a real server with a workflow that fails
     const { clankhouse } = tempClankHouse()

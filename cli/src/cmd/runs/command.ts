@@ -49,6 +49,14 @@ type RunDetails = {
 
 const runIncludes = ["sessions", "tool-io", "all"] as const
 
+const defaultListLimit = 20
+
+type RunListOptions = {
+    workflow?: string
+    key?: string
+    limit: number
+}
+
 type RunWatchItem =
     | { kind: "run"; schema: typeof WatchRunResponseSchema; message: WatchRunResponse }
     | { kind: "session"; schema: typeof WatchSessionResponseSchema; message: WatchSessionResponse }
@@ -78,6 +86,16 @@ export function registerRuns(program: Command, runtime: Runtime): void {
             await runWorkflow(runtime, command, workflowName, options.input)
         })
 
+    program
+        .command("ps")
+        .description("List running workflow runs")
+        .option("--workflow <name>", "filter by workflow")
+        .option("--key <key>", "filter by run key")
+        .option("--limit <n>", "limit the number of runs", positiveInteger, defaultListLimit)
+        .action(async (options: RunListOptions, command: Command) => {
+            await listRuns(runtime, command, options, [ExecutionStatus.RUNNING])
+        })
+
     const runs = program.command("runs").description("Start and inspect workflow runs")
     runs.command("start")
         .description("Start a workflow run")
@@ -92,30 +110,10 @@ export function registerRuns(program: Command, runtime: Runtime): void {
         .option("--workflow <name>", "filter by workflow")
         .option("--key <key>", "filter by run key")
         .option("--status <status>", "filter by status", collectStatus, [])
-        .option("--limit <n>", "limit the number of runs", positiveInteger)
-        .action(
-            async (
-                options: {
-                    workflow?: string
-                    key?: string
-                    status: ExecutionStatus[]
-                    limit?: number
-                },
-                command: Command
-            ) => {
-                const client = await runtime.client(command)
-                const response = await client.listRuns(
-                    {
-                        ...(options.workflow !== undefined ? { workflowName: options.workflow } : {}),
-                        ...(options.key !== undefined ? { key: options.key } : {}),
-                        statuses: options.status,
-                        ...(options.limit !== undefined ? { limit: options.limit } : {})
-                    },
-                    { signal: runtime.signal }
-                )
-                await runtime.emit(command, ListRunsResponseSchema, response, () => formatRuns(response))
-            }
-        )
+        .option("--limit <n>", "limit the number of runs", positiveInteger, defaultListLimit)
+        .action(async (options: RunListOptions & { status: ExecutionStatus[] }, command: Command) => {
+            await listRuns(runtime, command, options, options.status)
+        })
     runs.command("get")
         .description("Get a workflow run")
         .argument("<run-id>")
@@ -168,6 +166,25 @@ export function registerRuns(program: Command, runtime: Runtime): void {
             const response = await client.rerunRun({ runId, fromStepKey: options.from }, { signal: runtime.signal })
             await runtime.emit(command, RerunRunResponseSchema, response, () => formatRunId(response.runId))
         })
+}
+
+async function listRuns(
+    runtime: Runtime,
+    command: Command,
+    options: RunListOptions,
+    statuses: ExecutionStatus[]
+): Promise<void> {
+    const client = await runtime.client(command)
+    const response = await client.listRuns(
+        {
+            ...(options.workflow !== undefined ? { workflowName: options.workflow } : {}),
+            ...(options.key !== undefined ? { key: options.key } : {}),
+            statuses,
+            limit: options.limit
+        },
+        { signal: runtime.signal }
+    )
+    await runtime.emit(command, ListRunsResponseSchema, response, () => formatRuns(response))
 }
 
 async function runWorkflow(

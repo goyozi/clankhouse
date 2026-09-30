@@ -678,6 +678,22 @@ export const scenarios: Scenario[] = [
         )
     },
     {
+        id: "ps",
+        group: "Snapshots",
+        label: "Running runs",
+        command: "clank ps",
+        summary: "Running runs are printed in the same seven-column table as the full run list.",
+        note: "Interrupted and finished runs are excluded, so every row is still running and has no end time.",
+        delivery: "instant",
+        lines: tableLines(
+            ["ID", "WORKFLOW", "KEY", "ATTEMPT", "STATUS", "STARTED", "ENDED"],
+            [
+                [releaseRunId, "publish-release", "release-0.1", "1", "running", "2026-08-13T11:20:00.000Z", "-"],
+                ["aP4vR9tN2xH7mK1dQ6sW8", "release-notes", "v0.1.0", "1", "running", "2026-08-13T11:17:18.000Z", "-"]
+            ]
+        )
+    },
+    {
         id: "sessions-get",
         group: "Sessions",
         label: "Get session",
