@@ -427,7 +427,7 @@ test("runs workflows with pipeline-safe output and reconnects to keyed runs", as
     const env = serverEnv(server)
     const cwd = tempDir("clankhouse-cli-run-")
     const pipeInput = { id: "pipe", value: 4 }
-    const runningId = clankhouse.start("pipeline-run", pipeInput)
+    const runningId = clankhouse.start("pipeline-run", pipeInput).runId
     await waitForStep(clankhouse, runningId, "wait")
 
     // when the command receives piped input for an existing run and that run completes
@@ -445,15 +445,14 @@ test("runs workflows with pipeline-safe output and reconnects to keyed runs", as
 
     // then both invocations emit only the stored output and execute the keyed run once
     const pipeOutput = `${JSON.stringify({ id: "pipe", doubled: 8 })}\n`
-    expect({ code: runningCode, stdout: running.stdout().toString(), stderr: running.stderr() }).toEqual({
-        code: 0,
-        stdout: pipeOutput,
-        stderr: ""
-    })
+    const succeededNotice = `Run ${runningId} already exists (succeeded)\n`
+    expect({ code: runningCode, stdout: running.stdout().toString() }).toEqual({ code: 0, stdout: pipeOutput })
+
+    // and the invocation for the succeeded run notes on stderr that the run already exists
     expect({ code: succeeded.code, stdout: succeeded.stdout.toString(), stderr: succeeded.stderr }).toEqual({
         code: 0,
         stdout: pipeOutput,
-        stderr: ""
+        stderr: succeededNotice
     })
     expect(invocations).toBe(1)
 
@@ -755,7 +754,7 @@ test("human run watch does not repeat a step when only hidden metadata changes",
     )
     const server = await testServer(clankhouse)
     const env = serverEnv(server)
-    const runId = clankhouse.start("human-agent-watch", null)
+    const runId = clankhouse.start("human-agent-watch", null).runId
     await waitForStep(clankhouse, runId, "ready")
 
     // when watching starts before the agent gains its session metadata
@@ -817,7 +816,7 @@ test("human get --watch does not repeat a snapshotted step when only hidden meta
     )
     const server = await testServer(clankhouse)
     const env = serverEnv(server)
-    const runId = clankhouse.start("human-agent-get-watch", null)
+    const runId = clankhouse.start("human-agent-get-watch", null).runId
     await entered.released
     const plan = await waitForStep(clankhouse, runId, "plan")
 
@@ -960,6 +959,83 @@ test("resume reconnects to an interrupted run and prints only its run ID", async
     expect(await second.runs.get(runId)).toMatchObject({ status: "succeeded", output: 7 })
 })
 
+test("runs start reports an existing run on stderr in text mode while stdout keeps only the run ID", async () => {
+    // given an interrupted run left behind by a closed server
+    const { clankhouse, reopen } = tempClankHouse()
+    const register = (instance: ClankHouse) =>
+        instance.registerWorkflow(
+            "wait",
+            { input: z.string(), output: z.string(), key: (input) => input },
+            async (input) => (await instance.waitFor({ key: `event:${input}`, schema: z.string() })) + input
+        )
+    register(clankhouse)
+    const firstServer = await listen(clankhouse, { port: 0 })
+    const created = await runCliCommand(["runs", "start", "wait", "--input", "-", "--json"], {
+        env: serverEnv(firstServer),
+        input: JSON.stringify("interrupted")
+    })
+    const createdResponse = fromJsonString(StartRunResponseSchema, lines(created.stdout)[0]!)
+    await waitForStep(clankhouse, createdResponse.runId, "wait:event:interrupted")
+    await firstServer.close()
+    // and a replacement server with the workflow registered again
+    const second = reopen()
+    register(second)
+    const env = serverEnv(await testServer(second))
+
+    // when the same key is started in text and JSON mode
+    const text = await runCliCommand(["runs", "start", "wait", "--input", "-"], {
+        env,
+        input: JSON.stringify("interrupted")
+    })
+    const json = await runCliCommand(["runs", "start", "wait", "--input", "-", "--json"], {
+        env,
+        input: JSON.stringify("interrupted")
+    })
+    // and the same key is run to completion
+    const ran = await runCliCommand(["run", "wait", "--input", "-"], { env, input: JSON.stringify("interrupted") })
+    const ranJson = await runCliCommand(["run", "wait", "--input", "-", "--json"], {
+        env,
+        input: JSON.stringify("interrupted")
+    })
+
+    // then the creating start reports a running run
+    expect(createdResponse.status).toBe(ExecutionStatus.RUNNING)
+    // and text mode prints only the run ID to stdout and the notice with a resume hint to stderr
+    const runId = createdResponse.runId
+    expect({ code: text.code, stdout: text.stdout.toString(), stderr: text.stderr }).toEqual({
+        code: 0,
+        stdout: `${runId}\n`,
+        stderr: `Run ${runId} already exists (interrupted); use \`clank runs resume ${runId}\` to resume it\n`
+    })
+    // and JSON mode includes the interrupted status on stdout without a notice on stderr
+    expect(json.code).toBe(0)
+    expect(fromJsonString(StartRunResponseSchema, lines(json.stdout)[0]!)).toMatchObject({
+        runId,
+        status: ExecutionStatus.INTERRUPTED
+    })
+    expect(json.stderr).toBe("")
+    // and run prints the same notice before failing with the interrupted error
+    expect({ code: ran.code, stdout: ran.stdout.toString(), stderr: ran.stderr }).toEqual({
+        code: 1,
+        stdout: "",
+        stderr: [
+            `Run ${runId} already exists (interrupted); use \`clank runs resume ${runId}\` to resume it`,
+            `clank: Workflow run interrupted: ${runId}`,
+            ""
+        ].join("\n")
+    })
+    // and run in JSON mode prints only the JSON error on stderr
+    const [error, ...rest] = ranJson.stderr.split("\n")
+    expect({ code: ranJson.code, stdout: ranJson.stdout.toString(), error: JSON.parse(error!), rest }).toEqual({
+        code: 1,
+        stdout: "",
+        error: { type: "error", code: "workflow_run_interrupted", message: `Workflow run interrupted: ${runId}` },
+        rest: [""]
+    })
+    // and the run stays interrupted
+    expect((await second.runs.get(runId)).status).toBe("interrupted")
+})
+
 test("ps lists only running runs and excludes interrupted ones", async () => {
     // given an interrupted run left behind by a closed server
     const { clankhouse, reopen } = tempClankHouse()
@@ -1035,7 +1111,7 @@ test("lists at most 20 runs by default unless a limit is given", async () => {
         async (input) => input
     )
     for (let index = 0; index < 21; index++) {
-        await waitForRun(clankhouse, clankhouse.start("quick", index))
+        await waitForRun(clankhouse, clankhouse.start("quick", index).runId)
     }
     const env = serverEnv(await testServer(clankhouse))
 
@@ -1118,7 +1194,7 @@ test("reports server shutdown without publishing an incomplete artifact copy", a
         { input: z.null(), output: z.number(), key: () => "shutdown" },
         async () => (await clankhouse.waitFor({ key: "shutdown-event", schema: z.object({ value: z.number() }) })).value
     )
-    const runId = clankhouse.start("shutdown", null)
+    const runId = clankhouse.start("shutdown", null).runId
     const waiting = await waitForStep(clankhouse, runId, "wait:shutdown-event")
     const sourceDemanded = gate()
     clankhouse.artifacts.read = async () => ({

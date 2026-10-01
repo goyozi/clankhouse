@@ -68,6 +68,40 @@ test("run of a failed key without rerun is an error", async () => {
     await expect(testRun(clankhouse, async () => "fine")).rejects.toThrow(/has failed/)
 })
 
+test("run of an interrupted key resumes the same attempt", async () => {
+    // given an inline run interrupted after persisting its first step
+    const { clankhouse, reopen } = tempClankHouse()
+    const parked = gate()
+    const reached = gate()
+    void testRun(clankhouse, async () => {
+        await clankhouse.step("a", z.number(), async () => 1)
+        reached.release()
+        await parked.released
+        return "never"
+    })
+    await reached.released
+    const [interrupted] = await clankhouse.runs.list()
+
+    // when a reopened instance runs the same key
+    const second = reopen()
+    let stepCalls = 0
+    const result = await testRun(second, async () => {
+        const a = await second.step("a", z.number(), async () => {
+            stepCalls++
+            return 2
+        })
+        return `resumed-${a}`
+    })
+
+    // then the interrupted attempt resumes with the persisted step output
+    expect(result).toBe("resumed-1")
+    expect(stepCalls).toBe(0)
+    // and no new attempt is created
+    const runs = await second.runs.list()
+    expect(runs).toHaveLength(1)
+    expect(runs[0]).toMatchObject({ id: interrupted!.id, attempt: 1, status: "succeeded" })
+})
+
 test("rerun from a step starts a new attempt reusing earlier steps", async () => {
     // given a registered workflow with step "a" that succeeds and step "b" that initially fails
     const { clankhouse } = tempClankHouse()
@@ -84,7 +118,7 @@ test("rerun from a step starts a new attempt reusing earlier steps", async () =>
         return a + b
     })
     // when the first attempt fails at step "b"
-    const firstId = clankhouse.start("test-workflow", testInput)
+    const firstId = clankhouse.start("test-workflow", testInput).runId
     await expect(runOutput(clankhouse, firstId)).rejects.toThrow("boom")
     // and when step "b" is fixed and the run is rerun from it
     bImpl = () => 2
@@ -119,7 +153,7 @@ test("rerun preserves chronological step order across a caught-and-failed step",
         return "done"
     })
     // when the first attempt succeeds and is rerun from the last step
-    const firstId = clankhouse.start("test-workflow", testInput)
+    const firstId = clankhouse.start("test-workflow", testInput).runId
     expect(await runOutput(clankhouse, firstId)).toBe("done")
     const secondId = clankhouse.rerun(firstId, { from: "d" })
     expect(await runOutput(clankhouse, secondId)).toBe("done")
@@ -140,7 +174,7 @@ test("rerun of a succeeded run creates a new attempt", async () => {
         const b = await clankhouse.step("b", z.number(), async () => bValue)
         return a + b
     })
-    const firstId = clankhouse.start("test-workflow", testInput)
+    const firstId = clankhouse.start("test-workflow", testInput).runId
     expect(await runOutput(clankhouse, firstId)).toBe(3)
     // when the implementation value changes and the run is rerun from step "b"
     bValue = 10
@@ -161,7 +195,7 @@ test("rerun reuses the source attempt input", async () => {
             return value.value
         })
     })
-    const firstId = clankhouse.start("test-workflow", { id: "test-key", value: 17 })
+    const firstId = clankhouse.start("test-workflow", { id: "test-key", value: 17 }).runId
     await expect(runOutput(clankhouse, firstId)).rejects.toThrow("boom")
     // when the run is fixed and rerun without accepting new input
     shouldFail = false
@@ -180,7 +214,7 @@ test("rerun copies artifacts to the new attempt", async () => {
         await clankhouse.artifacts.writeText("report", "hello")
         return clankhouse.step("publish", z.string(), async () => publishImpl())
     })
-    const firstId = clankhouse.start("test-workflow", testInput)
+    const firstId = clankhouse.start("test-workflow", testInput).runId
     await expect(runOutput(clankhouse, firstId)).rejects.toThrow("boom")
     // when publish is fixed and the workflow is rerun from that step
     publishImpl = () => "published"
@@ -224,7 +258,7 @@ test("rerun from an unknown step is rejected", async () => {
     register(clankhouse, async () => {
         throw new Error("boom")
     })
-    const firstId = clankhouse.start("test-workflow", testInput)
+    const firstId = clankhouse.start("test-workflow", testInput).runId
     await expect(runOutput(clankhouse, firstId)).rejects.toThrow("boom")
     // when rerun targets a step that never existed
     // then it is rejected without creating an attempt
@@ -245,7 +279,7 @@ test("rerun while the run is active is rejected", async () => {
         await parked.released
         return 1
     })
-    const firstId = clankhouse.start("test-workflow", testInput)
+    const firstId = clankhouse.start("test-workflow", testInput).runId
     // when rerun is requested while the source is active
     // then it is rejected due to concurrent attempts
     expect(() => clankhouse.rerun(firstId, { from: "a" })).toThrow(
@@ -270,7 +304,7 @@ test("rerun of an interrupted run is rejected", async () => {
         await parked.released
         return null
     })
-    const firstId = clankhouse.start("test-workflow", testInput)
+    const firstId = clankhouse.start("test-workflow", testInput).runId
     await reached.released
     const second = reopen()
     register(second, async () => 1)
@@ -294,7 +328,7 @@ test("rerun of a non-latest attempt is rejected", async () => {
             return "published"
         })
     )
-    const firstId = clankhouse.start("test-workflow", testInput)
+    const firstId = clankhouse.start("test-workflow", testInput).runId
     await expect(runOutput(clankhouse, firstId)).rejects.toThrow("boom")
     shouldFail = false
     const secondId = clankhouse.rerun(firstId, { from: "publish" })
@@ -313,7 +347,7 @@ test("rerun validates persisted input before creating an attempt", async () => {
     // given a succeeded workflow whose current registration no longer accepts its persisted input
     const { clankhouse, reopen } = tempClankHouse()
     register(clankhouse, async () => clankhouse.step("publish", z.string(), async () => "published"))
-    const firstId = clankhouse.start("test-workflow", testInput)
+    const firstId = clankhouse.start("test-workflow", testInput).runId
     expect(await runOutput(clankhouse, firstId)).toBe("published")
     const second = reopen()
     second.registerWorkflow(

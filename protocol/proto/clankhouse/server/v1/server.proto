@@ -224,6 +224,7 @@ message StartRunRequest {
 
 message StartRunResponse {
   string run_id = 1;
+  ExecutionStatus status = 2;
 }
 
 message ListRunsRequest {

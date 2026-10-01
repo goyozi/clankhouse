@@ -75,7 +75,7 @@ test("top-level workflow functions delegate to the singleton clankhouse instance
                 return value
             }
         )
-        const runId = mod.start("index-workflow", { id: "x", value: 2 })
+        const runId = mod.start("index-workflow", { id: "x", value: 2 }).runId
 
         // when the top-level resume targets the still-active run
         // then it returns the same run ID rather than a new attempt

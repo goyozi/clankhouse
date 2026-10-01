@@ -741,7 +741,7 @@ test("claude agent step replay restores the worktree without re-invoking the SDK
     clankhouse.registerWorkflow("test-workflow", workflowOptions, body)
 
     // when the workflow runs and the publish step throws
-    const firstId = clankhouse.start("test-workflow", null)
+    const firstId = clankhouse.start("test-workflow", null).runId
     await expect(runOutput(clankhouse, firstId)).rejects.toThrow("boom")
     // and the worktree's uncommitted changes are discarded
     await runGit(worktree.path, ["reset", "--hard"])

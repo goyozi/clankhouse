@@ -2,7 +2,7 @@ import * as z from "zod"
 import { ClankHouse } from "./clankhouse.js"
 import type { ActiveEventSource, EventSource, EventSourceResult } from "./events.js"
 import type { TriggerArguments, TriggerHandle } from "./triggers.js"
-import type { RecoverResult, RerunOptions, WorkflowOptions, WorkflowRef, Workflows } from "./workflows.js"
+import type { RecoverResult, RerunOptions, StartResult, WorkflowOptions, WorkflowRef, Workflows } from "./workflows.js"
 import type { WorkflowRuns } from "./runs.js"
 import type { Artifacts } from "./artifacts.js"
 import type { AISessions } from "./ai/sessions.js"
@@ -46,7 +46,7 @@ export function addTrigger<S extends z.ZodTypeAny, Input>(
     return clankhouse().addTrigger(source, workflow, ...options)
 }
 
-export function start(name: string, input?: any): string {
+export function start(name: string, input?: any): StartResult {
     return clankhouse().start(name, input)
 }
 
@@ -95,7 +95,14 @@ export function waitForAny<const S extends readonly EventSource[]>(sources: S): 
     return clankhouse().waitForAny(sources)
 }
 
-export type { RecoverResult, RecoveryPolicy, RerunOptions, WorkflowOptions, WorkflowRef } from "./workflows.js"
+export type {
+    RecoverResult,
+    RecoveryPolicy,
+    RerunOptions,
+    StartResult,
+    WorkflowOptions,
+    WorkflowRef
+} from "./workflows.js"
 export type {
     ActiveEventSource,
     ApiEventSource,

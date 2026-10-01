@@ -150,7 +150,7 @@ test("agent step replay restores the worktree snapshot", async () => {
     clankhouse.registerWorkflow("test-workflow", workflowOptions, body)
 
     // when the workflow runs and the publish step throws
-    const firstId = clankhouse.start("test-workflow", null)
+    const firstId = clankhouse.start("test-workflow", null).runId
     await expect(runOutput(clankhouse, firstId)).rejects.toThrow("boom")
 
     // then discarding the worktree's uncommitted changes removes the agent's edit
@@ -194,7 +194,7 @@ test("snapshotless agent step replay returns stored output without restoring the
         })
         return clankhouse.step("publish", z.string(), async () => publishImpl())
     })
-    const firstId = clankhouse.start("test-workflow", null)
+    const firstId = clankhouse.start("test-workflow", null).runId
     await expect(runOutput(clankhouse, firstId)).rejects.toThrow("boom")
     await runGit(worktree.path, ["reset", "--hard"])
     await runGit(worktree.path, ["clean", "-fd"])
@@ -238,7 +238,7 @@ test.each([
             await agent.run("review", { prompt: "review it", output: outputSchema, worktree, snapshot })
             return clankhouse.step("publish", z.string(), async () => publishImpl())
         })
-        const firstId = clankhouse.start("test-workflow", null)
+        const firstId = clankhouse.start("test-workflow", null).runId
         await expect(runOutput(clankhouse, firstId)).rejects.toThrow("boom")
         await runGit(worktree.path, ["reset", "--hard"])
         await runGit(worktree.path, ["clean", "-fd"])
@@ -281,7 +281,7 @@ test("agent replay transforms the persisted raw reply once per execution", async
     })
 
     // when the failed workflow reruns from the later step
-    const firstId = clankhouse.start("test-workflow", null)
+    const firstId = clankhouse.start("test-workflow", null).runId
     await expect(runOutput(clankhouse, firstId)).rejects.toThrow("boom")
     publishImpl = () => "published"
     const secondId = clankhouse.rerun(firstId, { from: "publish" })
@@ -314,7 +314,7 @@ test("agent step replay fails loudly when its worktree snapshot is missing", asy
     clankhouse.registerWorkflow("test-workflow", workflowOptions, body)
 
     // when the workflow runs and the publish step throws
-    const firstId = clankhouse.start("test-workflow", null)
+    const firstId = clankhouse.start("test-workflow", null).runId
     await expect(runOutput(clankhouse, firstId)).rejects.toThrow("boom")
     // and the agent step's snapshot ref is lost before replay (e.g. the ref was pruned)
     const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)

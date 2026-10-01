@@ -574,6 +574,19 @@ export const scenarios: Scenario[] = [
         lines: [line(runId)]
     },
     {
+        id: "runs-start-existing",
+        group: "Run control",
+        label: "Start existing run",
+        command: "clank runs start review-pull-request --input input.json",
+        summary: "Starting a key that already has an interrupted run leaves it untouched and prints its identifier.",
+        note: "The notice and resume hint go to stderr, so stdout still contains only the run ID and the exit code stays 0.",
+        delivery: "instant",
+        lines: [
+            line(`Run ${runId} already exists (interrupted); use \`clank runs resume ${runId}\` to resume it`),
+            line(runId)
+        ]
+    },
+    {
         id: "runs-resume",
         group: "Run control",
         label: "Resume run",

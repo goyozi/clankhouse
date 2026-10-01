@@ -36,8 +36,8 @@ test("creates a distinct Git repository containing the fake agent implementation
     )
 
     // when the workflow is run twice
-    const firstRunId = clankhouse.start("hello-world")
-    const secondRunId = clankhouse.start("hello-world")
+    const firstRunId = clankhouse.start("hello-world").runId
+    const secondRunId = clankhouse.start("hello-world").runId
     directories.push(
         z.string().parse(await runOutput(clankhouse, firstRunId)),
         z.string().parse(await runOutput(clankhouse, secondRunId))

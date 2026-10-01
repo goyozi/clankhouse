@@ -173,13 +173,13 @@ test("a tombstoned succeeded key stays a no-op for start and makes run throw", a
             return null
         }
     )
-    const runId = clankhouse.start("test-workflow", null)
+    const runId = clankhouse.start("test-workflow", null).runId
     await runOutput(clankhouse, runId)
     age(clankhouse, runId, 15)
     await clankhouse.gc()
 
     // when the key is started again
-    const startedId = clankhouse.start("test-workflow", null)
+    const startedId = clankhouse.start("test-workflow", null).runId
 
     // then no new run is created
     expect(startedId).toBe(runId)
@@ -194,7 +194,7 @@ test("a tombstoned succeeded key stays a no-op for start and makes run throw", a
     )
 })
 
-test("a tombstoned failed key makes start and run throw workflow_run_deleted", async () => {
+test("a tombstoned failed key is a no-op for start and makes run throw workflow_run_deleted", async () => {
     // given a registered workflow with a deleted failed run and a failed run left deleting
     const { clankhouse } = tempClankHouse()
     clankhouse.registerWorkflow(
@@ -204,8 +204,8 @@ test("a tombstoned failed key makes start and run throw workflow_run_deleted", a
             throw new Error("boom")
         }
     )
-    const deletedId = clankhouse.start("test-workflow", "deleted")
-    const deletingId = clankhouse.start("test-workflow", "deleting")
+    const deletedId = clankhouse.start("test-workflow", "deleted").runId
+    const deletingId = clankhouse.start("test-workflow", "deleting").runId
     await expect(runOutput(clankhouse, deletedId)).rejects.toThrow("boom")
     await expect(runOutput(clankhouse, deletingId)).rejects.toThrow("boom")
     age(clankhouse, deletedId, 15)
@@ -213,12 +213,13 @@ test("a tombstoned failed key makes start and run throw workflow_run_deleted", a
     clankhouse.db.prepare("UPDATE runs SET gc_state = 'deleting' WHERE id = ?").run(deletingId)
 
     // when either key is started again
-    // then start reports the deletion instead of the failure
-    for (const key of ["deleted", "deleting"]) {
-        expect(() => clankhouse.start("test-workflow", key)).toThrow(
-            expect.objectContaining({ code: "workflow_run_deleted" })
-        )
-    }
+    const started = ["deleted", "deleting"].map((key) => clankhouse.start("test-workflow", key))
+
+    // then start is a no-op returning the deleted runs with their failed status
+    expect(started).toEqual([
+        { runId: deletedId, status: "failed" },
+        { runId: deletingId, status: "failed" }
+    ])
     // and run on either key reports the deletion
     for (const key of ["deleted", "deleting"]) {
         await expect(testRun(clankhouse, async () => null, { key })).rejects.toMatchObject({
@@ -247,7 +248,7 @@ test("a rerun's sessions and artifacts survive deletion of the earlier attempt",
             return null
         }
     )
-    const firstId = clankhouse.start("test-workflow", null)
+    const firstId = clankhouse.start("test-workflow", null).runId
     await expect(runOutput(clankhouse, firstId)).rejects.toThrow("boom")
     fail = false
     const secondId = clankhouse.rerun(firstId, { from: "finish" })

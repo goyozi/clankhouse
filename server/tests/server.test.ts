@@ -611,27 +611,31 @@ test("resumes an interrupted run through a restarted server", async () => {
     expect(await runOutput(second, resumed.runId)).toBe(9)
 })
 
-test("startRun reports input persisted under an incompatible schema as a failed precondition", async () => {
-    // given an interrupted run persisted under a numeric input schema
+test("startRun reports an existing interrupted run without resuming it", async () => {
+    // given an interrupted run persisted by a closed server
     const { clankhouse, reopen } = tempClankHouse()
     registerApproval(clankhouse, z.number())
     const firstServer = await testServer(clankhouse)
     const firstClient = rpcClient(firstServer)
     const started = await firstClient.startRun({ workflowName: "approval", inputJson: json({ id: "a", value: 1 }) })
+    expect(started.status).toBe(ExecutionStatus.RUNNING)
     await nextRunningStep(firstClient.watchRun({ runId: started.runId })[Symbol.asyncIterator](), "wait:approve:a")
     await firstServer.close()
 
-    // when the workflow is re-registered with a string-valued schema and started again with matching input
-    const { client } = await reopenWithIncompatibleInput(reopen)
-    const outcome = await client
-        .startRun({ workflowName: "approval", inputJson: json({ id: "a", value: "1" }) })
-        .catch((error: unknown) => error)
+    // when a restarted server is asked to start the same key
+    const second = reopen()
+    registerApproval(second, z.number())
+    const secondServer = await listen(second, { port: 0 })
+    onTestFinished(() => secondServer.close())
+    const restarted = await rpcClient(secondServer).startRun({
+        workflowName: "approval",
+        inputJson: json({ id: "a", value: 1 })
+    })
 
-    // then the persisted input is named as the failed precondition
-    const message = incompatibleInputOutcome(outcome)
-    expect(message).toContain('input no longer matches the input schema of workflow "approval"')
-    // and the caller's own valid input is not blamed for the stored mismatch
-    expect(message).not.toContain("Workflow input is invalid")
+    // then the existing run is reported as interrupted
+    expect(restarted).toMatchObject({ runId: started.runId, status: ExecutionStatus.INTERRUPTED })
+    // and it stays interrupted instead of being resumed
+    expect((await second.runs.get(started.runId)).status).toBe("interrupted")
 })
 
 test("resumeRun reports input persisted under an incompatible schema as a failed precondition", async () => {
@@ -754,13 +758,15 @@ test("maps workflow lifecycle ClankHouseError codes to stable Connect errors", a
     const failedId = (await client.startRun({ workflowName: "lifecycle", inputJson: json({ id: "failed" }) })).runId
     await expect(runOutput(clankhouse, failedId)).rejects.toThrow("boom")
 
-    // when starting a failed key and resuming missing or terminal runs
-    // then the matching lifecycle categories are returned
-    await expect(
-        client.startRun({ workflowName: "lifecycle", inputJson: json({ id: "failed" }) })
-    ).rejects.toMatchObject({
-        code: Code.FailedPrecondition
+    // when starting a failed key
+    // then the existing failed run is reported
+    expect(await client.startRun({ workflowName: "lifecycle", inputJson: json({ id: "failed" }) })).toMatchObject({
+        runId: failedId,
+        status: ExecutionStatus.FAILED
     })
+
+    // when resuming missing or terminal runs
+    // then the matching lifecycle categories are returned
     await expect(client.resumeRun({ runId: "missing" })).rejects.toMatchObject({ code: Code.NotFound })
     shouldFail = false
     const succeededId = (await client.startRun({ workflowName: "lifecycle", inputJson: json({ id: "succeeded" }) }))

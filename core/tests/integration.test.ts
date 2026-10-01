@@ -79,7 +79,7 @@ test("end-to-end: durable workflow with llm, agent, artifact and approval surviv
             await parkA.released
         }
     })
-    const runId = clankhouse.start("feature", { key: "feat-x" })
+    const runId = clankhouse.start("feature", { key: "feat-x" }).runId
     // and it pauses right after drafting, before implementing
     await reachedA.released
     // then only the plan step and the two draft llm calls have run so far

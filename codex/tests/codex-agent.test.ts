@@ -850,7 +850,7 @@ test("codex agent step replay restores the worktree without re-invoking the SDK"
     clankhouse.registerWorkflow("test-workflow", workflowOptions, body)
 
     // when the workflow fails after the agent and its changes are discarded
-    const firstId = clankhouse.start("test-workflow", null)
+    const firstId = clankhouse.start("test-workflow", null).runId
     await expect(runOutput(clankhouse, firstId)).rejects.toThrow("boom")
     await runGit(worktree.path, ["reset", "--hard"])
     await runGit(worktree.path, ["clean", "-fd"])

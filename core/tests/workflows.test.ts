@@ -15,7 +15,7 @@ test("start runs a registered workflow to completion", async () => {
     })
 
     // when starting the workflow
-    const runId = clankhouse.start("double", { id: "x", value: 21 })
+    const runId = clankhouse.start("double", { id: "x", value: 21 }).runId
 
     // then the run succeeds
     await expect.poll(async () => (await clankhouse.runs.list())[0]?.status).toBe("succeeded")
@@ -55,7 +55,7 @@ test("starts and reruns a workflow with omitted void input", async () => {
     )
 
     // when it is started without input and rerun from its durable step
-    const firstRunId = clankhouse.start("void-input")
+    const firstRunId = clankhouse.start("void-input").runId
     await runOutput(clankhouse, firstRunId)
     const secondRunId = clankhouse.rerun(firstRunId, { from: "record" })
     await runOutput(clankhouse, secondRunId)
@@ -78,11 +78,13 @@ test("start returns before the run finishes", async () => {
     })
 
     // when starting the workflow
-    const runId = clankhouse.start("double", { id: "x", value: 1 })
+    const started = clankhouse.start("double", { id: "x", value: 1 })
 
-    // then the run is still running
+    // then start reports the new run as running
+    expect(started.status).toBe("running")
+    // and the run is still running
     const [meta] = await clankhouse.runs.list()
-    expect(runId).toBe(meta.id)
+    expect(started.runId).toBe(meta.id)
     expect(meta.status).toBe("running")
 
     // when the gate is released
@@ -102,12 +104,13 @@ test("start is a no-op while the run is active", async () => {
     })
 
     // when starting the same workflow key twice while the first run is active
-    const firstId = clankhouse.start("double", { id: "x", value: 1 })
-    const secondId = clankhouse.start("double", { id: "x", value: 1 })
+    const firstId = clankhouse.start("double", { id: "x", value: 1 }).runId
+    const second = clankhouse.start("double", { id: "x", value: 1 })
 
     // then only one run is recorded
     expect(await clankhouse.runs.list()).toHaveLength(1)
-    expect(secondId).toBe(firstId)
+    // and the second start reports the existing run as running
+    expect(second).toEqual({ runId: firstId, status: "running" })
 
     // when the gate is released
     parked.release()
@@ -129,33 +132,46 @@ test("workflow output is validated against the output schema", async () => {
     // and the run records an error
     const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     expect(run.error).toBeDefined()
-    // and when the failed workflow key is started again
-    // then it is rejected and directs the caller to rerun
-    expect(() => clankhouse.start("double", { id: "x", value: 1 })).toThrow(
-        expect.objectContaining({
-            message: expect.stringMatching(/has failed.*rerun/),
-            code: "workflow_run_failed"
-        })
-    )
 })
 
 test("start of a succeeded workflow returns the existing run ID", async () => {
     // given a registered workflow that has already succeeded
     const { clankhouse } = tempClankHouse()
     clankhouse.registerWorkflow("double", options, async (value) => ({ doubled: value.value * 2 }))
-    const firstId = clankhouse.start("double", { id: "x", value: 2 })
+    const firstId = clankhouse.start("double", { id: "x", value: 2 }).runId
     expect(await runOutput(clankhouse, firstId)).toEqual({ doubled: 4 })
 
     // when the same workflow key is started again
-    const secondId = clankhouse.start("double", { id: "x", value: 99 })
+    const second = clankhouse.start("double", { id: "x", value: 99 })
 
-    // then the existing succeeded run ID is returned without re-execution
-    expect(secondId).toBe(firstId)
-    expect((await clankhouse.runs.get(secondId)).output).toEqual({ doubled: 4 })
+    // then the existing succeeded run is returned without re-execution
+    expect(second).toEqual({ runId: firstId, status: "succeeded" })
+    expect((await clankhouse.runs.get(firstId)).output).toEqual({ doubled: 4 })
 })
 
-test("start resumes an interrupted workflow with its original input", async () => {
-    // given a registered workflow interrupted after persisting a step under input value 3
+test("start of a failed workflow returns the existing run without throwing", async () => {
+    // given a registered workflow whose run has failed
+    const { clankhouse } = tempClankHouse()
+    let calls = 0
+    clankhouse.registerWorkflow("double", options, async () => {
+        calls++
+        throw new Error("boom")
+    })
+    const firstId = clankhouse.start("double", { id: "x", value: 2 }).runId
+    await expect(runOutput(clankhouse, firstId)).rejects.toThrow("boom")
+
+    // when the same workflow key is started again
+    const second = clankhouse.start("double", { id: "x", value: 2 })
+
+    // then the existing failed run is returned
+    expect(second).toEqual({ runId: firstId, status: "failed" })
+    // and no new attempt is executed
+    expect(calls).toBe(1)
+    expect(await clankhouse.runs.list()).toHaveLength(1)
+})
+
+test("start leaves an interrupted workflow interrupted and reports its status", async () => {
+    // given a registered workflow interrupted after persisting a step
     const { clankhouse, reopen } = tempClankHouse()
     const parked = gate()
     const reached = gate()
@@ -165,24 +181,24 @@ test("start resumes an interrupted workflow with its original input", async () =
         await parked.released
         return { doubled: value.value * 2 }
     })
-    const firstId = clankhouse.start("double", { id: "x", value: 3 })
+    const firstId = clankhouse.start("double", { id: "x", value: 3 }).runId
     await reached.released
 
-    // when a reopened instance starts the same key with a different non-key input
+    // when a reopened instance starts the same key
     const second = reopen()
-    let resumedInput: number | undefined
+    let calls = 0
     second.registerWorkflow("double", options, async (value) => {
-        resumedInput = value.value
-        await second.step("remember", z.number(), async () => value.value)
+        calls++
         return { doubled: value.value * 2 }
     })
-    const resumedId = second.start("double", { id: "x", value: 100 })
+    const started = second.start("double", { id: "x", value: 3 })
 
-    // then the same attempt resumes and executes with the persisted original input
-    expect(resumedId).toBe(firstId)
-    expect(await runOutput(second, resumedId)).toEqual({ doubled: 6 })
-    expect(resumedInput).toBe(3)
-    expect((await second.runs.get(resumedId)).attempt).toBe(1)
+    // then the existing run is returned with its interrupted status
+    expect(started).toEqual({ runId: firstId, status: "interrupted" })
+    // and the run is not dispatched
+    expect((await second.runs.get(firstId)).status).toBe("interrupted")
+    expect(calls).toBe(0)
+    expect(await second.runs.list()).toHaveLength(1)
 })
 
 test("explicit resume continues an interrupted workflow under the same ID", async () => {
@@ -200,7 +216,7 @@ test("explicit resume continues an interrupted workflow under the same ID", asyn
         await parked.released
         return { doubled: value.value * 2 }
     })
-    const firstId = clankhouse.start("double", { id: "x", value: 4 })
+    const firstId = clankhouse.start("double", { id: "x", value: 4 }).runId
     await reached.released
 
     // when the run is explicitly resumed on a reopened instance
@@ -231,7 +247,7 @@ test("resume validates persisted input before dispatching the workflow", async (
         await parked.released
         return { doubled: value.value * 2 }
     })
-    const runId = clankhouse.start("double", { id: "x", value: 4 })
+    const runId = clankhouse.start("double", { id: "x", value: 4 }).runId
     await reached.released
     const second = reopen()
     let workflowCalls = 0
@@ -269,7 +285,7 @@ test("resume of an already running workflow is idempotent", async () => {
         await parked.released
         return { doubled: value.value * 2 }
     })
-    const runId = clankhouse.start("double", { id: "x", value: 5 })
+    const runId = clankhouse.start("double", { id: "x", value: 5 }).runId
 
     // when resume targets the active run
     const resumedId = clankhouse.resume(runId)
@@ -289,10 +305,10 @@ test("resume rejects missing, terminal, and unregistered runs", async () => {
         if (shouldFail) throw new Error("boom")
         return { doubled: value.value * 2 }
     })
-    const runId = clankhouse.start("double", { id: "x", value: 6 })
+    const runId = clankhouse.start("double", { id: "x", value: 6 }).runId
     expect(await runOutput(clankhouse, runId)).toEqual({ doubled: 12 })
     shouldFail = true
-    const failedId = clankhouse.start("double", { id: "y", value: 6 })
+    const failedId = clankhouse.start("double", { id: "y", value: 6 }).runId
     await expect(runOutput(clankhouse, failedId)).rejects.toThrow("boom")
 
     // when resume targets an unknown run
@@ -341,7 +357,7 @@ test("resume rejects a non-latest attempt", async () => {
         })
         return { doubled }
     })
-    const firstId = clankhouse.start("double", { id: "x", value: 7 })
+    const firstId = clankhouse.start("double", { id: "x", value: 7 }).runId
     await expect(runOutput(clankhouse, firstId)).rejects.toThrow("boom")
     shouldFail = false
     const secondId = clankhouse.rerun(firstId, { from: "compute" })
@@ -476,7 +492,7 @@ test("a non-idempotent input transform runs once per attempt instead of compound
     )
 
     // when starting with value 1 so the transform yields 2
-    const runId = clankhouse.start("double", { id: "x", value: 1 })
+    const runId = clankhouse.start("double", { id: "x", value: 1 }).runId
 
     // then the body runs with the once-transformed value, not the doubly-transformed 3
     expect(await runOutput(clankhouse, runId)).toEqual({ doubled: 4 })

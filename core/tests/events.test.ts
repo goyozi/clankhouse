@@ -428,7 +428,7 @@ test("re-emitting on rerun supersedes the previous unconsumed event", async () =
     }
     clankhouse.registerWorkflow("test-workflow", workflowOptions, body)
     // when the first attempt emits result=1 and the publish step throws
-    const firstId = clankhouse.start("test-workflow", null)
+    const firstId = clankhouse.start("test-workflow", null).runId
     await expect(runOutput(clankhouse, firstId)).rejects.toThrow("boom")
     // then a single unconsumed "result" event is stored
     expect(clankhouse.db.prepare("SELECT COUNT(*) AS n FROM events WHERE key = 'result'").get()).toEqual({ n: 1 })

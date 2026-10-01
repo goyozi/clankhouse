@@ -23,10 +23,11 @@ import { InvalidArgumentError, type Command } from "commander"
 import type { ClankHouseClient } from "../../client.js"
 import { CliError } from "../../errors.js"
 import { collectIncludes, includes, type IncludeOptions } from "../../includes.js"
-import { readJsonInput } from "../../io.js"
+import { readJsonInput, writeText } from "../../io.js"
 import type { Output } from "../../output.js"
 import type { Runtime } from "../../runtime.js"
 import {
+    formatExistingRunNotice,
     formatRun,
     formatRunActivityHeader,
     formatRunId,
@@ -216,6 +217,9 @@ async function startWorkflowRun(
         },
         { signal: runtime.signal }
     )
+    if (!runtime.output(command).json && response.status !== ExecutionStatus.RUNNING) {
+        await writeText(runtime.stderr, formatExistingRunNotice(response.runId, response.status))
+    }
     return { client, response }
 }
 

@@ -1,7 +1,8 @@
 import * as z from "zod"
 import type { ClankHouse } from "./clankhouse.js"
 import type { Engine } from "./engine.js"
-import type { ActiveSets } from "./runtime.js"
+import { observableStatus, type ActiveSets } from "./runtime.js"
+import type { ObservableRunStatus } from "./runs.js"
 import * as sql from "./db.js"
 import type { Db, RunRow, StepRow } from "./db.js"
 import type { Artifacts } from "./artifacts.js"
@@ -67,23 +68,24 @@ export class Workflows {
         }
     }
 
-    start(name: string, input?: any): string
-    start<Input>(workflow: WorkflowRef<Input>, input: Input): string
-    start(target: string | WorkflowRef<any>, input?: any): string {
+    start(name: string, input?: any): StartResult
+    start<Input>(workflow: WorkflowRef<Input>, input: Input): StartResult
+    start(target: string | WorkflowRef<any>, input?: any): StartResult {
         const name = workflowName(target)
         const registered = this.requireRegistered(target)
         const parsed = registered.options.input.parse(input)
-        const inputJson = JSON.stringify(input)
-        const plan = this.resolveStart({
-            workflowName: name,
-            value: registered.options.key(parsed),
-            input: inputJson === undefined ? null : inputJson
-        })
-        if (plan.type === "execute") {
-            const runInput = plan.isNew ? parsed : this.parseStoredInput(registered, plan.runRow)
-            this.dispatchRegistered(plan.runRow, registered, runInput)
+        const key = registered.options.key(parsed)
+        const existing = sql.findLastAttempt(this.db, name, key)
+        if (existing) {
+            return { runId: existing.id, status: observableStatus(existing.status, this.active.runs.has(existing.id)) }
         }
-        return plan.runRow.id
+        const inputJson = JSON.stringify(input)
+        const runRow = this.insertRun(
+            { workflowName: name, value: key, input: inputJson === undefined ? null : inputJson },
+            1
+        )
+        this.dispatchRegistered(runRow, registered, parsed)
+        return { runId: runRow.id, status: "running" }
     }
 
     recover(): RecoverResult {
@@ -141,7 +143,7 @@ export class Workflows {
             role: `Workflow "${name}" output schema`,
             allowTopLevelVoid: true
         })
-        const plan = this.resolveStart({ workflowName: name, value: key, input: null })
+        const plan = this.resolveRun(name, key)
         if (plan.runRow.gc_state !== null) throw runDeleted(plan.runRow)
         switch (plan.type) {
             case "noopRunning":
@@ -203,20 +205,20 @@ export class Workflows {
         return row
     }
 
-    private resolveStart(target: RunKey): Plan {
-        const sourceRun = sql.findLastAttempt(this.db, target.workflowName, target.value)
-        if (!sourceRun) return { type: "execute", runRow: this.insertRun(target, 1), isNew: true }
+    private resolveRun(workflowName: string, key: string): Plan {
+        const sourceRun = sql.findLastAttempt(this.db, workflowName, key)
+        if (!sourceRun) return { type: "execute", runRow: this.insertRun({ workflowName, value: key, input: null }, 1) }
         if (this.active.runs.has(sourceRun.id)) return { type: "noopRunning", runRow: sourceRun }
         switch (sourceRun.status) {
             case "succeeded":
                 return { type: "noopSucceeded", runRow: sourceRun }
             case "interrupted":
-                return { type: "execute", runRow: sourceRun, isNew: false }
+                return { type: "execute", runRow: sourceRun }
             case "failed":
                 if (sourceRun.gc_state !== null) throw runDeleted(sourceRun)
                 throw new ClankHouseError(
                     "workflow_run_failed",
-                    `Run "${target.value}" has failed; rerun it from a step to start a new attempt`
+                    `Run "${key}" has failed; rerun it from a step to start a new attempt`
                 )
         }
     }
@@ -229,7 +231,7 @@ export class Workflows {
                 `Run "${sourceRun.id}" has ${sourceRun.status} and cannot be resumed`
             )
         }
-        return { type: "execute", runRow: sourceRun, isNew: false }
+        return { type: "execute", runRow: sourceRun }
     }
 
     private resolveRerun(sourceRun: RunRow, from: string): Extract<Plan, { type: "execute" }> {
@@ -252,7 +254,7 @@ export class Workflows {
             sourceRun.attempt + 1
         )
         this.reuseSteps(sourceRun.id, fromStep.seq, runRow)
-        return { type: "execute", runRow, isNew: true }
+        return { type: "execute", runRow }
     }
 
     private requireLatest(runId: string): RunRow {
@@ -349,6 +351,8 @@ export type WorkflowRef<Input> = {
     readonly [workflowInput]: (input: Input) => Input
 }
 
+export type StartResult = { runId: string; status: ObservableRunStatus }
+
 export type RerunOptions = { from: string }
 
 export type WorkflowSummary = { name: string }
@@ -361,6 +365,6 @@ export type WorkflowDefinition = WorkflowSummary & {
 type RunKey = { workflowName: string; value: string; input: string | null }
 
 type Plan =
-    | { type: "execute"; runRow: RunRow; isNew: boolean }
+    | { type: "execute"; runRow: RunRow }
     | { type: "noopRunning"; runRow: RunRow }
     | { type: "noopSucceeded"; runRow: RunRow }

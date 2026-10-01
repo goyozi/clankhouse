@@ -17,7 +17,7 @@ async function interruptRuns(clankhouse: ClankHouse, name: string, ids: string[]
         return { doubled: 0 }
     })
     for (const id of ids) {
-        const runId = clankhouse.start(name, { id, value: runIds.length + 1 })
+        const runId = clankhouse.start(name, { id, value: runIds.length + 1 }).runId
         await expect.poll(async () => (await clankhouse.runs.get(runId)).steps.length).toBe(1)
         runIds.push(runId)
         await new Promise((resolve) => setTimeout(resolve, 2))
@@ -149,7 +149,7 @@ test("recover is a no-op for runs already active in this process", async () => {
         await parked.released
         return { doubled: i.value * 2 }
     })
-    const runId = clankhouse.start("double", { id: "a", value: 5 })
+    const runId = clankhouse.start("double", { id: "a", value: 5 }).runId
 
     // when recover is called
     const result = clankhouse.recover()
@@ -269,8 +269,8 @@ test("recover does not touch succeeded and failed runs", async () => {
         if (i.value < 0) throw new Error("negative")
         return { doubled: i.value * 2 }
     })
-    const succeededId = clankhouse.start("double", { id: "ok", value: 1 })
-    const failedId = clankhouse.start("double", { id: "bad", value: -1 })
+    const succeededId = clankhouse.start("double", { id: "ok", value: 1 }).runId
+    const failedId = clankhouse.start("double", { id: "bad", value: -1 }).runId
     await expect.poll(async () => (await clankhouse.runs.get(succeededId)).status).toBe("succeeded")
     await expect.poll(async () => (await clankhouse.runs.get(failedId)).status).toBe("failed")
 

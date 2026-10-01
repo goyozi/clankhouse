@@ -178,9 +178,9 @@ test("runs get command output matches designs", async () => {
             })
         }
     )
-    const detailedRunId = clankhouse.start("compact-snapshot", null)
-    const emptyRunId = clankhouse.start("empty-snapshot", null)
-    const failedRunId = clankhouse.start("failed-snapshot", null)
+    const detailedRunId = clankhouse.start("compact-snapshot", null).runId
+    const emptyRunId = clankhouse.start("empty-snapshot", null).runId
+    const failedRunId = clankhouse.start("failed-snapshot", null).runId
     const [detailedRun, emptyRun, failedRun] = await Promise.all([
         waitForRun(clankhouse, detailedRunId),
         waitForRun(clankhouse, emptyRunId),
@@ -324,7 +324,7 @@ test("runs get command omits an empty active step count", async () => {
         entered.release()
         await finish.released
     })
-    const runId = clankhouse.start("step-gap", null)
+    const runId = clankhouse.start("step-gap", null).runId
     await entered.released
     const run = await clankhouse.runs.get(runId)
 
@@ -407,7 +407,7 @@ test("runs watch command output matches scoped activity designs", async () => {
         firstDone.release()
         secondDone.release()
     })
-    const runId = clankhouse.start("scoped-activity", null)
+    const runId = clankhouse.start("scoped-activity", null).runId
     await sessionsReady.released
     const env = serverEnv(await testServer(clankhouse))
 
@@ -520,7 +520,7 @@ test("runs watch command output scopes step and run failures", async () => {
             })
         }
     )
-    const runId = clankhouse.start("failed-activity", null)
+    const runId = clankhouse.start("failed-activity", null).runId
     await entered.released
     const watch = startCliCommand(["runs", "watch", runId], serverEnv(await testServer(clankhouse)))
 
@@ -581,7 +581,7 @@ test("runs get --watch command output matches snapshot and scoped update designs
                 }
             })
     )
-    const runId = clankhouse.start("snapshot-activity", null)
+    const runId = clankhouse.start("snapshot-activity", null).runId
     await ready.released
     const watch = startCliCommand(
         ["runs", "get", runId, "--include", "sessions", "--watch"],

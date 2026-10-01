@@ -18,6 +18,12 @@ export function formatRunId(runId: string): string {
     return `${runId}\n`
 }
 
+export function formatExistingRunNotice(runId: string, status: ExecutionStatus): string {
+    const notice = `Run ${runId} already exists (${executionStatus(status)})`
+    if (status === ExecutionStatus.INTERRUPTED) return `${notice}; use \`clank runs resume ${runId}\` to resume it\n`
+    return `${notice}\n`
+}
+
 export function formatRunOutput(outputJson: string): string {
     return `${outputJson}\n`
 }

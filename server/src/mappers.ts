@@ -132,7 +132,7 @@ export function toSession(session: AISession): MessageInitShape<typeof SessionSc
     }
 }
 
-function toExecutionStatus(status: ObservableRunStatus | ObservableStepStatus): ExecutionStatus {
+export function toExecutionStatus(status: ObservableRunStatus | ObservableStepStatus): ExecutionStatus {
     switch (status) {
         case "interrupted":
             return ExecutionStatus.INTERRUPTED

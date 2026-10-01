@@ -16,6 +16,7 @@ import {
     Workflows,
     type RecoverResult,
     type RerunOptions,
+    type StartResult,
     type WorkflowOptions,
     type WorkflowRef
 } from "./workflows.js"
@@ -108,10 +109,12 @@ export class ClankHouse {
     }
 
     /**
-     * Starts a workflow run for a registered workflow and returns its ID after dispatching it.
-     * Existing interrupted runs resume with their persisted input. Running and succeeded runs are no-ops.
+     * Idempotently creates a workflow run for a registered workflow and returns its ID and observable status.
+     * If no run exists for the input's key, a new run is created and dispatched.
+     * If a run already exists for the key, in any status, this is a no-op that returns the existing run.
+     * Existing interrupted runs are not resumed; use `resume()` or `recover()` for that.
      */
-    start(name: string, input?: any): string {
+    start(name: string, input?: any): StartResult {
         return this.workflows.start(name, input)
     }
 
@@ -189,7 +192,7 @@ export class ClankHouse {
     /**
      * Soft deletes succeeded and failed runs that ended more than `minAgeDays` ago and are not running,
      * then cleans up dangling (unassigned) worktrees older than `minAgeDays`.
-     * Deleted runs keep a tombstone: they are hidden from listings, a succeeded key stays a no-op for `start()`
+     * Deleted runs keep a tombstone: they are hidden from listings, their key stays a no-op for `start()`
      * and `run()` throws `workflow_run_deleted`. Artifact references inside run or step inputs/outputs may dangle.
      * Limitations:
      * - Does not (yet) clean up user/agent snapshot refs.

@@ -2,6 +2,7 @@ import { Code, ConnectError } from "@connectrpc/connect"
 import { formatZodError } from "@clankhouse/core/errors"
 import type { ClankHouse } from "@clankhouse/core/clankhouse"
 import * as z from "zod"
+import { toExecutionStatus } from "../mappers.js"
 import { notFound, parseJson, required, toConnectError } from "./errors.js"
 import type { ClankHouseServiceImplementation } from "./types.js"
 
@@ -36,7 +37,11 @@ export function workflowHandlers(clankhouse: ClankHouse): WorkflowHandlers {
         startRun(request) {
             required(request.workflowName, "workflow_name")
             try {
-                return { runId: clankhouse.start(request.workflowName, parseJson(request.inputJson, "input_json")) }
+                const { runId, status } = clankhouse.start(
+                    request.workflowName,
+                    parseJson(request.inputJson, "input_json")
+                )
+                return { runId, status: toExecutionStatus(status) }
             } catch (error) {
                 if (error instanceof z.ZodError) {
                     throw new ConnectError(
@@ -48,9 +53,7 @@ export function workflowHandlers(clankhouse: ClankHouse): WorkflowHandlers {
                     )
                 }
                 throw toConnectError(error, {
-                    workflow_not_registered: () => notFound("Workflow", request.workflowName),
-                    workflow_run_failed: Code.FailedPrecondition,
-                    workflow_input_incompatible: Code.FailedPrecondition
+                    workflow_not_registered: () => notFound("Workflow", request.workflowName)
                 })
             }
         }
