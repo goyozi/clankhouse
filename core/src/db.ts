@@ -112,6 +112,7 @@ type RunStatements = {
     fail: Statement
     findGcCandidates: Statement
     findByGcState: Statement
+    findInterrupted: Statement
     setGcState: Statement
 }
 
@@ -126,6 +127,9 @@ function prepareRunStatements(db: Db): RunStatements {
         findById: db.prepare("SELECT * FROM runs WHERE id = ?"),
         succeed: db.prepare("UPDATE runs SET status = 'succeeded', output = ?, ended_at = ? WHERE id = ?"),
         fail: db.prepare("UPDATE runs SET status = 'failed', error = ?, error_code = ?, ended_at = ? WHERE id = ?"),
+        findInterrupted: db.prepare(
+            "SELECT * FROM runs WHERE gc_state IS NULL AND status = 'interrupted' ORDER BY started_at, id"
+        ),
         findGcCandidates: db.prepare(
             "SELECT id FROM runs WHERE gc_state IS NULL AND status IN ('succeeded','failed') AND ended_at < ? ORDER BY id"
         ),
@@ -166,6 +170,10 @@ export function failRun(
     endedAt: string
 ): void {
     statements(db).runs.fail.run(error, errorCode, endedAt, id)
+}
+
+export function findInterruptedRuns(db: Db): RunRow[] {
+    return statements(db).runs.findInterrupted.all() as unknown as RunRow[]
 }
 
 export function findRunGcCandidates(db: Db, endedBefore: string): string[] {

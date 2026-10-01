@@ -12,7 +12,13 @@ import { Events, type ActiveEventSource, type EventSource, type EventSourceResul
 import { ClankHouseError } from "./errors.js"
 import { Notifier } from "./watch.js"
 import { Triggers, type TriggerArguments, type TriggerErrorHandler, type TriggerHandle } from "./triggers.js"
-import { Workflows, type RerunOptions, type WorkflowOptions, type WorkflowRef } from "./workflows.js"
+import {
+    Workflows,
+    type RecoverResult,
+    type RerunOptions,
+    type WorkflowOptions,
+    type WorkflowRef
+} from "./workflows.js"
 import { gcWorktrees, type WorktreeGcResult } from "./git/index.js"
 import { gcRuns, type RunGcResult } from "./gc.js"
 
@@ -127,6 +133,10 @@ export class ClankHouse {
         workflowFn: () => Promise<z.infer<T>>
     ): Promise<z.infer<T>> {
         return this.workflows.run(name, key, output, workflowFn)
+    }
+
+    recover(): RecoverResult {
+        return this.workflows.recover()
     }
 
     /**

@@ -86,6 +86,29 @@ export class Workflows {
         return plan.runRow.id
     }
 
+    recover(): RecoverResult {
+        const result: RecoverResult = { resumed: [], skipped: [], failed: [] }
+        for (const runRow of sql.findInterruptedRuns(this.db)) {
+            const registered = this.registered.get(runRow.workflow_name)
+            if (this.active.runs.has(runRow.id)) {
+                result.skipped.push({ runId: runRow.id, reason: "running" })
+            } else if (!registered) {
+                result.skipped.push({ runId: runRow.id, reason: "not_registered" })
+            } else if ((registered.options.recovery ?? "resume") === "manual") {
+                result.skipped.push({ runId: runRow.id, reason: "manual" })
+            } else {
+                try {
+                    this.resume(runRow.id)
+                    result.resumed.push(runRow.id)
+                } catch (error) {
+                    if (!(error instanceof ClankHouseError)) throw error
+                    result.failed.push({ runId: runRow.id, error })
+                }
+            }
+        }
+        return result
+    }
+
     resume(runId: string): string {
         const sourceRun = this.requireLatest(runId)
         const registered = this.requireRegistered(sourceRun.workflow_name)
@@ -140,10 +163,15 @@ export class Workflows {
         try {
             return registered.options.input.parse(this.storedInput(runRow))
         } catch (error) {
-            if (!(error instanceof z.ZodError)) throw error
+            const reason =
+                error instanceof z.ZodError
+                    ? formatZodError(error)
+                    : error instanceof Error
+                      ? error.message
+                      : String(error)
             throw new ClankHouseError(
                 "workflow_input_incompatible",
-                `Run "${runRow.id}" input no longer matches the input schema of workflow "${runRow.workflow_name}": ${formatZodError(error)}`,
+                `Run "${runRow.id}" input no longer matches the input schema of workflow "${runRow.workflow_name}": ${reason}`,
                 { cause: error }
             )
         }
@@ -285,7 +313,12 @@ function workflowName(target: string | WorkflowRef<any>): string {
 }
 
 type RegisteredWorkflow = {
-    options: { input: z.ZodTypeAny; output: z.ZodTypeAny; key: (input: any) => string }
+    options: {
+        input: z.ZodTypeAny
+        output: z.ZodTypeAny
+        key: (input: any) => string
+        recovery?: RecoveryPolicy
+    }
     fn: (input: any) => Promise<any>
     inputSchema?: z.core.JSONSchema.JSONSchema
     outputSchema?: z.core.JSONSchema.JSONSchema
@@ -296,6 +329,15 @@ export type WorkflowOptions<I extends z.ZodTypeAny, O extends z.ZodTypeAny> = {
     input: I
     output: O
     key: (input: z.infer<I>) => string
+    recovery?: RecoveryPolicy
+}
+
+export type RecoveryPolicy = "resume" | "manual"
+
+export type RecoverResult = {
+    resumed: string[]
+    skipped: { runId: string; reason: "manual" | "not_registered" | "running" }[]
+    failed: { runId: string; error: ClankHouseError }[]
 }
 
 const workflowRegistration = Symbol("workflowRegistration")
