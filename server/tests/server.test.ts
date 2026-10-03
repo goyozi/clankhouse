@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process"
 import * as fs from "node:fs"
+import * as net from "node:net"
 import * as path from "node:path"
 import type { RequestOptions } from "node:https"
 import { fileURLToPath } from "node:url"
@@ -18,7 +19,7 @@ import {
     ToolResultStatus,
     ToolSourceKind
 } from "@clankhouse/protocol"
-import { runOutput, tempDir, tempGitRepo, tempClankHouse, testRun, testSession } from "@clankhouse/test-utils"
+import { gate, runOutput, tempDir, tempGitRepo, tempClankHouse, testRun, testSession } from "@clankhouse/test-utils"
 import { expect, onTestFinished, test } from "vitest"
 import * as z from "zod"
 import { listen, serve, type ClankHouseServer } from "../src"
@@ -61,6 +62,17 @@ async function firstLine(stream: NodeJS.ReadableStream): Promise<string> {
     throw new Error("Process ended before writing a line")
 }
 
+async function freePort(port = 0): Promise<number> {
+    const probe = net.createServer()
+    await new Promise<void>((resolve, reject) => {
+        probe.once("error", reject)
+        probe.listen(port, "127.0.0.1", resolve)
+    })
+    const bound = (probe.address() as net.AddressInfo).port
+    await new Promise<void>((resolve) => probe.close(() => resolve()))
+    return bound
+}
+
 function json(value: unknown): string {
     return JSON.stringify(value)
 }
@@ -93,6 +105,30 @@ async function reopenWithIncompatibleInput(
     const server = await listen(second, { port: 0 })
     onTestFinished(() => server.close())
     return { clankhouse: second, client: rpcClient(server) }
+}
+
+async function interruptRun(instance: ClankHouse, name: string): Promise<string> {
+    const parked = gate()
+    instance.registerWorkflow(
+        name,
+        { input: z.object({ value: z.number() }), output: z.number(), key: () => `${name}-key` },
+        async (input) => {
+            await instance.step("remember", z.number(), async () => input.value)
+            await parked.released
+            return 0
+        }
+    )
+    const { runId } = instance.start(name, { value: 2 })
+    await expect.poll(async () => (await instance.runs.get(runId)).steps.length).toBe(1)
+    return runId
+}
+
+function registerDoubling(instance: ClankHouse, name: string, value: z.ZodTypeAny = z.number()): void {
+    instance.registerWorkflow(
+        name,
+        { input: z.object({ value }), output: z.number(), key: () => `${name}-key` },
+        async () => (await instance.step("remember", z.number(), async () => -1)) * 2
+    )
 }
 
 function incompatibleInputOutcome(outcome: unknown): string {
@@ -459,6 +495,82 @@ test("persists a private credential and authenticates unary and streaming RPCs",
     expect(await clankhouse.runs.list()).toEqual([])
 })
 
+test("serve resumes an interrupted run of a registered workflow at startup", async () => {
+    // given an interrupted run persisted by another ClankHouse instance
+    const { clankhouse, reopen } = tempClankHouse()
+    const runId = await interruptRun(clankhouse, "double")
+    const second = reopen()
+    registerDoubling(second, "double")
+
+    // when the high-level server starts on a reopened instance
+    const server = await serve(second, { port: 0 })
+    onTestFinished(() => server.close())
+
+    // then the run is resumed and finishes from its replayed step
+    expect(await runOutput(second, runId)).toBe(4)
+})
+
+test("serve with recover disabled leaves interrupted runs interrupted", async () => {
+    // given an interrupted run persisted by another ClankHouse instance
+    const { clankhouse, reopen } = tempClankHouse()
+    const runId = await interruptRun(clankhouse, "double")
+    const second = reopen()
+    registerDoubling(second, "double")
+
+    // when the high-level server starts with recovery disabled
+    const server = await serve(second, { port: 0, recover: false })
+    onTestFinished(() => server.close())
+
+    // then the run stays interrupted
+    expect((await second.runs.get(runId)).status).toBe("interrupted")
+    // and the handle carries no recover result
+    expect(server.recovered).toBeUndefined()
+})
+
+test("serve reports runs that fail to resume and still resumes the others", async () => {
+    // given interrupted runs of two workflows
+    const { clankhouse, reopen } = tempClankHouse()
+    const incompatibleRunId = await interruptRun(clankhouse, "incompatible")
+    const okRunId = await interruptRun(clankhouse, "double")
+    // and one workflow re-registered with an input schema the stored input no longer matches
+    const second = reopen()
+    registerDoubling(second, "incompatible", z.string())
+    registerDoubling(second, "double")
+    const errors: Error[] = []
+
+    // when the high-level server starts
+    const server = await serve(second, { port: 0, onError: (error) => errors.push(error) })
+    onTestFinished(() => server.close())
+
+    // then the incompatible run is reported to onError
+    expect(errors).toEqual([expect.objectContaining({ code: "workflow_input_incompatible" })])
+    expect(errors[0]!.message).toContain(incompatibleRunId)
+    // and the other run is resumed
+    expect(await runOutput(second, okRunId)).toBe(4)
+    // and the server is up
+    expect((await rpcClient(server).getRun({ runId: okRunId })).run?.metadata).toMatchObject({ workflowName: "double" })
+})
+
+test("serve exposes the recover result on the returned handle", async () => {
+    // given an interrupted run of a registered workflow and one of an unregistered workflow
+    const { clankhouse, reopen } = tempClankHouse()
+    const resumedRunId = await interruptRun(clankhouse, "double")
+    const skippedRunId = await interruptRun(clankhouse, "unregistered")
+    const second = reopen()
+    registerDoubling(second, "double")
+
+    // when the high-level server starts
+    const server = await serve(second, { port: 0 })
+    onTestFinished(() => server.close())
+
+    // then the handle reports which runs were resumed and skipped
+    expect(server.recovered).toEqual({
+        resumed: [resumedRunId],
+        skipped: [{ runId: skippedRunId, reason: "not_registered" }],
+        failed: []
+    })
+})
+
 test("serve owns process signal handling and the ClankHouse lifecycle", async () => {
     // given a fresh ClankHouse instance and the existing process signal listeners
     const { clankhouse } = tempClankHouse()
@@ -550,6 +662,25 @@ test("serve closes its ClankHouse instance when startup fails", async () => {
     // then the instance it took ownership of is closed
     expect(clankhouse.closed).toBe(true)
     expect(clankhouse.db.open).toBe(false)
+})
+
+test("serve releases its listener and closes its ClankHouse instance when recovery throws", async () => {
+    // given a ClankHouse instance whose runs table can no longer be read
+    const { clankhouse } = tempClankHouse()
+    clankhouse.db.exec("DROP TABLE runs")
+    // and a free port
+    const port = await freePort()
+
+    // when the high-level server binds that port and then recovers
+    const outcome = await serve(clankhouse, { port }).catch((error: unknown) => error)
+
+    // then the original recovery error is rethrown
+    expect(outcome).toMatchObject({ code: "SQLITE_ERROR", message: expect.stringContaining("no such table: runs") })
+    // and the instance it took ownership of is closed
+    expect(clankhouse.closed).toBe(true)
+    expect(clankhouse.db.open).toBe(false)
+    // and the port is free to bind again
+    expect(await freePort(port)).toBe(port)
 })
 
 test("rejects malformed credential files without replacing them", async () => {

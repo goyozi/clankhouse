@@ -2,7 +2,7 @@ import * as http from "node:http"
 import * as https from "node:https"
 import { Code, ConnectError } from "@connectrpc/connect"
 import { connectNodeAdapter } from "@connectrpc/connect-node"
-import { clankhouse as defaultClankHouse } from "@clankhouse/core"
+import { clankhouse as defaultClankHouse, type RecoverResult } from "@clankhouse/core"
 import type { ClankHouse } from "@clankhouse/core/clankhouse"
 import { ClankHouseService } from "@clankhouse/protocol"
 import { bearerAuth } from "./auth.js"
@@ -18,6 +18,7 @@ export type ServeOptions = {
     port?: number
     tls?: https.ServerOptions
     onError?: (error: Error) => void
+    recover?: boolean
 }
 
 export type ClankHouseServer = {
@@ -26,14 +27,19 @@ export type ClankHouseServer = {
     url: string
     readonly apiKey: string
     credentialsFile: string
+    recovered?: RecoverResult
     close(): Promise<void>
 }
 
 /**
  * Starts a ClankHouse server and takes full ownership of the clankhouse instance:
  * - handles SIGINT and SIGTERM
+ * - recovers interrupted runs once the listener is bound, unless `recover` is `false`
  * - closes ClankHouse on shutdown and on startup failure
  * - terminates the process with the received signal after cleanup
+ *
+ * Workflows must be registered before calling `serve`; interrupted runs of workflows registered later
+ * are skipped as `not_registered`.
  *
  * @see listen
  */
@@ -41,16 +47,21 @@ export async function serve(
     clankhouse: ClankHouse = defaultClankHouse(),
     options: ServeOptions = {}
 ): Promise<ClankHouseServer> {
-    let server: ClankHouseServer
+    const reportError = options.onError ?? reportServerError
+    let server: ClankHouseServer | undefined
     try {
         server = await listen(clankhouse, options)
+        if (options.recover ?? true) {
+            server.recovered = clankhouse.recover()
+            for (const failure of server.recovered.failed) reportError(failure.error)
+        }
     } catch (error) {
+        await server?.close().catch(reportError)
         clankhouse.close()
         throw error
     }
 
     const closeListener = server.close
-    const reportError = options.onError ?? reportServerError
     let closePromise: Promise<void> | undefined
     const removeSignalHandlers = () => {
         process.off("SIGINT", handleSignal)
