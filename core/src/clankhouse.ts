@@ -38,6 +38,14 @@ export type GcResult = { runs: RunGcResult; worktrees: WorktreeGcResult }
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
+export function validateGcOptions(options: GcOptions): number {
+    const minAgeDays = options.minAgeDays ?? 14
+    if (!Number.isInteger(minAgeDays) || minAgeDays < 1) {
+        throw new RangeError(`minAgeDays must be an integer of at least 1, received ${minAgeDays}`)
+    }
+    return minAgeDays
+}
+
 export type ClankHouseOptions = {
     onTriggerError?: TriggerErrorHandler
 }
@@ -200,10 +208,7 @@ export class ClankHouse {
      * - Unexpected Git metadata inconsistencies require manual repair.
      */
     async gc(options: GcOptions = {}): Promise<GcResult> {
-        const minAgeDays = options.minAgeDays ?? 14
-        if (!Number.isInteger(minAgeDays) || minAgeDays < 1) {
-            throw new RangeError(`minAgeDays must be an integer of at least 1, received ${minAgeDays}`)
-        }
+        const minAgeDays = validateGcOptions(options)
         const minAgeMs = minAgeDays * DAY_MS
         const runs =
             (options.deleteRuns ?? true)

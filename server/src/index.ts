@@ -3,7 +3,7 @@ import * as https from "node:https"
 import { Code, ConnectError } from "@connectrpc/connect"
 import { connectNodeAdapter } from "@connectrpc/connect-node"
 import { clankhouse as defaultClankHouse, type RecoverResult } from "@clankhouse/core"
-import type { ClankHouse } from "@clankhouse/core/clankhouse"
+import { validateGcOptions, type ClankHouse, type GcOptions } from "@clankhouse/core/clankhouse"
 import { ClankHouseService } from "@clankhouse/protocol"
 import { bearerAuth } from "./auth.js"
 import { resolveCredentials } from "./credentials.js"
@@ -12,6 +12,7 @@ import { clankhouseService } from "./service.js"
 
 const IDLE_SWEEP_MS = 10
 const CLOSE_GRACE_MS = 1000
+const GC_INTERVAL_MS = 24 * 60 * 60 * 1000
 
 export type ServeOptions = {
     host?: string
@@ -19,6 +20,7 @@ export type ServeOptions = {
     tls?: https.ServerOptions
     onError?: (error: Error) => void
     recover?: boolean
+    gc?: false | GcOptions
 }
 
 export type ClankHouseServer = {
@@ -35,6 +37,7 @@ export type ClankHouseServer = {
  * Starts a ClankHouse server and takes full ownership of the clankhouse instance:
  * - handles SIGINT and SIGTERM
  * - recovers interrupted runs once the listener is bound, unless `recover` is `false`
+ * - runs GC in the background after recovery and then every 24 hours, unless `gc` is `false`
  * - closes ClankHouse on shutdown and on startup failure
  * - terminates the process with the received signal after cleanup
  *
@@ -48,8 +51,10 @@ export async function serve(
     options: ServeOptions = {}
 ): Promise<ClankHouseServer> {
     const reportError = options.onError ?? reportServerError
+    const gcOptions = options.gc ?? {}
     let server: ClankHouseServer | undefined
     try {
+        if (gcOptions !== false) validateGcOptions(gcOptions)
         server = await listen(clankhouse, options)
         if (options.recover ?? true) {
             server.recovered = clankhouse.recover()
@@ -61,6 +66,7 @@ export async function serve(
         throw error
     }
 
+    const stopGc = gcOptions === false ? undefined : scheduleGc(clankhouse, gcOptions, reportError)
     const closeListener = server.close
     let closePromise: Promise<void> | undefined
     const removeSignalHandlers = () => {
@@ -69,10 +75,12 @@ export async function serve(
     }
     const close = () => {
         closePromise ??= (async () => {
+            const gcStopped = stopGc?.()
             try {
                 await closeListener()
             } finally {
                 removeSignalHandlers()
+                await gcStopped
                 clankhouse.close()
             }
         })()
@@ -91,6 +99,33 @@ export async function serve(
     process.once("SIGTERM", handleSignal)
     server.close = close
     return server
+}
+
+function scheduleGc(
+    clankhouse: ClankHouse,
+    options: GcOptions,
+    reportError: (error: Error) => void
+): () => Promise<void> {
+    let running: Promise<void> | undefined
+    const run = () => {
+        if (running !== undefined) return
+        running = clankhouse
+            .gc(options)
+            .then(
+                () => {},
+                (error: unknown) => reportError(error instanceof Error ? error : new Error(String(error)))
+            )
+            .catch(() => {})
+            .finally(() => {
+                running = undefined
+            })
+    }
+    run()
+    const timer = setInterval(run, GC_INTERVAL_MS).unref()
+    return async () => {
+        clearInterval(timer)
+        await running
+    }
 }
 
 /**
