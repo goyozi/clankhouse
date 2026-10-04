@@ -43,6 +43,8 @@ type Waiter = {
     handles: Set<EventSourceHandle>
     keys: string[]
     stepId: string
+    signal: AbortSignal
+    onAbort(): void
     resolve(result: { key: string; event: unknown }): void
     reject(error: unknown): void
 }
@@ -118,7 +120,7 @@ export class Events {
                 }
             },
             execute: async (handle) => {
-                const result = await this.waitForEvent(sources, handle.stepId)
+                const result = await this.waitForEvent(sources, handle.stepId, handle.signal)
                 handle.set("event_key", result.key)
                 return result
             }
@@ -145,13 +147,19 @@ export class Events {
         this.resolve(waiter, key, JSON.parse(payload))
     }
 
-    private waitForEvent(sources: readonly EventSource[], stepId: string): Promise<{ key: string; event: unknown }> {
+    private waitForEvent(
+        sources: readonly EventSource[],
+        stepId: string,
+        signal: AbortSignal
+    ): Promise<{ key: string; event: unknown }> {
         return new Promise((resolve, reject) => {
             const waiter: Waiter = {
                 active: true,
                 handles: new Set(),
                 keys: sources.map((source) => source.key),
                 stepId,
+                signal,
+                onAbort: () => this.reject(waiter, signal.reason),
                 resolve,
                 reject
             }
@@ -163,6 +171,8 @@ export class Events {
                 return
             }
             try {
+                signal.addEventListener("abort", waiter.onAbort, { once: true })
+                signal.throwIfAborted()
                 this.register(waiter)
                 this.start(waiter, sources)
             } catch (error) {
@@ -222,6 +232,7 @@ export class Events {
     private deactivate(waiter: Waiter): void {
         if (!waiter.active) return
         waiter.active = false
+        waiter.signal.removeEventListener("abort", waiter.onAbort)
         this.deregister(waiter)
         for (const handle of waiter.handles) this.stop(handle)
         waiter.handles.clear()

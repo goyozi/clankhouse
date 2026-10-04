@@ -12,6 +12,8 @@ type Statement = Database.Statement
 
 export type PersistedStatus = "interrupted" | "succeeded" | "failed"
 
+export type PersistedRunStatus = PersistedStatus | "canceled"
+
 type Statements = {
     runs: RunStatements
     steps: StepStatements
@@ -69,7 +71,7 @@ CREATE TABLE IF NOT EXISTS runs (
     output        TEXT,
     error         TEXT,
     error_code    TEXT,
-    status        TEXT NOT NULL CHECK (status IN ('interrupted','succeeded','failed')),
+    status        TEXT NOT NULL CHECK (status IN ('interrupted','succeeded','failed','canceled')),
     started_at    TEXT NOT NULL,
     ended_at      TEXT,
     gc_state      TEXT CHECK (gc_state IN ('deleting','deleted')),
@@ -89,7 +91,7 @@ export type RunRow = {
     output: string | null
     error: string | null
     error_code: ClankHouseErrorCode | null
-    status: PersistedStatus
+    status: PersistedRunStatus
     started_at: string
     ended_at: string | null
     gc_state: RunGcState | null
@@ -100,7 +102,7 @@ export type RunGcState = "deleting" | "deleted"
 export type ListRunsFilter = {
     key?: string
     workflowName?: string
-    statuses?: PersistedStatus[]
+    statuses?: PersistedRunStatus[]
     lastN?: number
 }
 
@@ -110,6 +112,7 @@ type RunStatements = {
     findById: Statement
     succeed: Statement
     fail: Statement
+    cancel: Statement
     findGcCandidates: Statement
     findByGcState: Statement
     findInterrupted: Statement
@@ -127,11 +130,12 @@ function prepareRunStatements(db: Db): RunStatements {
         findById: db.prepare("SELECT * FROM runs WHERE id = ?"),
         succeed: db.prepare("UPDATE runs SET status = 'succeeded', output = ?, ended_at = ? WHERE id = ?"),
         fail: db.prepare("UPDATE runs SET status = 'failed', error = ?, error_code = ?, ended_at = ? WHERE id = ?"),
+        cancel: db.prepare("UPDATE runs SET status = 'canceled', ended_at = ? WHERE id = ?"),
         findInterrupted: db.prepare(
             "SELECT * FROM runs WHERE gc_state IS NULL AND status = 'interrupted' ORDER BY started_at, id"
         ),
         findGcCandidates: db.prepare(
-            "SELECT id FROM runs WHERE gc_state IS NULL AND status IN ('succeeded','failed') AND ended_at < ? ORDER BY id"
+            "SELECT id FROM runs WHERE gc_state IS NULL AND status IN ('succeeded','failed','canceled') AND ended_at < ? ORDER BY id"
         ),
         findByGcState: db.prepare("SELECT id FROM runs WHERE gc_state = ? ORDER BY id"),
         setGcState: db.prepare("UPDATE runs SET gc_state = ? WHERE id = ?")
@@ -170,6 +174,10 @@ export function failRun(
     endedAt: string
 ): void {
     statements(db).runs.fail.run(error, errorCode, endedAt, id)
+}
+
+export function cancelRun(db: Db, id: string, endedAt: string): void {
+    statements(db).runs.cancel.run(endedAt, id)
 }
 
 export function findInterruptedRuns(db: Db): RunRow[] {

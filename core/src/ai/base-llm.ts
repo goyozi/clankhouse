@@ -59,7 +59,8 @@ export abstract class BaseLanguageModel implements LanguageModel {
                 return this.invoke({ stepName, prompt, output: options.output, session })
             },
             onSuccess: async () => session?.succeed(),
-            onError: async () => session?.fail()
+            onError: async () => session?.fail(),
+            onInterrupt: async () => session?.interrupt()
         })
     }
 }

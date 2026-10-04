@@ -46,6 +46,10 @@ export function validateGcOptions(options: GcOptions): number {
     return minAgeDays
 }
 
+export type StepContext = {
+    signal: AbortSignal
+}
+
 export type ClankHouseOptions = {
     onTriggerError?: TriggerErrorHandler
 }
@@ -134,6 +138,10 @@ export class ClankHouse {
         return this.workflows.rerun(runId, options)
     }
 
+    cancel(runId: string): void {
+        this.workflows.cancel(runId)
+    }
+
     /**
      * Starts a workflow run and awaits its completion. Promise resolves when run is **finished**.
      */
@@ -154,8 +162,17 @@ export class ClankHouse {
      * Wraps custom function as a durable step.
      * On re-run, stored output is validated against provided output schema.
      */
-    step<T extends z.ZodTypeAny>(name: string, output: T, stepFn: () => Promise<z.infer<T>>): Promise<z.infer<T>> {
-        return this.engine.executeStep({ kind: "custom", name, schema: output, execute: stepFn })
+    step<T extends z.ZodTypeAny>(
+        name: string,
+        output: T,
+        stepFn: (context: StepContext) => Promise<z.infer<T>>
+    ): Promise<z.infer<T>> {
+        return this.engine.executeStep({
+            kind: "custom",
+            name,
+            schema: output,
+            execute: (handle) => stepFn({ signal: handle.signal })
+        })
     }
 
     /**
@@ -198,7 +215,7 @@ export class ClankHouse {
     }
 
     /**
-     * Soft deletes succeeded and failed runs that ended more than `minAgeDays` ago and are not running,
+     * Soft deletes succeeded, failed and canceled runs that ended more than `minAgeDays` ago and are not running,
      * then cleans up dangling (unassigned) worktrees older than `minAgeDays`.
      * Deleted runs keep a tombstone: they are hidden from listings, their key stays a no-op for `start()`
      * and `run()` throws `workflow_run_deleted`. Artifact references inside run or step inputs/outputs may dangle.

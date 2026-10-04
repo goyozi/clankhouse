@@ -549,6 +549,48 @@ test("reports workflow failures without contaminating pipeline output", async ()
     })
 })
 
+test("run reports a workflow run canceled while the command waits for it", async () => {
+    // given a workflow parked on its abort signal
+    const { clankhouse } = tempClankHouse()
+    const parked = { human: gate(), json: gate() }
+    clankhouse.registerWorkflow(
+        "cancelable",
+        { input: z.enum(["human", "json"]), output: z.string(), key: (input) => input },
+        async (input) => {
+            await clankhouse.step("park", z.void(), async ({ signal }) => {
+                parked[input].release()
+                await new Promise((_, reject) => signal.addEventListener("abort", () => reject(signal.reason)))
+            })
+            return "finished"
+        }
+    )
+    const env = serverEnv(await testServer(clankhouse))
+    // and run commands waiting for a human and a JSON run
+    const human = startCli(["run", "cancelable", "--input", "-"], { env, input: JSON.stringify("human") })
+    const json = startCli(["run", "cancelable", "--input", "-", "--json"], { env, input: JSON.stringify("json") })
+    await parked.human.released
+    await parked.json.released
+    const [humanRun] = await clankhouse.runs.list({ key: "human" })
+    const [jsonRun] = await clankhouse.runs.list({ key: "json" })
+
+    // when both runs are canceled
+    clankhouse.cancel(humanRun!.id)
+    clankhouse.cancel(jsonRun!.id)
+
+    // then the human command fails with the canceled error and an empty stdout
+    expect({ code: await human.done, stdout: human.stdout().toString(), stderr: human.stderr() }).toEqual({
+        code: 1,
+        stdout: "",
+        stderr: `clank: Workflow run canceled: ${humanRun!.id}\n`
+    })
+    // and the JSON command reports the canceled error code on stderr
+    expect({ code: await json.done, stdout: json.stdout().toString(), error: JSON.parse(json.stderr()) }).toEqual({
+        code: 1,
+        stdout: "",
+        error: { type: "error", code: "workflow_run_canceled", message: `Workflow run canceled: ${jsonRun!.id}` }
+    })
+})
+
 test("cancels a running workflow command without reporting an error", async () => {
     // given a workflow command waiting for its run to finish
     const { clankhouse } = tempClankHouse()
@@ -1087,6 +1129,39 @@ test("ps lists only running runs and excludes interrupted ones", async () => {
     ])
     // and the shared filters still apply
     expect(fromJsonString(ListRunsResponseSchema, lines(filtered.stdout)[0]!).runs).toEqual([])
+})
+
+test("ps excludes canceled runs while runs list renders and filters them", async () => {
+    // given a running run and a canceled run
+    const { clankhouse } = tempClankHouse()
+    clankhouse.registerWorkflow(
+        "wait",
+        { input: z.string(), output: z.string(), key: (input) => input },
+        async (input) => clankhouse.waitFor({ key: `event:${input}`, schema: z.string() })
+    )
+    const runningId = clankhouse.start("wait", "running").runId
+    const canceledId = clankhouse.start("wait", "canceled").runId
+    await waitForStep(clankhouse, runningId, "wait:event:running")
+    await waitForStep(clankhouse, canceledId, "wait:event:canceled")
+    clankhouse.cancel(canceledId)
+    await waitForRun(clankhouse, canceledId)
+    const env = serverEnv(await testServer(clankhouse))
+
+    // when running and canceled runs are listed
+    const ps = await runCliCommand(["ps", "--json"], { env })
+    const canceled = await runCliCommand(["runs", "list", "--status", "canceled", "--json"], { env })
+    const human = await runCliCommand(["runs", "list", "--key", "canceled"], { env })
+
+    // then ps only includes the running run
+    expect(fromJsonString(ListRunsResponseSchema, lines(ps.stdout)[0]!).runs).toMatchObject([
+        { id: runningId, status: ExecutionStatus.RUNNING }
+    ])
+    // and the canceled run is filtered and rendered as canceled
+    expect(fromJsonString(ListRunsResponseSchema, lines(canceled.stdout)[0]!).runs).toMatchObject([
+        { id: canceledId, status: ExecutionStatus.CANCELED }
+    ])
+    expect(human.code).toBe(0)
+    expect(lines(human.stdout)[1]).toMatch(new RegExp(`^${canceledId}\\s+wait\\s+canceled\\s+1\\s+canceled\\s`))
 })
 
 test("ps rejects the status option", async () => {

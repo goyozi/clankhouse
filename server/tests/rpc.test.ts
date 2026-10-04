@@ -2,7 +2,7 @@ import { FakeCodingAgent } from "@clankhouse/core/ai/fake-agent"
 import { FakeLLM } from "@clankhouse/core/ai/fake-llm"
 import { GitRepository } from "@clankhouse/core/git"
 import { ExecutionStatus, StepKind, ToolResultStatus, ToolSourceKind } from "@clankhouse/protocol"
-import { runOutput, tempGitRepo, tempClankHouse, testSession } from "@clankhouse/test-utils"
+import { gate, runOutput, tempGitRepo, tempClankHouse, testSession } from "@clankhouse/test-utils"
 import { expect, test } from "vitest"
 import * as z from "zod"
 import { nextRunningStep, rpcClient, testServer } from "./helpers"
@@ -307,4 +307,31 @@ test("distinguishes absent void schemas and values from present JSON null across
     // and protobuf output text exactly matches SQLite presence and contents
     expect(clankhouse.db.prepare("SELECT output FROM runs WHERE id = ?").get(voidId)).toEqual({ output: null })
     expect(clankhouse.db.prepare("SELECT output FROM runs WHERE id = ?").get(nullId)).toEqual({ output: "null" })
+})
+
+test("maps canceled runs to the canceled execution status", async () => {
+    // given a canceled run
+    const { clankhouse } = tempClankHouse()
+    const parked = gate()
+    clankhouse.registerWorkflow("park", { input: z.null(), output: z.null(), key: () => "park" }, async () => {
+        await clankhouse.step("park", z.void(), async ({ signal }) => {
+            parked.release()
+            await new Promise((_, reject) => signal.addEventListener("abort", () => reject(signal.reason)))
+        })
+        return null
+    })
+    const { runId } = clankhouse.start("park", null)
+    await parked.released
+    clankhouse.cancel(runId)
+    await expect.poll(async () => (await clankhouse.runs.get(runId)).steps[0]?.status).toBe("interrupted")
+    const client = rpcClient(await testServer(clankhouse))
+
+    // when the run is fetched and listed by status
+    const fetched = (await client.getRun({ runId })).run!
+    const listed = await client.listRuns({ statuses: [ExecutionStatus.CANCELED] })
+
+    // then the canceled status is exposed and filterable
+    expect(fetched.metadata).toMatchObject({ id: runId, status: ExecutionStatus.CANCELED })
+    expect(fetched.steps).toMatchObject([{ key: "park", status: ExecutionStatus.INTERRUPTED }])
+    expect(listed.runs).toMatchObject([{ id: runId, status: ExecutionStatus.CANCELED }])
 })

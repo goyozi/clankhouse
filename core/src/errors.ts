@@ -11,6 +11,8 @@ export type ClankHouseErrorCode =
     | "workflow_run_deleted"
     | "workflow_run_failed"
     | "workflow_run_not_resumable"
+    | "workflow_run_canceled"
+    | "workflow_run_not_cancelable"
     | "workflow_run_in_progress"
     | "workflow_run_not_latest"
     | "workflow_step_not_found"

@@ -237,6 +237,9 @@ function completedRunOutput(runId: string, run: WorkflowRun | undefined): string
     if (run.metadata.status === ExecutionStatus.INTERRUPTED) {
         throw new CliError("workflow_run_interrupted", `Workflow run interrupted: ${runId}`)
     }
+    if (run.metadata.status === ExecutionStatus.CANCELED) {
+        throw new CliError("workflow_run_canceled", `Workflow run canceled: ${runId}`)
+    }
     if (run.metadata.status !== ExecutionStatus.SUCCEEDED) {
         throw new CliError("internal", `Workflow run did not finish: ${runId}`)
     }
@@ -527,8 +530,10 @@ function parseStatus(value: string): ExecutionStatus {
             return ExecutionStatus.SUCCEEDED
         case "failed":
             return ExecutionStatus.FAILED
+        case "canceled":
+            return ExecutionStatus.CANCELED
         default:
-            throw new InvalidArgumentError(`allowed values are interrupted, running, succeeded, and failed`)
+            throw new InvalidArgumentError(`allowed values are interrupted, running, succeeded, failed, and canceled`)
     }
 }
 

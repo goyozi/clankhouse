@@ -11,6 +11,7 @@ export type RunContext = {
     prefixes: string[]
     seenStepKeys: Set<string>
     seq: { next: number }
+    controller: AbortController
 }
 
 export const runContext = new AsyncLocalStorage<RunContext>()

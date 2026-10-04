@@ -131,6 +131,19 @@ export class Workflows {
         return plan.runRow.id
     }
 
+    cancel(runId: string): void {
+        const runRow = this.requireRun(runId)
+        if (runRow.status === "canceled") return
+        if (runRow.status !== "interrupted") {
+            throw new ClankHouseError(
+                "workflow_run_not_cancelable",
+                `Run "${runRow.id}" has ${runRow.status} and cannot be canceled`
+            )
+        }
+        sql.cancelRun(this.db, runRow.id, nowIso())
+        this.engine.abortRun(runRow.id, runCanceled(runRow))
+    }
+
     async run<T extends z.ZodTypeAny>(
         name: string,
         key: string,
@@ -208,7 +221,9 @@ export class Workflows {
     private resolveRun(workflowName: string, key: string): Plan {
         const sourceRun = sql.findLastAttempt(this.db, workflowName, key)
         if (!sourceRun) return { type: "execute", runRow: this.insertRun({ workflowName, value: key, input: null }, 1) }
-        if (this.active.runs.has(sourceRun.id)) return { type: "noopRunning", runRow: sourceRun }
+        if (sourceRun.status !== "canceled" && this.active.runs.has(sourceRun.id)) {
+            return { type: "noopRunning", runRow: sourceRun }
+        }
         switch (sourceRun.status) {
             case "succeeded":
                 return { type: "noopSucceeded", runRow: sourceRun }
@@ -220,17 +235,20 @@ export class Workflows {
                     "workflow_run_failed",
                     `Run "${key}" has failed; rerun it from a step to start a new attempt`
                 )
+            case "canceled":
+                if (sourceRun.gc_state !== null) throw runDeleted(sourceRun)
+                throw runCanceled(sourceRun)
         }
     }
 
     private resolveResume(sourceRun: RunRow): Plan {
-        if (this.active.runs.has(sourceRun.id)) return { type: "noopRunning", runRow: sourceRun }
         if (sourceRun.status !== "interrupted") {
             throw new ClankHouseError(
                 "workflow_run_not_resumable",
                 `Run "${sourceRun.id}" has ${sourceRun.status} and cannot be resumed`
             )
         }
+        if (this.active.runs.has(sourceRun.id)) return { type: "noopRunning", runRow: sourceRun }
         return { type: "execute", runRow: sourceRun }
     }
 
@@ -304,6 +322,10 @@ export class Workflows {
             output
         })
     }
+}
+
+function runCanceled(row: RunRow): ClankHouseError {
+    return new ClankHouseError("workflow_run_canceled", `Run "${row.key}" (${row.id}) has been canceled`)
 }
 
 function runDeleted(row: RunRow): ClankHouseError {

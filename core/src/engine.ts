@@ -14,6 +14,7 @@ export type { StepColumn } from "./db.js"
 export type StepHandle = {
     readonly stepId: string
     readonly stepKey: string
+    readonly signal: AbortSignal
     set(column: StepColumn, value: string | number): void
 }
 
@@ -28,6 +29,7 @@ export type ExecuteStepOptions<T extends z.ZodTypeAny> = {
     parse?: (value: unknown) => z.infer<T>
     onSuccess?: (handle: StepHandle, output: z.infer<T>) => Promise<void>
     onError?: (handle: StepHandle) => Promise<void>
+    onInterrupt?: (handle: StepHandle) => Promise<void>
     onReplay?: (row: StepRow) => Promise<void>
 }
 
@@ -64,17 +66,21 @@ export class Engine {
             attempt: runRow.attempt,
             prefixes: [],
             seenStepKeys: new Set(),
-            seq: { next: maxSeq + 1 }
+            seq: { next: maxSeq + 1 },
+            controller: new AbortController()
         }
+        const signal = ctx.controller.signal
         const promise = Promise.resolve()
             .then(() => runContext.run(ctx, fn))
             .then((value) => output.parse(value))
             .then(
                 (value) => {
+                    signal.throwIfAborted()
                     sql.succeedRun(db, runRow.id, value === undefined ? null : JSON.stringify(value), nowIso())
                     return value
                 },
                 (e) => {
+                    signal.throwIfAborted()
                     sql.failRun(db, runRow.id, errorMessage(e), errorCode(e), nowIso())
                     throw e
                 }
@@ -83,13 +89,14 @@ export class Engine {
                 this.active.runs.delete(runRow.id)
                 this.notifier.notify(runRow.id)
             })
-        this.active.runs.set(runRow.id, { promise })
+        this.active.runs.set(runRow.id, { promise, controller: ctx.controller })
         return promise
     }
 
     async executeStep<T extends z.ZodTypeAny>(options: ExecuteStepOptions<T>): Promise<z.infer<T>> {
-        const io = validateStepSchema(options)
         const ctx = requireContext()
+        ctx.controller.signal.throwIfAborted()
+        const io = validateStepSchema(options)
         const key = this.claimStepKey(ctx, options.name)
         const existing = sql.findStep(this.db, ctx.runId, key)
         if (existing?.status === "succeeded") return this.replayStep(options, existing)
@@ -123,7 +130,7 @@ export class Engine {
         existing: StepRow | undefined
     ): PreparedStep {
         const id = existing ? this.resetStep(existing) : this.insertStep(ctx, key, options)
-        return { id, runId: ctx.runId, handle: this.stepHandle(id, ctx.runId, key) }
+        return { id, runId: ctx.runId, handle: this.stepHandle(id, ctx.runId, key, ctx.controller.signal) }
     }
 
     private resetStep(row: StepRow): string {
@@ -145,10 +152,11 @@ export class Engine {
         return id
     }
 
-    private stepHandle(id: string, runId: string, key: string): StepHandle {
+    private stepHandle(id: string, runId: string, key: string, signal: AbortSignal): StepHandle {
         return {
             stepId: id,
             stepKey: key,
+            signal,
             set: (column, value) => {
                 sql.setStepColumn(this.db, id, column, value)
                 this.notifier.notify(runId)
@@ -165,9 +173,6 @@ export class Engine {
         this.notifier.notify(step.runId)
         try {
             return await this.executePreparedStep(options, io, step)
-        } catch (error) {
-            await this.failPreparedStep(options, step, error)
-            throw error
         } finally {
             this.active.steps.delete(step.id)
             this.notifier.notify(step.runId)
@@ -179,12 +184,44 @@ export class Engine {
         io: SchemaIo,
         step: PreparedStep
     ): Promise<z.infer<T>> {
-        const raw = await options.execute(step.handle)
+        let raw: unknown
+        try {
+            raw = await options.execute(step.handle)
+        } catch (error) {
+            if (step.handle.signal.aborted) return this.interruptPreparedStep(options, step)
+            await this.failPreparedStep(options, step, error)
+            throw error
+        }
+        if (step.handle.signal.aborted) return this.interruptPreparedStep(options, step)
+        try {
+            return await this.succeedPreparedStep(options, io, step, raw)
+        } catch (error) {
+            await this.failPreparedStep(options, step, error)
+            throw error
+        }
+    }
+
+    private async succeedPreparedStep<T extends z.ZodTypeAny>(
+        options: ExecuteStepOptions<T>,
+        io: SchemaIo,
+        step: PreparedStep,
+        raw: unknown
+    ): Promise<z.infer<T>> {
         const output = parseStepOutput(options, raw)
         if (options.onSuccess) await options.onSuccess(step.handle, output)
         const persisted = io === "input" ? raw : output
         sql.succeedStep(this.db, step.id, persisted === undefined ? null : JSON.stringify(persisted), nowIso())
         return output
+    }
+
+    private async interruptPreparedStep<T extends z.ZodTypeAny>(
+        options: ExecuteStepOptions<T>,
+        step: PreparedStep
+    ): Promise<never> {
+        try {
+            if (options.onInterrupt) await options.onInterrupt(step.handle)
+        } catch {}
+        throw step.handle.signal.reason
     }
 
     private async failPreparedStep<T extends z.ZodTypeAny>(
@@ -194,6 +231,13 @@ export class Engine {
     ): Promise<void> {
         if (options.onError) await options.onError(step.handle)
         sql.failStep(this.db, step.id, errorMessage(error), errorCode(error), nowIso())
+    }
+
+    abortRun(runId: string, reason: ClankHouseError): void {
+        const active = this.active.runs.get(runId)
+        if (!active) return
+        this.notifier.notify(runId)
+        active.controller.abort(reason)
     }
 
     async prefix<O>(name: string, fn: () => Promise<O>): Promise<O> {

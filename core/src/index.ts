@@ -1,5 +1,5 @@
 import * as z from "zod"
-import { ClankHouse } from "./clankhouse.js"
+import { ClankHouse, type StepContext } from "./clankhouse.js"
 import type { ActiveEventSource, EventSource, EventSourceResult } from "./events.js"
 import type { TriggerArguments, TriggerHandle } from "./triggers.js"
 import type { RecoverResult, RerunOptions, StartResult, WorkflowOptions, WorkflowRef, Workflows } from "./workflows.js"
@@ -58,6 +58,10 @@ export function rerun(runId: string, options: RerunOptions): string {
     return clankhouse().rerun(runId, options)
 }
 
+export function cancel(runId: string): void {
+    return clankhouse().cancel(runId)
+}
+
 export function run<T extends z.ZodTypeAny>(
     name: string,
     key: string,
@@ -74,7 +78,7 @@ export function recover(): RecoverResult {
 export function step<T extends z.ZodTypeAny>(
     name: string,
     output: T,
-    stepFn: () => Promise<z.infer<T>>
+    stepFn: (context: StepContext) => Promise<z.infer<T>>
 ): Promise<z.infer<T>> {
     return clankhouse().step(name, output, stepFn)
 }
@@ -112,7 +116,7 @@ export type {
     EventSourceResult
 } from "./events.js"
 export type { TriggerErrorHandler, TriggerHandle, TriggerOptions } from "./triggers.js"
-export type { ClankHouseOptions, GcOptions, GcResult } from "./clankhouse.js"
+export type { ClankHouseOptions, GcOptions, GcResult, StepContext } from "./clankhouse.js"
 export { fileCreated, fileCreatedIn } from "./files.js"
 export { ClankHouseError } from "./errors.js"
 export type { ClankHouseErrorCode } from "./errors.js"

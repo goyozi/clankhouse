@@ -104,6 +104,8 @@ function fromExecutionStatus(status: ExecutionStatus): ObservableRunStatus {
             return "succeeded"
         case ExecutionStatus.FAILED:
             return "failed"
+        case ExecutionStatus.CANCELED:
+            return "canceled"
         default:
             throw new ConnectError("statuses contains an unspecified value", Code.InvalidArgument)
     }

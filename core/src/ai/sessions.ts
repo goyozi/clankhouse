@@ -126,6 +126,10 @@ export class AISessions {
                 sql.failSession(db, id, nowIso())
                 active.delete(id)
                 notify()
+            },
+            interrupt() {
+                active.delete(id)
+                notify()
             }
         }
     }
@@ -255,6 +259,7 @@ export type SessionRecorder = {
     addToolResult(result: NewSessionToolResult): void
     succeed(): void
     fail(): void
+    interrupt(): void
 }
 
 export type AISession = {

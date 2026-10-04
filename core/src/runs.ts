@@ -66,7 +66,7 @@ export class WorkflowRuns {
     /**
      * Streams step and run updates.
      * Step updates are yielded as they arrive, while run updates are yielded when
-     * a run stops (succeeded, failed, or interrupted).
+     * a run stops (succeeded, failed, canceled, or interrupted).
      *
      * Parameter `fromStepId` is inclusive as the step's state may have changed.
      *
@@ -254,7 +254,7 @@ export type WorktreeStep = StepBase & { kind: "worktree"; output?: WorktreeRefer
 export type Step = CustomStep | ArtifactStep | LlmStep | AgentStep | EventStep | WorktreeStep
 
 // persisted state is never "running" -> "running" stuff is in-memory only and "overlayed" on top of "interrupted"
-export type PersistedRunStatus = "interrupted" | "succeeded" | "failed"
+export type PersistedRunStatus = "interrupted" | "succeeded" | "failed" | "canceled"
 
 export type ObservableRunStatus = PersistedRunStatus | "running"
 

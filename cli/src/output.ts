@@ -61,6 +61,8 @@ export function executionStatus(value: ExecutionStatus): string {
             return "succeeded"
         case ExecutionStatus.FAILED:
             return "failed"
+        case ExecutionStatus.CANCELED:
+            return "canceled"
         default:
             return "unspecified"
     }

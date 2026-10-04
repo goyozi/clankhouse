@@ -82,6 +82,7 @@ export abstract class BaseCodingAgent implements CodingAgent {
                 session?.succeed()
             },
             onError: async () => session?.fail(),
+            onInterrupt: async () => session?.interrupt(),
             onReplay: async (row) => {
                 const recordedSnapshot = row.snapshot_enabled === 1
                 if (recordedSnapshot !== snapshot) {

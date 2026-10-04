@@ -142,6 +142,8 @@ export function toExecutionStatus(status: ObservableRunStatus | ObservableStepSt
             return ExecutionStatus.SUCCEEDED
         case "failed":
             return ExecutionStatus.FAILED
+        case "canceled":
+            return ExecutionStatus.CANCELED
     }
 }
 

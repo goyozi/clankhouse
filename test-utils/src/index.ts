@@ -109,7 +109,7 @@ export async function testSession(
 
 export async function waitForRun(clankhouse: ClankHouse, runId: string): Promise<WorkflowRun> {
     let run = await clankhouse.runs.get(runId)
-    while (run.status !== "succeeded" && run.status !== "failed") {
+    while (run.status !== "succeeded" && run.status !== "failed" && run.status !== "canceled") {
         await delay(5)
         run = await clankhouse.runs.get(runId)
     }
