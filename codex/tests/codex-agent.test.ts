@@ -471,7 +471,7 @@ You may include prose outside the tags.`)
 })
 
 test("CodexAgent forwards every configured native SDK option", async () => {
-    // given a codex agent configured with every supported client and thread option
+    // given a codex agent configured with effort and client and thread SDK options
     const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
@@ -480,16 +480,23 @@ test("CodexAgent forwards every configured native SDK option", async () => {
     }))
     const agent = new CodexAgent({
         model: "gpt-5.4",
-        sandboxMode: "danger-full-access",
-        approvalPolicy: "untrusted",
-        modelReasoningEffort: "high",
-        networkAccessEnabled: true,
-        webSearchMode: "live",
-        additionalDirectories: ["/tmp/extra"],
-        codexPathOverride: "/opt/codex",
-        baseUrl: "https://example.test",
-        apiKey: "test-key",
-        config: { show_raw_agent_reasoning: true },
+        effort: "high",
+        sdkOptions: {
+            client: {
+                codexPathOverride: "/opt/codex",
+                baseUrl: "https://example.test",
+                apiKey: "test-key",
+                config: { show_raw_agent_reasoning: true }
+            },
+            thread: {
+                sandboxMode: "danger-full-access",
+                approvalPolicy: "untrusted",
+                networkAccessEnabled: true,
+                webSearchMode: "live",
+                additionalDirectories: ["/tmp/extra"],
+                skipGitRepoCheck: true
+            }
+        },
         codexFactory
     })
     let worktree!: Worktree
@@ -521,7 +528,8 @@ test("CodexAgent forwards every configured native SDK option", async () => {
             modelReasoningEffort: "high",
             networkAccessEnabled: true,
             webSearchMode: "live",
-            additionalDirectories: ["/tmp/extra"]
+            additionalDirectories: ["/tmp/extra"],
+            skipGitRepoCheck: true
         }
     ])
 })
@@ -538,7 +546,9 @@ test("CodexAgent augments the process environment with the configured env", asyn
     process.env.CLANKHOUSE_CODEX_OVERRIDDEN = "from-process"
     const agent = new CodexAgent({
         model: "gpt-5.4",
-        env: { CLANKHOUSE_CODEX_OVERRIDDEN: "from-agent", CLANKHOUSE_CODEX_ADDED: "from-agent" },
+        sdkOptions: {
+            client: { env: { CLANKHOUSE_CODEX_OVERRIDDEN: "from-agent", CLANKHOUSE_CODEX_ADDED: "from-agent" } }
+        },
         codexFactory
     })
 

@@ -12,7 +12,7 @@ import { BaseCodingAgent, type CodingAgentInvocation } from "@clankhouse/core/ai
 import type { CommonTool, SessionRecorder } from "@clankhouse/core/ai/sessions"
 import type { Worktree } from "@clankhouse/core/git"
 
-export type PiAgentSessionOptions = Omit<CreateAgentSessionOptions, "cwd" | "model" | "sessionManager">
+export type PiAgentSdkOptions = Omit<CreateAgentSessionOptions, "cwd" | "model" | "thinkingLevel" | "sessionManager">
 
 export type PiAgentSession = Pick<AgentSession, "sessionId" | "subscribe" | "prompt" | "dispose">
 
@@ -21,7 +21,8 @@ export type PiAgentSessionFactory = (options: CreateAgentSessionOptions) => Prom
 export type PiAgentOptions = {
     provider: string
     model: string
-    sessionOptions?: PiAgentSessionOptions
+    effort?: CreateAgentSessionOptions["thinkingLevel"]
+    sdkOptions?: PiAgentSdkOptions
     createAgentSession?: PiAgentSessionFactory
 }
 
@@ -57,10 +58,10 @@ export class PiAgent extends BaseCodingAgent {
     }
 
     private async getModelRuntime(): Promise<ModelRuntime> {
-        if (this.options.sessionOptions?.modelRuntime !== undefined) {
-            return this.options.sessionOptions.modelRuntime
+        if (this.options.sdkOptions?.modelRuntime !== undefined) {
+            return this.options.sdkOptions.modelRuntime
         }
-        this.modelRuntimePromise ??= ModelRuntime.create(modelRuntimeOptions(this.options.sessionOptions?.agentDir))
+        this.modelRuntimePromise ??= ModelRuntime.create(modelRuntimeOptions(this.options.sdkOptions?.agentDir))
         try {
             return await this.modelRuntimePromise
         } catch (error) {
@@ -74,15 +75,17 @@ export class PiAgent extends BaseCodingAgent {
         modelRuntime: ModelRuntime,
         model: NonNullable<ReturnType<ModelRuntime["getModel"]>>
     ): CreateAgentSessionOptions {
-        const sessionOptions = this.options.sessionOptions ?? {}
-        return {
-            ...sessionOptions,
+        const sdkOptions = this.options.sdkOptions ?? {}
+        const options: CreateAgentSessionOptions = {
+            ...sdkOptions,
             cwd: worktree.path,
             model,
             modelRuntime,
             sessionManager: SessionManager.inMemory(worktree.path),
-            excludeTools: [...new Set([...(sessionOptions.excludeTools ?? []), "ask_question"])]
+            excludeTools: [...new Set([...(sdkOptions.excludeTools ?? []), "ask_question"])]
         }
+        if (this.options.effort !== undefined) options.thinkingLevel = this.options.effort
+        return options
     }
 }
 

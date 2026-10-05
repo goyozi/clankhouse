@@ -494,7 +494,7 @@ test("ClaudeAgent passes default options to the SDK", async () => {
 })
 
 test("ClaudeAgent passes configured options to the SDK", async () => {
-    // given a claude agent with every option customized
+    // given a claude agent with effort and SDK options overriding ClankHouse defaults
     const { clankhouse } = tempClankHouse()
     const repo = await tempGitRepo()
     const repository = new GitRepository(repo.path)
@@ -502,12 +502,16 @@ test("ClaudeAgent passes configured options to the SDK", async () => {
     const agent = new ClaudeAgent({
         model: "claude-opus-4-8",
         effort: "medium",
-        maxTurns: 5,
-        env: { CLAUDE_TEST: "1" },
-        allowedTools: ["Read", "Write"],
-        disallowedTools: ["WebSearch"],
-        settingSources: [],
-        systemPrompt: "custom prompt",
+        sdkOptions: {
+            maxTurns: 5,
+            env: { CLAUDE_TEST: "1" },
+            allowedTools: ["Read", "Write"],
+            disallowedTools: ["WebSearch"],
+            settingSources: [],
+            systemPrompt: "custom prompt",
+            permissionMode: "acceptEdits",
+            mcpServers: { docs: { type: "http", url: "https://example.test/mcp" } }
+        },
         query
     })
 
@@ -530,6 +534,9 @@ test("ClaudeAgent passes configured options to the SDK", async () => {
     expect(options.disallowedTools).toEqual(["WebSearch", "AskUserQuestion"])
     expect(options.settingSources).toEqual([])
     expect(options.systemPrompt).toBe("custom prompt")
+    expect(options.permissionMode).toBe("acceptEdits")
+    // and SDK options without a dedicated ClankHouse option are forwarded verbatim
+    expect(options.mcpServers).toEqual({ docs: { type: "http", url: "https://example.test/mcp" } })
     // and the session records the configured model
     const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
     const step = run.steps.find((candidate) => candidate.kind === "agent")!

@@ -6,7 +6,7 @@ import { serve } from "@clankhouse/server"
 import * as z from "zod"
 import { createDualReviewWorkflow } from "./workflow"
 
-const reviewer2Options = { model: "gpt-5.6-sol", modelReasoningEffort: "xhigh" } as const
+const reviewer2Options = { model: "gpt-5.6-sol", effort: "xhigh" } as const
 const workflow = createDualReviewWorkflow({
     reviewer1: new ClaudeAgent({ model: "claude-opus-5", effort: "medium" }),
     reviewer2: new CodexAgent(reviewer2Options),

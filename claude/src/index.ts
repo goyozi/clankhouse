@@ -15,21 +15,30 @@ export type QueryFunction = (input: {
     options?: Options
 }) => AsyncIterable<SDKMessage>
 
+export type ClaudeAgentSdkOptions = Omit<
+    Options,
+    | "cwd"
+    | "model"
+    | "effort"
+    | "outputFormat"
+    | "continue"
+    | "resume"
+    | "resumeSessionAt"
+    | "resumeDropsTurn"
+    | "forkSession"
+    | "sessionId"
+>
+
 export type ClaudeAgentOptions = {
     model: string
     effort?: Options["effort"]
-    maxTurns?: number
-    env?: Record<string, string | undefined>
-    allowedTools?: string[]
-    disallowedTools?: string[]
     /**
-     * Sources the agent loads configuration from. Caution: the default is `["project"]`, which is
-     * required to pick up the target repo's CLAUDE.md but also loads that repo's committed
-     * `.claude/settings.json`, applying its permissions and hooks during the run. Pass `[]` to run
-     * against a repo without trusting its committed settings.
+     * Caution: `settingSources` defaults to `["project"]`, which is required to pick up the target
+     * repo's CLAUDE.md but also loads that repo's committed `.claude/settings.json`, applying its
+     * permissions and hooks during the run. Pass `settingSources: []` to run against a repo without
+     * trusting its committed settings.
      */
-    settingSources?: Options["settingSources"]
-    systemPrompt?: Options["systemPrompt"]
+    sdkOptions?: ClaudeAgentSdkOptions
     query?: QueryFunction
 }
 
@@ -70,18 +79,18 @@ export class ClaudeAgent extends BaseCodingAgent {
     }
 
     private buildOptions(worktree: Worktree): Options {
+        const sdkOptions = this.options.sdkOptions ?? {}
         const options: Options = {
+            permissionMode: "auto",
+            systemPrompt: { type: "preset", preset: "claude_code" },
+            settingSources: ["project"],
+            ...sdkOptions,
             cwd: worktree.path,
             model: this.model,
-            permissionMode: "auto",
-            systemPrompt: this.options.systemPrompt ?? { type: "preset", preset: "claude_code" },
-            settingSources: this.options.settingSources ?? ["project"],
-            disallowedTools: [...new Set([...(this.options.disallowedTools ?? []), "AskUserQuestion"])]
+            disallowedTools: [...new Set([...(sdkOptions.disallowedTools ?? []), "AskUserQuestion"])]
         }
         if (this.options.effort !== undefined) options.effort = this.options.effort
-        if (this.options.maxTurns !== undefined) options.maxTurns = this.options.maxTurns
-        if (this.options.env !== undefined) options.env = { ...process.env, ...this.options.env }
-        if (this.options.allowedTools !== undefined) options.allowedTools = this.options.allowedTools
+        if (sdkOptions.env !== undefined) options.env = { ...process.env, ...sdkOptions.env }
         return options
     }
 }

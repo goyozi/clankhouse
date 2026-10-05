@@ -57,7 +57,7 @@ test("PiAgent maps the SDK conversation to the session and snapshots the worktre
     const agent = new PiAgent({
         provider: "openai",
         model: "gpt-5.4",
-        sessionOptions: { modelRuntime },
+        sdkOptions: { modelRuntime },
         createAgentSession
     })
     let worktree!: Worktree
@@ -162,7 +162,7 @@ test("PiAgent normalizes every built-in common tool", async () => {
     const agent = new PiAgent({
         provider: "openai",
         model: "gpt-5.4",
-        sessionOptions: { modelRuntime, tools: ["read", "write", "edit", "bash", "grep", "find", "ls"] },
+        sdkOptions: { modelRuntime, tools: ["read", "write", "edit", "bash", "grep", "find", "ls"] },
         createAgentSession
     })
 
@@ -266,7 +266,7 @@ test("PiAgent records extension custom messages as user messages", async () => {
     const agent = new PiAgent({
         provider: "openai",
         model: "gpt-5.4",
-        sessionOptions: { modelRuntime },
+        sdkOptions: { modelRuntime },
         createAgentSession
     })
 
@@ -309,7 +309,7 @@ test("PiAgent runs a void-output step without instructed output framing", async 
     const agent = new PiAgent({
         provider: "openai",
         model: "gpt-5.4",
-        sessionOptions: { modelRuntime },
+        sdkOptions: { modelRuntime },
         createAgentSession
     })
     let worktree!: Worktree
@@ -356,7 +356,7 @@ test("PiAgent preserves an unknown tool and normalizes its failed result", async
     const agent = new PiAgent({
         provider: "openai",
         model: "gpt-5.4",
-        sessionOptions: { modelRuntime },
+        sdkOptions: { modelRuntime },
         createAgentSession
     })
 
@@ -402,7 +402,7 @@ test("PiAgent returns a grouped tagged string before an untagged monitor message
     const agent = new PiAgent({
         provider: "openai",
         model: "gpt-5.4",
-        sessionOptions: { modelRuntime },
+        sdkOptions: { modelRuntime },
         createAgentSession
     })
 
@@ -437,7 +437,7 @@ test("PiAgent passes native defaults while locking ClankHouse-owned session opti
     const agent = new PiAgent({
         provider: "openai",
         model: "gpt-5.4",
-        sessionOptions: { modelRuntime },
+        sdkOptions: { modelRuntime },
         createAgentSession
     })
     let worktree!: Worktree
@@ -466,7 +466,7 @@ test("PiAgent passes native defaults while locking ClankHouse-owned session opti
     expect(calls[0].excludeTools).toEqual(["ask_question"])
 })
 
-test("PiAgent forwards raw session options and merges the interactive tool guard", async () => {
+test("PiAgent forwards effort and raw SDK options and merges the interactive tool guard", async () => {
     // given raw Pi options including duplicate exclusions and caller-owned values ClankHouse must replace
     const { clankhouse, dir } = tempClankHouse()
     const repo = await tempGitRepo()
@@ -476,9 +476,9 @@ test("PiAgent forwards raw session options and merges the interactive tool guard
     const agent = new PiAgent({
         provider: "openai",
         model: "gpt-5.4",
-        sessionOptions: {
+        effort: "high",
+        sdkOptions: {
             modelRuntime,
-            thinkingLevel: "high",
             noTools: "builtin",
             tools: ["read", "grep"],
             excludeTools: ["write", "ask_question", "write"]
@@ -493,8 +493,9 @@ test("PiAgent forwards raw session options and merges the interactive tool guard
         return agent.run("implement", { prompt: "do it", output: outputSchema, worktree })
     })
 
-    // then native configuration is forwarded verbatim where ClankHouse does not own it
+    // then effort is passed as the thinking level
     expect(calls[0].thinkingLevel).toBe("high")
+    // and native configuration is forwarded verbatim where ClankHouse does not own it
     expect(calls[0].noTools).toBe("builtin")
     expect(calls[0].tools).toEqual(["read", "grep"])
     // and exclusions are deduplicated with ask_question forced off after the allowlist
@@ -527,7 +528,7 @@ test("PiAgent resolves custom models from a custom agentDir", async () => {
     const agent = new PiAgent({
         provider: "clankhouse-test",
         model: "fixture-model",
-        sessionOptions: { agentDir },
+        sdkOptions: { agentDir },
         createAgentSession
     })
 
@@ -554,7 +555,7 @@ test("an unknown Pi model fails before creating an SDK session", async () => {
     const agent = new PiAgent({
         provider: "missing-provider",
         model: "missing-model",
-        sessionOptions: { modelRuntime },
+        sdkOptions: { modelRuntime },
         createAgentSession
     })
 
@@ -585,7 +586,7 @@ test.each(["error", "aborted", "length", "toolUse", "deferred", "pending"] as co
         const agent = new PiAgent({
             provider: "openai",
             model: "gpt-5.4",
-            sessionOptions: { modelRuntime },
+            sdkOptions: { modelRuntime },
             createAgentSession
         })
 
@@ -615,7 +616,7 @@ test("a prompt failure is preserved when Pi cleanup also fails", async () => {
     const agent = new PiAgent({
         provider: "openai",
         model: "gpt-5.4",
-        sessionOptions: { modelRuntime },
+        sdkOptions: { modelRuntime },
         createAgentSession
     })
 
@@ -649,7 +650,7 @@ test("a Pi cleanup failure fails an otherwise successful step", async () => {
     const agent = new PiAgent({
         provider: "openai",
         model: "gpt-5.4",
-        sessionOptions: { modelRuntime },
+        sdkOptions: { modelRuntime },
         createAgentSession
     })
 
@@ -675,7 +676,7 @@ test("Pi output fails when the session has no final assistant message", async ()
     const agent = new PiAgent({
         provider: "openai",
         model: "gpt-5.4",
-        sessionOptions: { modelRuntime },
+        sdkOptions: { modelRuntime },
         createAgentSession
     })
 
@@ -700,7 +701,7 @@ test("an untagged Pi response fails instructed-output collection", async () => {
     const agent = new PiAgent({
         provider: "openai",
         model: "gpt-5.4",
-        sessionOptions: { modelRuntime },
+        sdkOptions: { modelRuntime },
         createAgentSession
     })
 
@@ -727,7 +728,7 @@ test("invalid JSON inside Pi's instructed tags fails the step", async () => {
     const agent = new PiAgent({
         provider: "openai",
         model: "gpt-5.4",
-        sessionOptions: { modelRuntime },
+        sdkOptions: { modelRuntime },
         createAgentSession
     })
 
@@ -751,7 +752,7 @@ test("Pi structured output violating the Zod schema fails the step and session",
     const agent = new PiAgent({
         provider: "openai",
         model: "gpt-5.4",
-        sessionOptions: { modelRuntime },
+        sdkOptions: { modelRuntime },
         createAgentSession
     })
 
@@ -780,7 +781,7 @@ test("a non-JSON-representable output schema fails before creating a Pi session"
     const agent = new PiAgent({
         provider: "openai",
         model: "gpt-5.4",
-        sessionOptions: { modelRuntime },
+        sdkOptions: { modelRuntime },
         createAgentSession
     })
 
@@ -814,7 +815,7 @@ test("Pi agent step replay restores the worktree without re-invoking the SDK", a
     const agent = new PiAgent({
         provider: "openai",
         model: "gpt-5.4",
-        sessionOptions: { modelRuntime },
+        sdkOptions: { modelRuntime },
         createAgentSession
     })
     let publishImpl: () => string = () => {
@@ -843,20 +844,22 @@ test("Pi agent step replay restores the worktree without re-invoking the SDK", a
     expect(fs.readFileSync(path.join(worktree.path, "src/hello.ts"), "utf8")).toBe("export const hi = 1\n")
 })
 
-test("PiAgent public session options exclude ClankHouse-owned fields", async () => {
-    // given the public raw session option type
-    type SessionOptions = ConstructorParameters<typeof PiAgent>[0]["sessionOptions"]
+test("PiAgent public SDK options exclude ClankHouse-owned fields", async () => {
+    // given the public raw SDK option type
+    type SdkOptions = NonNullable<ConstructorParameters<typeof PiAgent>[0]["sdkOptions"]>
 
     // when compile-time ownership is checked
-    type HasCwd = "cwd" extends keyof NonNullable<SessionOptions> ? true : false
-    type HasModel = "model" extends keyof NonNullable<SessionOptions> ? true : false
-    type HasSessionManager = "sessionManager" extends keyof NonNullable<SessionOptions> ? true : false
+    type HasCwd = "cwd" extends keyof SdkOptions ? true : false
+    type HasModel = "model" extends keyof SdkOptions ? true : false
+    type HasThinkingLevel = "thinkingLevel" extends keyof SdkOptions ? true : false
+    type HasSessionManager = "sessionManager" extends keyof SdkOptions ? true : false
 
     // then ClankHouse-owned fields are unavailable while Pi-native fields remain exposed
     expect(false satisfies HasCwd).toBe(false)
     expect(false satisfies HasModel).toBe(false)
+    expect(false satisfies HasThinkingLevel).toBe(false)
     expect(false satisfies HasSessionManager).toBe(false)
-    expect({ thinkingLevel: "high" } satisfies NonNullable<SessionOptions>).toEqual({ thinkingLevel: "high" })
+    expect({ noTools: "builtin" } satisfies SdkOptions).toEqual({ noTools: "builtin" })
 })
 
 test.skipIf(!process.env.PI_AGENT_LIVE_TEST)(

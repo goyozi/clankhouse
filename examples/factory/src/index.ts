@@ -13,8 +13,7 @@ if (repositories.length === 0) {
 }
 
 const claude = (effort: "medium" | "high") => new ClaudeAgent({ model: "claude-opus-5-5", effort })
-const codex = (modelReasoningEffort: "medium" | "xhigh") =>
-    new CodexAgent({ model: "gpt-5.6-sol", modelReasoningEffort })
+const codex = (effort: "medium" | "xhigh") => new CodexAgent({ model: "gpt-5.6-sol", effort })
 
 const workflow = createFactoryWorkflow({
     implementer: claude("medium"),

@@ -3,7 +3,7 @@
 Reviews uncommitted code changes with both Claude and Codex, and presents a final Act/Skip recommendation list.
 
 **Caution:** This runs Claude hooks configured in the repository. Only use on repos you trust or modify the workflow to
-pass `settingSources: []`.
+pass `sdkOptions: { settingSources: [] }`.
 
 ## Try It
 

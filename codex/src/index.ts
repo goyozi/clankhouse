@@ -12,19 +12,15 @@ type CodexClient = {
 
 export type CodexFactory = (options: CodexOptions) => CodexClient
 
+export type CodexAgentSdkOptions = {
+    client?: CodexOptions
+    thread?: Omit<ThreadOptions, "model" | "workingDirectory" | "modelReasoningEffort">
+}
+
 export type CodexAgentOptions = {
     model: string
-    sandboxMode?: ThreadOptions["sandboxMode"]
-    approvalPolicy?: ThreadOptions["approvalPolicy"]
-    modelReasoningEffort?: ThreadOptions["modelReasoningEffort"]
-    networkAccessEnabled?: ThreadOptions["networkAccessEnabled"]
-    webSearchMode?: ThreadOptions["webSearchMode"]
-    additionalDirectories?: ThreadOptions["additionalDirectories"]
-    codexPathOverride?: CodexOptions["codexPathOverride"]
-    baseUrl?: CodexOptions["baseUrl"]
-    apiKey?: CodexOptions["apiKey"]
-    config?: CodexOptions["config"]
-    env?: CodexOptions["env"]
+    effort?: ThreadOptions["modelReasoningEffort"]
+    sdkOptions?: CodexAgentSdkOptions
     codexFactory?: CodexFactory
 }
 
@@ -52,34 +48,22 @@ export class CodexAgent extends BaseCodingAgent {
     }
 
     private buildClientOptions(): CodexOptions {
-        const options: CodexOptions = {}
-        if (this.options.codexPathOverride !== undefined) options.codexPathOverride = this.options.codexPathOverride
-        if (this.options.baseUrl !== undefined) options.baseUrl = this.options.baseUrl
-        if (this.options.apiKey !== undefined) options.apiKey = this.options.apiKey
-        if (this.options.config !== undefined) options.config = this.options.config
-        if (this.options.env !== undefined) {
-            options.env = { ...process.env, ...this.options.env } as Record<string, string>
+        const options: CodexOptions = { ...this.options.sdkOptions?.client }
+        if (options.env !== undefined) {
+            options.env = { ...process.env, ...options.env } as Record<string, string>
         }
         return options
     }
 
     private buildThreadOptions(worktree: Worktree): ThreadOptions {
         const options: ThreadOptions = {
+            sandboxMode: "workspace-write",
+            approvalPolicy: "never",
+            ...this.options.sdkOptions?.thread,
             model: this.model,
-            workingDirectory: worktree.path,
-            sandboxMode: this.options.sandboxMode ?? "workspace-write",
-            approvalPolicy: this.options.approvalPolicy ?? "never"
+            workingDirectory: worktree.path
         }
-        if (this.options.additionalDirectories !== undefined) {
-            options.additionalDirectories = this.options.additionalDirectories
-        }
-        if (this.options.modelReasoningEffort !== undefined) {
-            options.modelReasoningEffort = this.options.modelReasoningEffort
-        }
-        if (this.options.networkAccessEnabled !== undefined) {
-            options.networkAccessEnabled = this.options.networkAccessEnabled
-        }
-        if (this.options.webSearchMode !== undefined) options.webSearchMode = this.options.webSearchMode
+        if (this.options.effort !== undefined) options.modelReasoningEffort = this.options.effort
         return options
     }
 }
