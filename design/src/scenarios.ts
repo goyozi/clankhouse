@@ -607,6 +607,16 @@ export const scenarios: Scenario[] = [
         lines: [line(rerunId)]
     },
     {
+        id: "runs-cancel",
+        group: "Run control",
+        label: "Cancel run",
+        command: `clank runs cancel ${runId}`,
+        summary: "Canceling a run confirms the cancellation without waiting for the run to stop.",
+        note: "An already canceled run prints the same confirmation.",
+        delivery: "instant",
+        lines: [line(`Run ${runId} canceled`)]
+    },
+    {
         id: "run-details",
         group: "Snapshots",
         label: "Completed run",

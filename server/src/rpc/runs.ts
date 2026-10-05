@@ -6,7 +6,10 @@ import { toRunMetadata, toStep, toWorkflowRun } from "../mappers.js"
 import { notFound, required, throwIfAborted, toConnectError } from "./errors.js"
 import type { ClankHouseServiceImplementation } from "./types.js"
 
-type RunHandlers = Pick<ClankHouseServiceImplementation, "listRuns" | "getRun" | "watchRun" | "resumeRun" | "rerunRun">
+type RunHandlers = Pick<
+    ClankHouseServiceImplementation,
+    "listRuns" | "getRun" | "watchRun" | "resumeRun" | "rerunRun" | "cancelRun"
+>
 
 export function runHandlers(clankhouse: ClankHouse): RunHandlers {
     return {
@@ -77,6 +80,19 @@ export function runHandlers(clankhouse: ClankHouse): RunHandlers {
                     workflow_run_not_latest: Code.FailedPrecondition,
                     workflow_not_registered: Code.FailedPrecondition,
                     workflow_input_incompatible: Code.FailedPrecondition
+                })
+            }
+        },
+        cancelRun(request) {
+            required(request.runId, "run_id")
+            try {
+                clankhouse.cancel(request.runId)
+                return {}
+            } catch (error) {
+                throw toConnectError(error, {
+                    workflow_run_not_found: () => notFound("Workflow run", request.runId),
+                    workflow_run_deleted: () => notFound("Workflow run", request.runId),
+                    workflow_run_not_cancelable: Code.FailedPrecondition
                 })
             }
         }

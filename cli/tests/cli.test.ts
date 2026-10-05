@@ -1001,6 +1001,51 @@ test("resume reconnects to an interrupted run and prints only its run ID", async
     expect(await second.runs.get(runId)).toMatchObject({ status: "succeeded", output: 7 })
 })
 
+test("runs cancel cancels a run and reports lifecycle failures", async () => {
+    // given an active run waiting for an event and a succeeded run
+    const { clankhouse } = tempClankHouse()
+    clankhouse.registerWorkflow(
+        "cancel",
+        { input: z.string(), output: z.number(), key: (input) => input },
+        async () => (await clankhouse.waitFor({ key: "cancel-event", schema: z.object({ value: z.number() }) })).value
+    )
+    const env = serverEnv(await testServer(clankhouse))
+    const { runId } = clankhouse.start("cancel", "active")
+    await waitForStep(clankhouse, runId, "wait:cancel-event")
+    await testRun(clankhouse, async () => null, { key: "succeeded" })
+    const [succeeded] = await clankhouse.runs.list({ key: "succeeded" })
+
+    // when the active run is canceled in text mode and canceled again in JSON mode
+    const human = await runCliCommand(["runs", "cancel", runId], { env })
+    const json = await runCliCommand(["runs", "cancel", runId, "--json"], { env })
+
+    // then text mode confirms the cancellation and JSON mode prints the empty response
+    expect({ code: human.code, stdout: human.stdout.toString(), stderr: human.stderr }).toEqual({
+        code: 0,
+        stdout: `Run ${runId} canceled\n`,
+        stderr: ""
+    })
+    expect({ code: json.code, stdout: json.stdout.toString(), stderr: json.stderr }).toEqual({
+        code: 0,
+        stdout: "{}\n",
+        stderr: ""
+    })
+    // and the run is canceled
+    expect((await clankhouse.runs.get(runId)).status).toBe("canceled")
+
+    // when a succeeded and a missing run are canceled
+    const notCancelable = await runCliCommand(["runs", "cancel", succeeded!.id, "--json"], { env })
+    const missing = await runCliCommand(["runs", "cancel", "missing", "--json"], { env })
+
+    // then each failure is reported with its error code and a non-zero exit code
+    expect(notCancelable.code).not.toBe(0)
+    expect(notCancelable.stdout.toString()).toBe("")
+    expect(JSON.parse(notCancelable.stderr)).toMatchObject({ type: "error", code: "failed_precondition" })
+    expect(missing.code).not.toBe(0)
+    expect(missing.stdout.toString()).toBe("")
+    expect(JSON.parse(missing.stderr)).toMatchObject({ type: "error", code: "not_found" })
+})
+
 test("runs start reports an existing run on stderr in text mode while stdout keeps only the run ID", async () => {
     // given an interrupted run left behind by a closed server
     const { clankhouse, reopen } = tempClankHouse()

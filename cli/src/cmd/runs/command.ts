@@ -1,5 +1,6 @@
 import { toJsonString } from "@bufbuild/protobuf"
 import {
+    CancelRunResponseSchema,
     ExecutionStatus,
     GetRunResponseSchema,
     GetSessionResponseSchema,
@@ -166,6 +167,14 @@ export function registerRuns(program: Command, runtime: Runtime): void {
             const client = await runtime.client(command)
             const response = await client.rerunRun({ runId, fromStepKey: options.from }, { signal: runtime.signal })
             await runtime.emit(command, RerunRunResponseSchema, response, () => formatRunId(response.runId))
+        })
+    runs.command("cancel")
+        .description("Cancel a workflow run")
+        .argument("<run-id>")
+        .action(async (runId: string, _options: unknown, command: Command) => {
+            const client = await runtime.client(command)
+            const response = await client.cancelRun({ runId }, { signal: runtime.signal })
+            await runtime.emit(command, CancelRunResponseSchema, response, () => `Run ${runId} canceled\n`)
         })
 }
 

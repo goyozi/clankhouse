@@ -13,6 +13,7 @@ service ClankHouseService {
   rpc WatchRun(WatchRunRequest) returns (stream WatchRunResponse);
   rpc ResumeRun(ResumeRunRequest) returns (ResumeRunResponse);
   rpc RerunRun(RerunRunRequest) returns (RerunRunResponse);
+  rpc CancelRun(CancelRunRequest) returns (CancelRunResponse);
   rpc EmitEvent(EmitEventRequest) returns (EmitEventResponse);
   rpc GetArtifact(GetArtifactRequest) returns (GetArtifactResponse);
   rpc ReadArtifact(ReadArtifactRequest) returns (stream ReadArtifactResponse);
@@ -275,6 +276,12 @@ message RerunRunRequest {
 message RerunRunResponse {
   string run_id = 1;
 }
+
+message CancelRunRequest {
+  string run_id = 1;
+}
+
+message CancelRunResponse {}
 
 message EmitEventRequest {
   string key = 1;
