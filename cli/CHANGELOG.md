@@ -1,4 +1,4 @@
-# @clankhouse/cli
+# clankhouse
 
 ## 0.0.2
 

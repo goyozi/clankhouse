@@ -6,7 +6,7 @@
         [
             "@clankhouse/anthropic",
             "@clankhouse/claude",
-            "@clankhouse/cli",
+            "clankhouse",
             "@clankhouse/codex",
             "@clankhouse/core",
             "@clankhouse/openai",

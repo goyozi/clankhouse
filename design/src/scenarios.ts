@@ -107,7 +107,7 @@ const parallelReviewSessionMessages = [
 const testSessionMessages = [
     "user: Validate the change with the focused CLI tests.",
     "assistant: I’ll run the run-output and CLI suites.",
-    "tool: shell pnpm --filter @clankhouse/cli test",
+    "tool: shell pnpm --filter clankhouse test",
     "assistant: All focused tests pass."
 ]
 const summarySessionMessages = ["user: Combine the code and test reviews into a final verdict.", "assistant: approve"]

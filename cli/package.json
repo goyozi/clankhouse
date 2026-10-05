@@ -1,5 +1,5 @@
 {
-    "name": "@clankhouse/cli",
+    "name": "clankhouse",
     "version": "0.0.2",
     "description": "Command-line client for ClankHouse servers",
     "type": "module",

@@ -1,11 +1,11 @@
-# `@clankhouse/cli`
+# `clankhouse`
 
 The `clank` command-line client for interacting with a ClankHouse server.
 
 ## Installation
 
 ```sh
-pnpm add --global @clankhouse/cli
+pnpm add --global clankhouse
 ```
 
 Then run `clank --help` to see the available commands.

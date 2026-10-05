@@ -1,5 +1,5 @@
 ---
-"@clankhouse/cli": patch
+"clankhouse": patch
 ---
 
 Add `clank ps` to list running workflow runs

@@ -1,7 +1,7 @@
 ---
 "@clankhouse/anthropic": minor
 "@clankhouse/claude": minor
-"@clankhouse/cli": minor
+"clankhouse": minor
 "@clankhouse/codex": minor
 "@clankhouse/core": minor
 "@clankhouse/openai": minor

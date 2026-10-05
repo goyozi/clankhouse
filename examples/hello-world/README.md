@@ -7,7 +7,7 @@ Basic workflow that sets up a temporary Git repository and asks an agent to impl
 If you don't have `clank` installed or want to use the source version:
 
 ```sh
-alias clank="pnpm --filter @clankhouse/cli exec node bin/clank.js"
+alias clank="pnpm --filter clankhouse exec node bin/clank.js"
 ```
 
 Start the server:

@@ -2,7 +2,7 @@
 "@clankhouse/core": patch
 "@clankhouse/protocol": patch
 "@clankhouse/server": patch
-"@clankhouse/cli": patch
+"clankhouse": patch
 ---
 
 Add run cancellation

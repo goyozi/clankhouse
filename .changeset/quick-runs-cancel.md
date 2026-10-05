@@ -1,7 +1,7 @@
 ---
 "@clankhouse/protocol": patch
 "@clankhouse/server": patch
-"@clankhouse/cli": patch
+"clankhouse": patch
 ---
 
 Add `CancelRun` RPC and `clank runs cancel <run-id>`

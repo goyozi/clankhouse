@@ -11,7 +11,7 @@ If you don't have `clank` installed or want to use the source version:
 
 ```sh
 export CLANKHOUSE_SOURCE=/absolute/path/to/clankhouse
-alias clank='pnpm --dir "$CLANKHOUSE_SOURCE" --filter @clankhouse/cli exec node bin/clank.js'
+alias clank='pnpm --dir "$CLANKHOUSE_SOURCE" --filter clankhouse exec node bin/clank.js'
 ```
 
 Start the server with the repositories to watch:
