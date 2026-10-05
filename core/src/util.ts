@@ -32,9 +32,11 @@ export function sanitize(value: string): string {
     return value.replace(/[^A-Za-z0-9_-]/g, "-")
 }
 
+const UNIQUE_NAME_READABLE_LENGTH = 40
+
 export function uniqueName(value: string): string {
     const hash = createHash("sha256").update(value).digest("hex").slice(0, 8)
-    return `${sanitize(value)}-${hash}`
+    return `${sanitize(value).slice(-UNIQUE_NAME_READABLE_LENGTH)}-${hash}`
 }
 
 export function errorMessage(e: unknown): string {
