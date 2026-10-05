@@ -5,7 +5,7 @@ The Pi coding-agent adapter for ClankHouse, powered by `@earendil-works/pi-codin
 ## Installation
 
 ```sh
-pnpm add @clankhouse/pi
+pnpm add @clankhouse/pi @earendil-works/pi-coding-agent
 ```
 
 ClankHouse is pre-0.1 and its APIs may change without notice.

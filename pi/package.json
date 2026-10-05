@@ -38,14 +38,15 @@
         "typecheck": "tsc -p tsconfig.json --noEmit"
     },
     "dependencies": {
-        "@earendil-works/pi-coding-agent": "^0.84.1",
         "zod": "catalog:"
     },
     "devDependencies": {
         "@clankhouse/core": "workspace:*",
-        "@clankhouse/test-utils": "workspace:*"
+        "@clankhouse/test-utils": "workspace:*",
+        "@earendil-works/pi-coding-agent": "^1.0.2"
     },
     "peerDependencies": {
-        "@clankhouse/core": "workspace:^"
+        "@clankhouse/core": "workspace:^",
+        "@earendil-works/pi-coding-agent": ">=0.84.1 <2"
     }
 }

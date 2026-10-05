@@ -13,6 +13,7 @@ import { taggedOutput } from "@clankhouse/test-utils"
 type PiMessage = Extract<AgentSessionEvent, { type: "message_end" }>["message"]
 type PiAssistantMessage = Extract<PiMessage, { role: "assistant" }>
 type PiAssistantContent = PiAssistantMessage["content"][number]
+type PiToolCallArguments = Extract<PiAssistantContent, { type: "toolCall" }>["arguments"]
 type PiToolResultMessage = Extract<PiMessage, { role: "toolResult" }>
 type PiCustomMessage = Extract<PiMessage, { role: "custom" }>
 
@@ -123,7 +124,7 @@ async function run(
             type: "toolCall" as const,
             id: call.id ?? `tool_${randomUUID()}`,
             name: call.name,
-            arguments: call.arguments
+            arguments: call.arguments as PiToolCallArguments
         }))
     ]
     if (content.length > 0) emit({ type: "message_end", message: assistantMessage(model, content, "toolUse") })

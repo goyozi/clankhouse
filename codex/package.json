@@ -38,14 +38,15 @@
         "typecheck": "tsc -p tsconfig.json --noEmit"
     },
     "dependencies": {
-        "@openai/codex-sdk": "^0.157.1",
         "zod": "catalog:"
     },
     "devDependencies": {
         "@clankhouse/core": "workspace:*",
-        "@clankhouse/test-utils": "workspace:*"
+        "@clankhouse/test-utils": "workspace:*",
+        "@openai/codex-sdk": "^0.160.0"
     },
     "peerDependencies": {
-        "@clankhouse/core": "workspace:^"
+        "@clankhouse/core": "workspace:^",
+        "@openai/codex-sdk": ">=0.157.1 <1"
     }
 }

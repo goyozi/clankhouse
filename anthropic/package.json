@@ -38,14 +38,15 @@
         "typecheck": "tsc -p tsconfig.json --noEmit"
     },
     "dependencies": {
-        "@anthropic-ai/sdk": "^0.115.0",
         "zod": "catalog:"
     },
     "devDependencies": {
+        "@anthropic-ai/sdk": "^0.131.0",
         "@clankhouse/core": "workspace:*",
         "@clankhouse/test-utils": "workspace:*"
     },
     "peerDependencies": {
+        "@anthropic-ai/sdk": ">=0.115.0 <1",
         "@clankhouse/core": "workspace:^"
     }
 }

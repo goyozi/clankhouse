@@ -5,7 +5,7 @@ The Claude coding-agent adapter for ClankHouse, powered by `@anthropic-ai/claude
 ## Installation
 
 ```sh
-pnpm add @clankhouse/claude
+pnpm add @clankhouse/claude @anthropic-ai/claude-agent-sdk
 ```
 
 ClankHouse is pre-0.1 and its APIs may change without notice.

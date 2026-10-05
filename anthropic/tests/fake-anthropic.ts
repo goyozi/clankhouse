@@ -55,6 +55,7 @@ function anthropicMessage(model: string, content: ContentBlock[], stopReason: St
         id: "msg_test",
         container: null,
         content,
+        diagnostics: null,
         model,
         role: "assistant",
         stop_details: null,
