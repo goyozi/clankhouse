@@ -90,6 +90,12 @@ async function* run(
     if (script.endWithoutCompletion) return
     yield {
         type: "turn.completed",
-        usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 1, reasoning_output_tokens: 0 }
+        usage: {
+            input_tokens: 1,
+            cached_input_tokens: 0,
+            cache_write_input_tokens: 0,
+            output_tokens: 1,
+            reasoning_output_tokens: 0
+        }
     }
 }

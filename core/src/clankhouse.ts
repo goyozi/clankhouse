@@ -10,6 +10,7 @@ import type { ActiveSets } from "./runtime.js"
 import { Engine } from "./engine.js"
 import { Events, type ActiveEventSource, type EventSource, type EventSourceResult } from "./events.js"
 import { ClankHouseError } from "./errors.js"
+import { moveFile } from "./files.js"
 import { Notifier } from "./watch.js"
 import { Triggers, type TriggerArguments, type TriggerErrorHandler, type TriggerHandle } from "./triggers.js"
 import {
@@ -212,6 +213,14 @@ export class ClankHouse {
      */
     async waitForAny<const S extends readonly EventSource[]>(sources: S): Promise<EventSourceResult<S[number]>> {
         return this.events.waitForAny(sources)
+    }
+
+    /**
+     * Moves a file as a durable step, creating missing parent directories of the target.
+     * Fails if the target already exists, unless the source is gone (i.e. the move already happened).
+     */
+    moveFile(name: string, from: string, to: string): Promise<void> {
+        return this.step(name, z.void(), () => moveFile(from, to))
     }
 
     /**

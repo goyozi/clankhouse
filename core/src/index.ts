@@ -99,6 +99,10 @@ export function waitForAny<const S extends readonly EventSource[]>(sources: S): 
     return clankhouse().waitForAny(sources)
 }
 
+export function moveFile(name: string, from: string, to: string): Promise<void> {
+    return clankhouse().moveFile(name, from, to)
+}
+
 export type {
     RecoverResult,
     RecoveryPolicy,

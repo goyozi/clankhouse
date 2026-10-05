@@ -23,6 +23,7 @@ export type ClankHouseErrorCode =
     | "event_schema_validation_failed"
     | "event_wait_already_registered"
     | "event_payload_required"
+    | "file_move_target_exists"
     | "artifact_not_found"
     | "ai_session_not_found"
     | "ai_session_message_not_found"

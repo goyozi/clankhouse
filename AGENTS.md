@@ -47,6 +47,7 @@ examples:
 
 - hello-world - basic ClankHouse workflow example
 - dual-review - code review by Claude & Codex
+- factory - simple software factory
 
 design:
 

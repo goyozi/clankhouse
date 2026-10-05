@@ -3,6 +3,7 @@ import * as path from "node:path"
 import { expect, onTestFinished, test } from "vitest"
 import { fileCreated, fileCreatedIn } from "@clankhouse/core/files"
 import { gate, tempDir, tempClankHouse, testRun } from "@clankhouse/test-utils"
+import * as z from "zod"
 
 test("fileCreated returns an existing regular file from its initial scan", async () => {
     // given a regular file that already exists
@@ -621,4 +622,90 @@ test("file sources require watched paths to resolve to directories", async () =>
     await expect(regularFile).rejects.toThrow(/requires a directory/)
     // and a symbolic-link directory is followed while retaining its logical path
     await expect(linkedDirectory).resolves.toEqual({ path: path.join(linked, "result.md"), filename: "result.md" })
+})
+
+test("moveFile moves a file into a missing directory as a durable step", async () => {
+    // given a file and a destination directory that does not exist yet
+    const { clankhouse } = tempClankHouse()
+    const directory = tempDir("clankhouse-move-file-")
+    const source = path.join(directory, "todo", "feature.md")
+    const target = path.join(directory, "done", "feature.md")
+    fs.mkdirSync(path.dirname(source))
+    fs.writeFileSync(source, "plan")
+
+    // when a workflow moves the file
+    await testRun(clankhouse, async () => clankhouse.moveFile("move-card", source, target), {
+        output: z.void()
+    })
+
+    // then the file exists only at its destination
+    expect(fs.existsSync(source)).toBe(false)
+    expect(fs.readFileSync(target, "utf8")).toBe("plan")
+    // and the move is recorded as a succeeded step
+    const run = await clankhouse.runs.get((await clankhouse.runs.list())[0].id)
+    expect(run.steps.map((step) => ({ key: step.key, status: step.status }))).toEqual([
+        { key: "move-card", status: "succeeded" }
+    ])
+})
+
+test("moveFile succeeds without changes when the file was already moved", async () => {
+    // given a file that is already at its destination and absent from its source
+    const { clankhouse } = tempClankHouse()
+    const directory = tempDir("clankhouse-move-file-moved-")
+    const source = path.join(directory, "feature.md")
+    const target = path.join(directory, "done", "feature.md")
+    fs.mkdirSync(path.dirname(target))
+    fs.writeFileSync(target, "moved")
+
+    // when a workflow moves the file again
+    await testRun(clankhouse, async () => clankhouse.moveFile("move-card", source, target), {
+        output: z.void()
+    })
+
+    // then the destination is left untouched
+    expect(fs.readFileSync(target, "utf8")).toBe("moved")
+    expect(fs.existsSync(source)).toBe(false)
+})
+
+test("moveFile refuses to overwrite an existing destination", async () => {
+    // given a source file and a different file already at the destination
+    const { clankhouse } = tempClankHouse()
+    const directory = tempDir("clankhouse-move-file-conflict-")
+    const source = path.join(directory, "feature.md")
+    const target = path.join(directory, "done", "feature.md")
+    fs.writeFileSync(source, "new")
+    fs.mkdirSync(path.dirname(target))
+    fs.writeFileSync(target, "old")
+
+    // when a workflow moves the source onto the destination
+    const moved = testRun(clankhouse, async () => clankhouse.moveFile("move-card", source, target), {
+        output: z.void()
+    })
+
+    // then the move is rejected with a stable code
+    await expect(moved).rejects.toMatchObject({ code: "file_move_target_exists" })
+    // and both files keep their contents
+    expect(fs.readFileSync(source, "utf8")).toBe("new")
+    expect(fs.readFileSync(target, "utf8")).toBe("old")
+})
+
+test("moveFile keeps the native error when neither source nor destination exists", async () => {
+    // given paths where no file exists
+    const { clankhouse } = tempClankHouse()
+    const directory = tempDir("clankhouse-move-file-missing-")
+
+    // when a workflow moves the missing file
+    const moved = testRun(
+        clankhouse,
+        async () =>
+            clankhouse.moveFile(
+                "move-card",
+                path.join(directory, "missing.md"),
+                path.join(directory, "done", "missing.md")
+            ),
+        { output: z.void() }
+    )
+
+    // then the filesystem error is propagated
+    await expect(moved).rejects.toMatchObject({ code: "ENOENT" })
 })

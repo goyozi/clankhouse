@@ -872,7 +872,7 @@ test.skipIf(!process.env.CODEX_AGENT_LIVE_TEST)(
         const { clankhouse } = tempClankHouse()
         const repo = await tempGitRepo()
         const repository = new GitRepository(repo.path)
-        const agent = new CodexAgent({ model: "gpt-5.4-mini" })
+        const agent = new CodexAgent({ model: "gpt-6-luna" })
         let worktree!: Worktree
 
         // when it creates a two-line file and reports an array-root discriminated union

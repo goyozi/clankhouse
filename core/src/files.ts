@@ -1,12 +1,27 @@
 import { statSync, watch, type FSWatcher } from "node:fs"
-import { readdir, stat } from "node:fs/promises"
+import { mkdir, readdir, rename, stat } from "node:fs/promises"
 import * as path from "node:path"
 import * as z from "zod"
+import { ClankHouseError } from "./errors.js"
 import type { ActiveEventSource, EventSourceHandle, EventSourceListener } from "./events.js"
 import { isNodeError } from "./util.js"
 
 const fileCreatedEvent = z.object({ path: z.string(), filename: z.string() })
 type InitialFileEvents = "all" | "first" | "none"
+
+export async function moveFile(from: string, to: string): Promise<void> {
+    const source = path.resolve(from)
+    const target = path.resolve(to)
+    if ((await optionalStat(target)) !== undefined) {
+        if ((await optionalStat(source)) === undefined) return
+        throw new ClankHouseError(
+            "file_move_target_exists",
+            `Cannot move ${source} to ${target}: target already exists`
+        )
+    }
+    await mkdir(path.dirname(target), { recursive: true })
+    await rename(source, target)
+}
 
 /**
  * Event source for observing a specific file being created.

@@ -1,0 +1,22 @@
+{
+    "name": "@clankhouse/example-factory",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "main": "./src/index.ts",
+    "scripts": {
+        "start": "tsx src/index.ts",
+        "test": "vitest run --config vitest.config.ts",
+        "typecheck": "tsc -p tsconfig.json --noEmit"
+    },
+    "dependencies": {
+        "@clankhouse/claude": "workspace:*",
+        "@clankhouse/codex": "workspace:*",
+        "@clankhouse/core": "workspace:*",
+        "@clankhouse/server": "workspace:*",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@clankhouse/test-utils": "workspace:*"
+    }
+}
