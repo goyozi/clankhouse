@@ -1,6 +1,6 @@
 We are working on ClankHouse, a local-first durable AI workflow framework.
 
-Note: since we're pre-0.1 without any real world users, there's no need to maintain backwards compatibility and do database migrations.
+Note: since we're pre-1.0, breaking changes require only a minor version bump.
 
 ## Modules
 
