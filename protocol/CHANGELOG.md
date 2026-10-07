@@ -1,5 +1,11 @@
 # @clankhouse/protocol
 
+## 0.2.0
+
+### Patch Changes
+
+- 3560251: Add usage examples to package READMEs
+
 ## 0.1.0
 
 ### Minor Changes

@@ -1,6 +1,6 @@
 {
     "name": "@clankhouse/testing",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "Test helpers and fake AI implementations for ClankHouse workflows",
     "type": "module",
     "main": "./src/index.ts",
