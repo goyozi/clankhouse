@@ -1,7 +1,7 @@
 import * as fs from "node:fs"
 import * as path from "node:path"
 import { Readable } from "node:stream"
-import { tempDir } from "@clankhouse/test-utils"
+import { tempDir } from "@clankhouse/testing"
 import { expect, test } from "vitest"
 import { copyWithoutClobber, readJsonInput } from "../src/io"
 

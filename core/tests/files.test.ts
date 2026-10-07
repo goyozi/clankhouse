@@ -2,7 +2,7 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import { expect, onTestFinished, test } from "vitest"
 import { fileCreated, fileCreatedIn } from "@clankhouse/core/files"
-import { gate, tempDir, tempClankHouse, testRun } from "@clankhouse/test-utils"
+import { gate, tempClankHouse, tempDir, testRun } from "@clankhouse/testing"
 import * as z from "zod"
 
 test("fileCreated returns an existing regular file from its initial scan", async () => {

@@ -318,6 +318,12 @@ const notes = await run("release-notes", "v0.3.0", z.string(), () =>
 )
 ```
 
+### Testing
+
+`@clankhouse/testing` has fake agents and models (`FakeCodingAgent`, `FakeLLM`) and helpers for temporary ClankHouse
+instances and Git repositories, so you can test workflows with Vitest without making AI calls. See its
+[README](testing/README.md) and the examples' tests.
+
 ## Known Gaps / Limitations
 
 - one ClankHouse process per config directory (`CLANKHOUSE_DIR`)

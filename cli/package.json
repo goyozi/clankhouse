@@ -54,6 +54,7 @@
         "@clankhouse/core": "workspace:*",
         "@clankhouse/server": "workspace:*",
         "@clankhouse/test-utils": "workspace:*",
+        "@clankhouse/testing": "workspace:*",
         "tsx": "^4.23.0",
         "zod": "catalog:"
     }

@@ -2,7 +2,7 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import { expect, test } from "vitest"
 import { GitRepository } from "@clankhouse/core/git"
-import { runGit, tempGitRepo } from "@clankhouse/test-utils"
+import { runGit, tempGitRepo } from "@clankhouse/testing"
 import { createWorktree } from "./helpers"
 
 test("worktrees live outside the repository", async () => {

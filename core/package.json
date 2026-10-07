@@ -55,6 +55,7 @@
     },
     "devDependencies": {
         "@clankhouse/test-utils": "workspace:*",
+        "@clankhouse/testing": "workspace:*",
         "fast-check": "^4.9.0"
     }
 }

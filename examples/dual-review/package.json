@@ -10,13 +10,19 @@
         "typecheck": "tsc -p tsconfig.json --noEmit"
     },
     "dependencies": {
+        "@anthropic-ai/claude-agent-sdk": "^0.3.289",
         "@clankhouse/claude": "workspace:*",
         "@clankhouse/codex": "workspace:*",
         "@clankhouse/core": "workspace:*",
         "@clankhouse/server": "workspace:*",
-        "zod": "catalog:"
+        "@openai/codex-sdk": "^0.160.0",
+        "tsx": "^4.23.0",
+        "zod": "^4.4.3"
     },
     "devDependencies": {
-        "@clankhouse/test-utils": "workspace:*"
+        "@clankhouse/testing": "workspace:*",
+        "@types/node": "^26.6.4",
+        "typescript": "^6.0.3",
+        "vitest": "^4.1.10"
     }
 }

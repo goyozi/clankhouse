@@ -2,9 +2,8 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { FakeLLM } from "@clankhouse/core/ai/fake-llm"
+import { FakeLLM, gate, tempClankHouse, tempDir, testRun } from "@clankhouse/testing"
 import { ClankHouse } from "@clankhouse/core/clankhouse"
-import { gate, tempDir, tempClankHouse, testRun } from "@clankhouse/test-utils"
 
 const outputSchema = z.object({ summary: z.string() })
 

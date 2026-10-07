@@ -1,7 +1,7 @@
 import * as path from "node:path"
 import { realpath } from "node:fs/promises"
 import { expect, test } from "vitest"
-import { runGit, tempDir, tempGitRepo } from "@clankhouse/test-utils"
+import { runGit, tempDir, tempGitRepo } from "@clankhouse/testing"
 import * as git from "../../src/git/client"
 
 test("typed revision, configuration, ref and worktree operations", async () => {

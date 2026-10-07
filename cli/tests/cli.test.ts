@@ -5,8 +5,17 @@ import { PassThrough, Readable, Writable } from "node:stream"
 import { promisify } from "node:util"
 import { fileURLToPath } from "node:url"
 import { fromJsonString } from "@bufbuild/protobuf"
-import { FakeCodingAgent } from "@clankhouse/core/ai/fake-agent"
-import { FakeLLM } from "@clankhouse/core/ai/fake-llm"
+import {
+    FakeCodingAgent,
+    FakeLLM,
+    gate,
+    runOutput,
+    tempClankHouse,
+    tempDir,
+    tempGitRepo,
+    testRun,
+    waitForRun
+} from "@clankhouse/testing"
 import { openDatabase } from "@clankhouse/core/db"
 import { ClankHouseError } from "@clankhouse/core/errors"
 import { GitRepository } from "@clankhouse/core/git"
@@ -26,7 +35,6 @@ import {
     WatchSessionResponseSchema
 } from "@clankhouse/protocol"
 import { listen, type ClankHouseServer } from "@clankhouse/server"
-import { gate, runOutput, tempDir, tempGitRepo, tempClankHouse, testRun, waitForRun } from "@clankhouse/test-utils"
 import { expect, onTestFinished, test } from "vitest"
 import * as z from "zod"
 import { runCli } from "../src"

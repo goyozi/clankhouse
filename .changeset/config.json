@@ -12,7 +12,8 @@
             "@clankhouse/openai",
             "@clankhouse/pi",
             "@clankhouse/protocol",
-            "@clankhouse/server"
+            "@clankhouse/server",
+            "@clankhouse/testing"
         ]
     ],
     "linked": [],

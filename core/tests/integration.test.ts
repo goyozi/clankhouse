@@ -2,11 +2,9 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { FakeCodingAgent } from "@clankhouse/core/ai/fake-agent"
-import { FakeLLM } from "@clankhouse/core/ai/fake-llm"
+import { FakeCodingAgent, FakeLLM, gate, runOutput, tempClankHouse, tempGitRepo, testRun } from "@clankhouse/testing"
 import { GitRepository } from "@clankhouse/core/git"
 import { ClankHouse } from "@clankhouse/core/clankhouse"
-import { gate, runOutput, tempGitRepo, tempClankHouse, testRun } from "@clankhouse/test-utils"
 
 test("end-to-end: durable workflow with llm, agent, artifact and approval survives crashes and reruns", async () => {
     // given a durable clankhouse instance and a git repository

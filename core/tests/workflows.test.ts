@@ -1,6 +1,6 @@
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { gate, runOutput, tempClankHouse } from "@clankhouse/test-utils"
+import { gate, runOutput, tempClankHouse } from "@clankhouse/testing"
 
 const input = z.object({ id: z.string(), value: z.number() })
 const output = z.object({ doubled: z.number() })

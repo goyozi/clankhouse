@@ -6,18 +6,14 @@ import { ClaudeAgent } from "@clankhouse/claude"
 import { GitRepository, Worktree } from "@clankhouse/core/git"
 import { uniqueName } from "@clankhouse/core/util"
 import { fakeClaudeQuery } from "./fake-claude-sdk"
+import { runGit, runOutput, tempClankHouse, tempGitRepo, testRun } from "@clankhouse/testing"
 import {
     instructedSchema,
     instructedTags,
-    runGit,
-    runOutput,
     sessionTextMessages,
     sessionToolCallMessages,
     taggedOutput,
-    taggedStringOutput,
-    tempGitRepo,
-    tempClankHouse,
-    testRun
+    taggedStringOutput
 } from "@clankhouse/test-utils"
 
 const outputSchema = z.object({ done: z.boolean() })

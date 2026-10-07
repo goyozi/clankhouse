@@ -1,8 +1,8 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import * as path from "node:path"
-import { BaseCodingAgent, type CodingAgentInvocation } from "./base-agent.js"
-import { ClankHouseError } from "../errors.js"
-import { errorMessage, newId } from "../util.js"
+import { ClankHouseError } from "@clankhouse/core"
+import { BaseCodingAgent, type CodingAgentInvocation } from "@clankhouse/core/ai/base-agent"
+import { errorMessage, newId } from "@clankhouse/core/util"
 
 export type FakeWrite = {
     file: string

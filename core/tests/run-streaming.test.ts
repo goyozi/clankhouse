@@ -2,7 +2,7 @@ import * as z from "zod"
 import { expect, test } from "vitest"
 import { BaseLanguageModel, type LanguageModelInvocation } from "@clankhouse/core/ai/base-llm"
 import { ClankHouseError } from "@clankhouse/core/errors"
-import { gate, tempClankHouse, testRun } from "@clankhouse/test-utils"
+import { gate, tempClankHouse, testRun } from "@clankhouse/testing"
 import type { ClankHouse } from "@clankhouse/core/clankhouse"
 
 async function onlyRunId(clankhouse: ClankHouse, key?: string): Promise<string> {

@@ -2,7 +2,7 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import { createHash } from "node:crypto"
 import { type GitRepository, Worktree, type WorktreeOptions } from "@clankhouse/core/git"
-import { runGit, tempClankHouse, testRun } from "@clankhouse/test-utils"
+import { runGit, tempClankHouse, testRun } from "@clankhouse/testing"
 
 export function userSnapshotRef(worktree: Worktree, name: string): string {
     const namespace = createHash("sha256").update(path.resolve(worktree.path)).digest("hex")

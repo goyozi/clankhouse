@@ -2,12 +2,19 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { FakeCodingAgent } from "@clankhouse/core/ai/fake-agent"
-import { FakeLLM } from "@clankhouse/core/ai/fake-llm"
+import {
+    FakeCodingAgent,
+    FakeLLM,
+    gate,
+    runOutput,
+    tempClankHouse,
+    tempGitRepo,
+    testRun,
+    waitForRun
+} from "@clankhouse/testing"
 import type { ClankHouse } from "@clankhouse/core/clankhouse"
 import * as sql from "@clankhouse/core/db"
 import { GitRepository, type Worktree } from "@clankhouse/core/git"
-import { gate, runOutput, tempClankHouse, tempGitRepo, testRun, waitForRun } from "@clankhouse/test-utils"
 
 const DAY_MS = 24 * 60 * 60 * 1000
 

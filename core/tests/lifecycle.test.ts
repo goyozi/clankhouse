@@ -1,6 +1,6 @@
 import { expect, test } from "vitest"
 import { ClankHouse } from "@clankhouse/core/clankhouse"
-import { tempDir } from "@clankhouse/test-utils"
+import { tempDir } from "@clankhouse/testing"
 
 test("closing marks the instance closed and releases its database", async () => {
     // given an open ClankHouse instance

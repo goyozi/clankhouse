@@ -43,7 +43,8 @@
     },
     "devDependencies": {
         "@clankhouse/core": "workspace:*",
-        "@clankhouse/test-utils": "workspace:*"
+        "@clankhouse/test-utils": "workspace:*",
+        "@clankhouse/testing": "workspace:*"
     },
     "peerDependencies": {
         "@clankhouse/core": "workspace:^"

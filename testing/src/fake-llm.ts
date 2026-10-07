@@ -1,4 +1,4 @@
-import { BaseLanguageModel, type LanguageModelInvocation } from "./base-llm.js"
+import { BaseLanguageModel, type LanguageModelInvocation } from "@clankhouse/core/ai/base-llm"
 
 export class FakeLLM extends BaseLanguageModel {
     readonly client = "fake-llm"

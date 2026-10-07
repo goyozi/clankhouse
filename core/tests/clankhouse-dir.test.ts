@@ -2,7 +2,7 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import { expect, test } from "vitest"
 import { ClankHouse } from "@clankhouse/core/clankhouse"
-import { tempDir } from "@clankhouse/test-utils"
+import { tempDir } from "@clankhouse/testing"
 
 test("uses explicitly provided directory and creates the database", () => {
     // given a nested directory path that does not yet exist

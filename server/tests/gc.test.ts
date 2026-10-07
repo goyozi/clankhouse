@@ -1,5 +1,5 @@
 import type { ClankHouse } from "@clankhouse/core/clankhouse"
-import { gate, tempClankHouse, testRun } from "@clankhouse/test-utils"
+import { gate, tempClankHouse, testRun } from "@clankhouse/testing"
 import { expect, onTestFinished, test, vi } from "vitest"
 import { serve, type ClankHouseServer } from "../src"
 import { freePort, rpcClient } from "./helpers"

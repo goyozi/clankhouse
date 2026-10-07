@@ -4,21 +4,38 @@ Basic workflow that sets up a temporary Git repository and asks an agent to impl
 
 ## Try It
 
-If you don't have `clank` installed or want to use the source version:
+You'll need Node.js 22.19 or newer, Git, [Codex](https://openai.com/codex/) signed in, and the `clank` CLI:
 
 ```sh
-alias clank="pnpm --filter clankhouse exec node bin/clank.js"
+npm install --global clankhouse
+```
+
+Copy this example and install its dependencies:
+
+```sh
+npx giget@latest gh:goyozi/clankhouse/examples/hello-world hello-world
+cd hello-world
+npm install
 ```
 
 Start the server:
 
 ```sh
-pnpm --filter @clankhouse/example-hello-world start
+npm start
 ```
 
-Start and watch a run:
+In another terminal, start and watch a run:
 
 ```sh
 RUN_ID=$(clank runs start hello-world)
 clank runs get $RUN_ID --watch --include sessions
 ```
+
+## Test It
+
+```sh
+npm test
+```
+
+The tests swap the agents for fakes from [`@clankhouse/testing`](https://github.com/goyozi/clankhouse/tree/main/testing),
+so they run offline and make no AI calls.

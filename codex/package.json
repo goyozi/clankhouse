@@ -43,6 +43,7 @@
     "devDependencies": {
         "@clankhouse/core": "workspace:*",
         "@clankhouse/test-utils": "workspace:*",
+        "@clankhouse/testing": "workspace:*",
         "@openai/codex-sdk": "^0.160.0"
     },
     "peerDependencies": {

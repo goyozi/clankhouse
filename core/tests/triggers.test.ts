@@ -11,7 +11,7 @@ import {
     type TriggerOptions
 } from "@clankhouse/core/triggers"
 import type { WorkflowRef } from "@clankhouse/core/workflows"
-import { gate, runOutput, tempClankHouse, tempDir } from "@clankhouse/test-utils"
+import { gate, runOutput, tempClankHouse, tempDir } from "@clankhouse/testing"
 
 function configuredClankHouse(onTriggerError: TriggerErrorHandler): ClankHouse {
     const clankhouse = new ClankHouse(tempDir("clankhouse-trigger-errors-"), { onTriggerError })

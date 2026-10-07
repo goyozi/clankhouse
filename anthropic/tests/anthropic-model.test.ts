@@ -1,7 +1,8 @@
 import * as z from "zod"
 import { expect, test } from "vitest"
 import { AnthropicModel } from "@clankhouse/anthropic"
-import { sessionTextMessages, taggedOutput, taggedStringOutput, tempClankHouse, testRun } from "@clankhouse/test-utils"
+import { tempClankHouse, testRun } from "@clankhouse/testing"
+import { sessionTextMessages, taggedOutput, taggedStringOutput } from "@clankhouse/test-utils"
 import { fakeAnthropic, redactedThinkingBlock, textBlock, thinkingBlock } from "./fake-anthropic"
 
 const outputSchema = z.object({ done: z.boolean() })

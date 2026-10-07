@@ -43,7 +43,8 @@
     "devDependencies": {
         "@anthropic-ai/sdk": "^0.131.0",
         "@clankhouse/core": "workspace:*",
-        "@clankhouse/test-utils": "workspace:*"
+        "@clankhouse/test-utils": "workspace:*",
+        "@clankhouse/testing": "workspace:*"
     },
     "peerDependencies": {
         "@anthropic-ai/sdk": ">=0.115.0 <1",

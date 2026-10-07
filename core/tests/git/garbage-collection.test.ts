@@ -3,7 +3,7 @@ import * as path from "node:path"
 import { expect, test } from "vitest"
 import { GitRepository, Worktree, type WorktreeReference } from "@clankhouse/core/git"
 import { ClankHouse } from "@clankhouse/core/clankhouse"
-import { runGit, tempDir, tempGitRepo, tempClankHouse, testRun } from "@clankhouse/test-utils"
+import { runGit, tempClankHouse, tempDir, tempGitRepo, testRun } from "@clankhouse/testing"
 
 const OLD_CANDIDATE_DATE = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000)
 

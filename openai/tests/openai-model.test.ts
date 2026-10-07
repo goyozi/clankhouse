@@ -1,7 +1,8 @@
 import * as z from "zod"
 import { expect, test } from "vitest"
 import { OpenAIModel } from "@clankhouse/openai"
-import { sessionTextMessages, taggedOutput, taggedStringOutput, tempClankHouse, testRun } from "@clankhouse/test-utils"
+import { tempClankHouse, testRun } from "@clankhouse/testing"
+import { sessionTextMessages, taggedOutput, taggedStringOutput } from "@clankhouse/test-utils"
 import { fakeOpenAI, openAIResponse, outputMessage, reasoningItem } from "./fake-openai"
 
 const outputSchema = z.object({ done: z.boolean() })

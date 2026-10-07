@@ -5,17 +5,13 @@ import { expect, test } from "vitest"
 import { CodexAgent } from "@clankhouse/codex"
 import { GitRepository, Worktree } from "@clankhouse/core/git"
 import { uniqueName } from "@clankhouse/core/util"
+import { runGit, runOutput, tempClankHouse, tempGitRepo, testRun } from "@clankhouse/testing"
 import {
     instructedSchema,
     instructedTags,
-    runGit,
-    runOutput,
     sessionTextMessages,
     taggedOutput,
-    taggedStringOutput,
-    tempGitRepo,
-    tempClankHouse,
-    testRun
+    taggedStringOutput
 } from "@clankhouse/test-utils"
 import { fakeCodex } from "./fake-codex-sdk"
 

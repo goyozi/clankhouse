@@ -4,7 +4,8 @@ import * as z from "zod"
 import { expect, test } from "vitest"
 import { BaseLanguageModel, type LanguageModelInvocation } from "@clankhouse/core/ai/base-llm"
 import type { AISessionMessage } from "@clankhouse/core/ai/sessions"
-import { gate, tempDir, tempClankHouse, testRun, testSession } from "@clankhouse/test-utils"
+import { gate, tempClankHouse, tempDir, testRun } from "@clankhouse/testing"
+import { testSession } from "@clankhouse/test-utils"
 
 function textMessage(message: AISessionMessage): Extract<AISessionMessage, { type: "message" }> {
     if (message.type !== "message") throw new Error(`Expected message, received ${message.type}`)

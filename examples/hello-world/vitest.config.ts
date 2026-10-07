@@ -1,9 +1,8 @@
 import { defineConfig } from "vitest/config"
-import { testDefaults } from "../../vitest.shared"
 
 export default defineConfig({
     test: {
-        ...testDefaults,
+        testTimeout: 20_000,
         include: ["tests/**/*.test.ts"]
     }
 })

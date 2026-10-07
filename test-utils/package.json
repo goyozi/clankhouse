@@ -9,6 +9,6 @@
     },
     "dependencies": {
         "@clankhouse/core": "workspace:*",
-        "zod": "catalog:"
+        "@clankhouse/testing": "workspace:*"
     }
 }

@@ -2,7 +2,7 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import { expect, test } from "vitest"
 import { GitRepository } from "@clankhouse/core/git"
-import { runGit, tempDir, tempGitRepo } from "@clankhouse/test-utils"
+import { runGit, tempDir, tempGitRepo } from "@clankhouse/testing"
 import { createWorktree, userSnapshotRef, writeTree } from "./helpers"
 
 test("snapshot and restore round-trip covering edits, adds and deletes", async () => {

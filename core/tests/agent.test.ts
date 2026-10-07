@@ -2,10 +2,9 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { FakeCodingAgent } from "@clankhouse/core/ai/fake-agent"
+import { FakeCodingAgent, runGit, runOutput, tempClankHouse, tempGitRepo, testRun } from "@clankhouse/testing"
 import { GitRepository, Worktree } from "@clankhouse/core/git"
 import { uniqueName } from "@clankhouse/core/util"
-import { runGit, runOutput, tempGitRepo, tempClankHouse, testRun } from "@clankhouse/test-utils"
 
 const outputSchema = z.object({ done: z.boolean() })
 const workflowOptions = { input: z.null(), output: z.json(), key: () => "test-key" }

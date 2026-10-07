@@ -2,9 +2,8 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { FakeLLM } from "@clankhouse/core/ai/fake-llm"
+import { FakeLLM, gate, runOutput, tempClankHouse, testRun } from "@clankhouse/testing"
 import type { ClankHouse } from "@clankhouse/core/clankhouse"
-import { gate, runOutput, tempClankHouse, testRun } from "@clankhouse/test-utils"
 
 const DAY_MS = 24 * 60 * 60 * 1000
 

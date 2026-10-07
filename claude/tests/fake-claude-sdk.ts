@@ -9,7 +9,7 @@ import type {
     SDKUserMessage
 } from "@anthropic-ai/claude-agent-sdk"
 import type { QueryFunction } from "@clankhouse/claude"
-import { applyChange, type FakeChange } from "@clankhouse/core/ai/fake-agent"
+import { applyChange, type FakeChange } from "@clankhouse/testing"
 import { taggedOutput } from "@clankhouse/test-utils"
 
 type AssistantBlock = SDKAssistantMessage["message"]["content"][number]

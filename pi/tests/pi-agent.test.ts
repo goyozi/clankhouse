@@ -4,18 +4,8 @@ import { ModelRuntime } from "@earendil-works/pi-coding-agent"
 import { PiAgent } from "@clankhouse/pi"
 import { GitRepository, Worktree } from "@clankhouse/core/git"
 import { uniqueName } from "@clankhouse/core/util"
-import {
-    instructedTags,
-    runGit,
-    runOutput,
-    sessionTextMessages,
-    sessionToolCallMessages,
-    taggedOutput,
-    tempDir,
-    tempGitRepo,
-    tempClankHouse,
-    testRun
-} from "@clankhouse/test-utils"
+import { runGit, runOutput, tempClankHouse, tempDir, tempGitRepo, testRun } from "@clankhouse/testing"
+import { instructedTags, sessionTextMessages, sessionToolCallMessages, taggedOutput } from "@clankhouse/test-utils"
 import * as z from "zod"
 import { expect, test } from "vitest"
 import { fakePi, isolatedModelRuntime } from "./fake-pi-sdk"

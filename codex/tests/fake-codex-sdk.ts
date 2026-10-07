@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
 import type { CodexOptions, Input, ThreadEvent, ThreadItem, ThreadOptions, TurnOptions } from "@openai/codex-sdk"
 import type { CodexFactory } from "@clankhouse/codex"
-import { applyChange, type FakeChange } from "@clankhouse/core/ai/fake-agent"
+import { applyChange, type FakeChange } from "@clankhouse/testing"
 import { taggedOutput } from "@clankhouse/test-utils"
 
 export type FakeCodexItem = {

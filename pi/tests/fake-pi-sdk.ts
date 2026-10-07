@@ -7,7 +7,7 @@ import {
     type PromptOptions
 } from "@earendil-works/pi-coding-agent"
 import type { PiAgentSessionFactory } from "@clankhouse/pi"
-import { applyChange, type FakeChange } from "@clankhouse/core/ai/fake-agent"
+import { applyChange, type FakeChange } from "@clankhouse/testing"
 import { taggedOutput } from "@clankhouse/test-utils"
 
 type PiMessage = Extract<AgentSessionEvent, { type: "message_end" }>["message"]

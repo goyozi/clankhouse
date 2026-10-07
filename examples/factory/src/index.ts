@@ -8,7 +8,7 @@ import { createFactoryWorkflow, FactoryInput } from "./workflow"
 
 const repositories = process.argv.slice(2)
 if (repositories.length === 0) {
-    console.error("usage: pnpm start <repository-path>...")
+    console.error("usage: npm start -- <repository-path>...")
     process.exit(2)
 }
 

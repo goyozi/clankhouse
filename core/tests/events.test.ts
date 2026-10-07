@@ -2,7 +2,7 @@ import * as z from "zod"
 import { expect, expectTypeOf, test } from "vitest"
 import { ClankHouse } from "@clankhouse/core/clankhouse"
 import type { EventSourceListener } from "@clankhouse/core/events"
-import { gate, runOutput, tempClankHouse, testRun } from "@clankhouse/test-utils"
+import { gate, runOutput, tempClankHouse, testRun } from "@clankhouse/testing"
 
 const approval = z.object({ ok: z.boolean() })
 const workflowOptions = { input: z.null(), output: z.json(), key: () => "test-key" }

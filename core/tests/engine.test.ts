@@ -2,7 +2,7 @@ import * as z from "zod"
 import { expect, test } from "vitest"
 import { ClankHouse } from "@clankhouse/core/clankhouse"
 import { ClankHouseError } from "@clankhouse/core/errors"
-import { gate, tempClankHouse, testRun } from "@clankhouse/test-utils"
+import { gate, tempClankHouse, testRun } from "@clankhouse/testing"
 
 test("runs a workflow with durable steps and persists results", async () => {
     // given a fresh clankhouse instance

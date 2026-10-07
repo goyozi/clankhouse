@@ -47,6 +47,7 @@
     "devDependencies": {
         "@clankhouse/core": "workspace:*",
         "@clankhouse/test-utils": "workspace:*",
+        "@clankhouse/testing": "workspace:*",
         "tsx": "^4.23.0",
         "typescript": "^6.0.3"
     },

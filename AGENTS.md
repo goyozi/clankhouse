@@ -39,9 +39,13 @@ anthropic / openai
 - `AnthropicModel` using `@anthropic-ai/sdk`
 - `OpenAIModel` using `openai`
 
+testing:
+
+- published utils and fakes for testing ClankHouse workflows
+
 test-utils:
 
-- shared utils for testing ClankHouse workflows
+- internal utils for testing ClankHouse itself (structured output tags, sessions)
 
 examples:
 

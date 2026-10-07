@@ -7,17 +7,25 @@ and tested, with the resulting changes waiting uncommitted in your working tree.
 
 ## Try It
 
-If you don't have `clank` installed or want to use the source version:
+You'll need Node.js 22.19 or newer, Git, [Claude Code](https://claude.com/product/claude-code) and
+[Codex](https://openai.com/codex/) signed in, and the `clank` CLI:
 
 ```sh
-export CLANKHOUSE_SOURCE=/absolute/path/to/clankhouse
-alias clank='pnpm --dir "$CLANKHOUSE_SOURCE" --filter clankhouse exec node bin/clank.js'
+npm install --global clankhouse
+```
+
+Copy this example and install its dependencies:
+
+```sh
+npx giget@latest gh:goyozi/clankhouse/examples/factory factory
+cd factory
+npm install
 ```
 
 Start the server with the repositories to watch:
 
 ```sh
-pnpm --dir "$CLANKHOUSE_SOURCE" --filter @clankhouse/example-factory start ~/src/my-app
+npm start -- ~/src/my-app
 ```
 
 Each repository gets a `factory/` directory:
@@ -61,3 +69,12 @@ changes and rerun from the step you changed, reusing everything before it:
 ```sh
 clank runs rerun <run-id> --from code-review-round-1/review-code-1
 ```
+
+## Test It
+
+```sh
+npm test
+```
+
+The tests swap the agents for fakes from [`@clankhouse/testing`](https://github.com/goyozi/clankhouse/tree/main/testing),
+so they run offline and make no AI calls.

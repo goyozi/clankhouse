@@ -3,7 +3,7 @@ import * as path from "node:path"
 import * as z from "zod"
 import { expect, test } from "vitest"
 import { GitRepository, Worktree, type WorktreeReference } from "@clankhouse/core/git"
-import { runGit, tempGitRepo, tempClankHouse, testRun } from "@clankhouse/test-utils"
+import { runGit, tempClankHouse, tempGitRepo, testRun } from "@clankhouse/testing"
 
 test("worktree creation is a durable step publishing a random detached checkout", async () => {
     // given a ClankHouse instance and fresh repository
