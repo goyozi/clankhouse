@@ -1,5 +1,17 @@
 # @clankhouse/core
 
+## 0.2.0
+
+### Minor Changes
+
+- 7c2ced0: Add `@clankhouse/testing` with helpers for testing workflows: temporary ClankHouse instances, directories and Git
+  repositories, run helpers, and the fake `FakeLLM` and `FakeCodingAgent`. The fakes moved there from
+  `@clankhouse/core/ai/fake-llm` and `@clankhouse/core/ai/fake-agent`.
+
+### Patch Changes
+
+- 3560251: Add usage examples to package READMEs
+
 ## 0.1.0
 
 ### Minor Changes
