@@ -179,17 +179,17 @@ importers:
         specifier: ^0.3.289
         version: 0.3.289(@anthropic-ai/sdk@0.131.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(zod@4.4.3)
       '@clankhouse/claude':
-        specifier: workspace:*
-        version: link:../../claude
+        specifier: ^0.2.0
+        version: 0.2.0(@anthropic-ai/claude-agent-sdk@0.3.289(@anthropic-ai/sdk@0.131.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(zod@4.4.3))(@clankhouse/core@0.2.0)
       '@clankhouse/codex':
-        specifier: workspace:*
-        version: link:../../codex
+        specifier: ^0.2.0
+        version: 0.2.0(@clankhouse/core@0.2.0)(@openai/codex-sdk@0.160.0)
       '@clankhouse/core':
-        specifier: workspace:*
-        version: link:../../core
+        specifier: ^0.2.0
+        version: 0.2.0
       '@clankhouse/server':
-        specifier: workspace:*
-        version: link:../../server
+        specifier: ^0.2.0
+        version: 0.2.0(@clankhouse/core@0.2.0)
       '@openai/codex-sdk':
         specifier: ^0.160.0
         version: 0.160.0
@@ -201,8 +201,8 @@ importers:
         version: 4.4.3
     devDependencies:
       '@clankhouse/testing':
-        specifier: workspace:*
-        version: link:../../testing
+        specifier: ^0.2.0
+        version: 0.2.0(@clankhouse/core@0.2.0)(vitest@4.1.10(@opentelemetry/api@1.9.0)(@types/node@26.6.4)(vite@8.1.3(@types/node@26.6.4)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0)))
       '@types/node':
         specifier: ^26.6.4
         version: 26.6.4
@@ -219,17 +219,17 @@ importers:
         specifier: ^0.3.289
         version: 0.3.289(@anthropic-ai/sdk@0.131.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(zod@4.4.3)
       '@clankhouse/claude':
-        specifier: workspace:*
-        version: link:../../claude
+        specifier: ^0.2.0
+        version: 0.2.0(@anthropic-ai/claude-agent-sdk@0.3.289(@anthropic-ai/sdk@0.131.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(zod@4.4.3))(@clankhouse/core@0.2.0)
       '@clankhouse/codex':
-        specifier: workspace:*
-        version: link:../../codex
+        specifier: ^0.2.0
+        version: 0.2.0(@clankhouse/core@0.2.0)(@openai/codex-sdk@0.160.0)
       '@clankhouse/core':
-        specifier: workspace:*
-        version: link:../../core
+        specifier: ^0.2.0
+        version: 0.2.0
       '@clankhouse/server':
-        specifier: workspace:*
-        version: link:../../server
+        specifier: ^0.2.0
+        version: 0.2.0(@clankhouse/core@0.2.0)
       '@openai/codex-sdk':
         specifier: ^0.160.0
         version: 0.160.0
@@ -241,8 +241,8 @@ importers:
         version: 4.4.3
     devDependencies:
       '@clankhouse/testing':
-        specifier: workspace:*
-        version: link:../../testing
+        specifier: ^0.2.0
+        version: 0.2.0(@clankhouse/core@0.2.0)(vitest@4.1.10(@opentelemetry/api@1.9.0)(@types/node@26.6.4)(vite@8.1.3(@types/node@26.6.4)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0)))
       '@types/node':
         specifier: ^26.6.4
         version: 26.6.4
@@ -256,14 +256,14 @@ importers:
   examples/hello-world:
     dependencies:
       '@clankhouse/codex':
-        specifier: workspace:*
-        version: link:../../codex
+        specifier: ^0.2.0
+        version: 0.2.0(@clankhouse/core@0.2.0)(@openai/codex-sdk@0.160.0)
       '@clankhouse/core':
-        specifier: workspace:*
-        version: link:../../core
+        specifier: ^0.2.0
+        version: 0.2.0
       '@clankhouse/server':
-        specifier: workspace:*
-        version: link:../../server
+        specifier: ^0.2.0
+        version: 0.2.0(@clankhouse/core@0.2.0)
       '@openai/codex-sdk':
         specifier: ^0.160.0
         version: 0.160.0
@@ -275,8 +275,8 @@ importers:
         version: 4.4.3
     devDependencies:
       '@clankhouse/testing':
-        specifier: workspace:*
-        version: link:../../testing
+        specifier: ^0.2.0
+        version: 0.2.0(@clankhouse/core@0.2.0)(vitest@4.1.10(@opentelemetry/api@1.9.0)(@types/node@26.6.4)(vite@8.1.3(@types/node@26.6.4)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0)))
       '@types/node':
         specifier: ^26.6.4
         version: 26.6.4
@@ -684,6 +684,41 @@ packages:
   '@clack/prompts@1.7.0':
     resolution: {integrity: sha512-y7/yvZ2TPAnR9+jnc00klvNNLkJiXFFrQA/hlLCcxA9a2A4zQIOimyFQ9XfwYKiGD1fb5GY8vbKIIgO8d5Tb2A==}
     engines: {node: '>= 20.12.0'}
+
+  '@clankhouse/claude@0.2.0':
+    resolution: {integrity: sha512-tzv75YS5f5+/F0mRoS+DIW2y9eX1TOSVQjXnTCy3hoXn/7giPtq13nA5fEJHg0P6G3nKVH/WxkYZViqRXDfNwQ==}
+    engines: {node: '>=22.19.0'}
+    peerDependencies:
+      '@anthropic-ai/claude-agent-sdk': '>=0.3.283 <1'
+      '@clankhouse/core': ^0.2.0
+
+  '@clankhouse/codex@0.2.0':
+    resolution: {integrity: sha512-Ohk93v7ro05PFUGsXbo7VmMwP/MNfdrrji5QSApxhHAzgg2CMzwWSSN7GuidyBR0dgAOp4DSxbY01yhWmXCKQQ==}
+    engines: {node: '>=22.19.0'}
+    peerDependencies:
+      '@clankhouse/core': ^0.2.0
+      '@openai/codex-sdk': '>=0.157.1 <1'
+
+  '@clankhouse/core@0.2.0':
+    resolution: {integrity: sha512-pifsh/f1wPtYIDEajvlk//er1S1vBnWcSOFLTEfd7FaVJ2lnsveDRldInICCcgSnY+NaYnkXOnRNqrpLobsKdA==}
+    engines: {node: '>=22.19.0'}
+
+  '@clankhouse/protocol@0.2.0':
+    resolution: {integrity: sha512-7pWiDONNXuxnttJEkeX4ySIcqU6ymLhPMDFmXF5NlLAhR1lqXa56Uiiqb9oay5Cm8No3PcGfrptPsysZaYRWng==}
+    engines: {node: '>=22.19.0'}
+
+  '@clankhouse/server@0.2.0':
+    resolution: {integrity: sha512-C2JBVYJpX5diYxSie8wwLHN7ftSplAiiW6pXoBK1NWoE/Fd2gsIl7p6snzP8rAu1PB+B/ENBZcdvN61LV0516Q==}
+    engines: {node: '>=22.19.0'}
+    peerDependencies:
+      '@clankhouse/core': ^0.2.0
+
+  '@clankhouse/testing@0.2.0':
+    resolution: {integrity: sha512-JHsoVu5yzLhkHCuhN2wIqDwenYZKm5JHYglX1PzJgA5KlI8oRJEOu4gfVx6N/ZlTNrhukhkzcZJLPCkOgRtgDA==}
+    engines: {node: '>=22.19.0'}
+    peerDependencies:
+      '@clankhouse/core': ^0.2.0
+      vitest: ^4.0.0
 
   '@connectrpc/connect-node@2.1.2':
     resolution: {integrity: sha512-+i/aAOpsI8sIx1mbYp6d99zvxaUSF6t/jP9Ux9maAmjsZPgmIQ3JuIeYi0zJIP9zlCnBlJjkpPosshCgdRuThQ==}
@@ -3044,6 +3079,44 @@ snapshots:
       fast-string-width: 3.0.2
       fast-wrap-ansi: 0.2.2
       sisteransi: 1.0.5
+
+  '@clankhouse/claude@0.2.0(@anthropic-ai/claude-agent-sdk@0.3.289(@anthropic-ai/sdk@0.131.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(zod@4.4.3))(@clankhouse/core@0.2.0)':
+    dependencies:
+      '@anthropic-ai/claude-agent-sdk': 0.3.289(@anthropic-ai/sdk@0.131.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(zod@4.4.3)
+      '@clankhouse/core': 0.2.0
+      zod: 4.4.3
+
+  '@clankhouse/codex@0.2.0(@clankhouse/core@0.2.0)(@openai/codex-sdk@0.160.0)':
+    dependencies:
+      '@clankhouse/core': 0.2.0
+      '@openai/codex-sdk': 0.160.0
+      zod: 4.4.3
+
+  '@clankhouse/core@0.2.0':
+    dependencies:
+      better-sqlite3: 12.11.1
+      handlebars: 4.7.9
+      nanoid: 5.1.16
+      zod: 4.4.3
+
+  '@clankhouse/protocol@0.2.0':
+    dependencies:
+      '@bufbuild/protobuf': 2.12.1
+
+  '@clankhouse/server@0.2.0(@clankhouse/core@0.2.0)':
+    dependencies:
+      '@bufbuild/protobuf': 2.12.1
+      '@clankhouse/core': 0.2.0
+      '@clankhouse/protocol': 0.2.0
+      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.1)
+      '@connectrpc/connect-node': 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
+      zod: 4.4.3
+
+  '@clankhouse/testing@0.2.0(@clankhouse/core@0.2.0)(vitest@4.1.10(@opentelemetry/api@1.9.0)(@types/node@26.6.4)(vite@8.1.3(@types/node@26.6.4)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0)))':
+    dependencies:
+      '@clankhouse/core': 0.2.0
+      vitest: 4.1.10(@opentelemetry/api@1.9.0)(@types/node@26.6.4)(vite@8.1.3(@types/node@26.6.4)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0))
+      zod: 4.4.3
 
   '@connectrpc/connect-node@2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))':
     dependencies:
