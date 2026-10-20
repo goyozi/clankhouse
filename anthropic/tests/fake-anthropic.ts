@@ -51,7 +51,7 @@ export function fakeAnthropic(
 }
 
 function anthropicMessage(model: string, content: ContentBlock[], stopReason: StopReason): Message {
-    return {
+    const message: Partial<Message> = {
         id: "msg_test",
         container: null,
         content,
@@ -72,8 +72,9 @@ function anthropicMessage(model: string, content: ContentBlock[], stopReason: St
             output_tokens_details: null,
             server_tool_use: null,
             service_tier: "standard"
-        }
+        } as Message["usage"]
     }
+    return message as Message
 }
 
 function toSSE(message: Message): string {
