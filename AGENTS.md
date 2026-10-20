@@ -52,6 +52,7 @@ examples:
 - hello-world - basic ClankHouse workflow example
 - dual-review - code review by Claude & Codex
 - factory - simple software factory
+- linear-to-herdr - Linear issues picked up by a coding agent in Herdr
 
 design:
 

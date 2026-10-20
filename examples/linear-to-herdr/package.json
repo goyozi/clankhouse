@@ -1,0 +1,24 @@
+{
+    "name": "@clankhouse/example-linear-to-herdr",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "main": "./src/index.ts",
+    "scripts": {
+        "start": "tsx src/index.ts",
+        "test": "vitest run --config vitest.config.ts",
+        "typecheck": "tsc -p tsconfig.json --noEmit"
+    },
+    "dependencies": {
+        "@clankhouse/core": "^0.2.0",
+        "@clankhouse/server": "^0.2.0",
+        "tsx": "^4.23.0",
+        "zod": "^4.4.3"
+    },
+    "devDependencies": {
+        "@clankhouse/testing": "^0.2.0",
+        "@types/node": "^26.6.4",
+        "typescript": "^6.0.3",
+        "vitest": "^4.1.10"
+    }
+}
