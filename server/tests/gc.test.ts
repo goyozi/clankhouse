@@ -1,4 +1,4 @@
-import type { ClankHouse } from "@clankhouse/core/clankhouse"
+import type { ClankHouse } from "@clankhouse/core"
 import { gate, tempClankHouse, testRun } from "@clankhouse/testing"
 import { expect, onTestFinished, test, vi } from "vitest"
 import { serve, type ClankHouseServer } from "../src"

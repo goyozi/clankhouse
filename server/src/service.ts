@@ -1,5 +1,5 @@
 import type { ServiceImpl } from "@connectrpc/connect"
-import type { ClankHouse } from "@clankhouse/core/clankhouse"
+import type { ClankHouse } from "@clankhouse/core"
 import { ClankHouseService } from "@clankhouse/protocol"
 import { artifactHandlers } from "./rpc/artifacts.js"
 import { eventHandlers } from "./rpc/events.js"

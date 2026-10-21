@@ -1,6 +1,6 @@
 import { Code, ConnectError } from "@connectrpc/connect"
-import { formatZodError } from "@clankhouse/core/errors"
-import type { ClankHouse } from "@clankhouse/core/clankhouse"
+import type { ClankHouse } from "@clankhouse/core"
+import { formatZodError } from "@clankhouse/core/internal"
 import * as z from "zod"
 import { toExecutionStatus } from "../mappers.js"
 import { notFound, parseJson, required, toConnectError } from "./errors.js"

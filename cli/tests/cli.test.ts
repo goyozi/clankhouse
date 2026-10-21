@@ -16,10 +16,8 @@ import {
     testRun,
     waitForRun
 } from "@clankhouse/testing"
-import { openDatabase } from "@clankhouse/core/db"
-import { ClankHouseError } from "@clankhouse/core/errors"
+import { ClankHouseError, type ClankHouse } from "@clankhouse/core"
 import { GitRepository } from "@clankhouse/core/git"
-import type { ClankHouse } from "@clankhouse/core/clankhouse"
 import {
     ExecutionStatus,
     GetArtifactResponseSchema,
@@ -892,7 +890,7 @@ test("human get --watch does not repeat a snapshotted step when only hidden meta
 
 test("included session failures do not stop the primary run watch", async () => {
     // given a live run whose completed session cursor becomes invalid after its initial snapshot
-    const { clankhouse, dir } = tempClankHouse()
+    const { clankhouse } = tempClankHouse()
     const llm = new FakeLLM((_stepName, prompt) => ({ reply: prompt }))
     clankhouse.registerWorkflow(
         "session-watch-error",
@@ -935,12 +933,7 @@ test("included session failures do not stop the primary run watch", async () => 
     await stdout.blocked
 
     // when the persisted cursor is removed before tailing begins
-    const db = openDatabase(path.join(dir, "clankhouse.db"))
-    try {
-        db.prepare("DELETE FROM session_messages WHERE id = ?").run(cursor)
-    } finally {
-        db.close()
-    }
+    clankhouse.db.prepare("DELETE FROM session_messages WHERE id = ?").run(cursor)
     stdout.release()
     await waitForCondition(
         () => Buffer.concat(stderrChunks).toString("utf8").includes('"scope":"session"'),

@@ -12,8 +12,8 @@ import {
     testRun,
     waitForRun
 } from "@clankhouse/testing"
-import type { ClankHouse } from "@clankhouse/core/clankhouse"
-import * as sql from "@clankhouse/core/db"
+import type { ClankHouse } from "../src/clankhouse"
+import * as sql from "../src/db"
 import { GitRepository, type Worktree } from "@clankhouse/core/git"
 
 const DAY_MS = 24 * 60 * 60 * 1000

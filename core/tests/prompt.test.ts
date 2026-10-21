@@ -2,7 +2,7 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import { pathToFileURL } from "node:url"
 import { expect, test } from "vitest"
-import { renderPrompt } from "@clankhouse/core/ai/prompt"
+import { renderPrompt } from "../src/ai/prompt"
 import { tempDir } from "@clankhouse/testing"
 
 test("relative prompt files resolve against the project root", async () => {

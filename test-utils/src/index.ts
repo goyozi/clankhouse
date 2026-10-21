@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
-import type { ClankHouse } from "@clankhouse/core/clankhouse"
-import type { AISessionMessage, SessionRecorder } from "@clankhouse/core/ai/sessions"
+import type { AISessionMessage, ClankHouse } from "@clankhouse/core"
+import type { SessionRecorder } from "@clankhouse/core/providers"
 import { testRun } from "@clankhouse/testing"
 
 export async function testSession(

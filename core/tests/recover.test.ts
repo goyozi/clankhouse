@@ -1,7 +1,7 @@
 import * as z from "zod"
 import { expect, test } from "vitest"
-import type { ClankHouse } from "@clankhouse/core/clankhouse"
-import * as sql from "@clankhouse/core/db"
+import type { ClankHouse } from "../src/clankhouse"
+import * as sql from "../src/db"
 import { gate, runOutput, tempClankHouse } from "@clankhouse/testing"
 
 const input = z.object({ id: z.string(), value: z.number() })

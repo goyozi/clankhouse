@@ -103,14 +103,27 @@ export function moveFile(name: string, from: string, to: string): Promise<void> 
     return clankhouse().moveFile(name, from, to)
 }
 
+export { ClankHouse, type ClankHouseOptions, type StepContext } from "./clankhouse.js"
+
 export type {
     RecoverResult,
     RecoveryPolicy,
     RerunOptions,
     StartResult,
     WorkflowOptions,
-    WorkflowRef
+    WorkflowRef,
+    Workflows
 } from "./workflows.js"
+export type {
+    ListWorkflowOptions,
+    ObservableRunStatus,
+    ObservableStepStatus,
+    Step,
+    WorkflowRun,
+    WorkflowRunMetadata,
+    WorkflowRuns
+} from "./runs.js"
+
 export type {
     ActiveEventSource,
     ApiEventSource,
@@ -120,7 +133,22 @@ export type {
     EventSourceResult
 } from "./events.js"
 export type { TriggerErrorHandler, TriggerHandle, TriggerOptions } from "./triggers.js"
-export type { ClankHouseOptions, GcOptions, GcResult, StepContext } from "./clankhouse.js"
 export { fileCreated, fileCreatedIn } from "./files.js"
-export { ClankHouseError } from "./errors.js"
-export type { ClankHouseErrorCode } from "./errors.js"
+
+export type { Artifact, Artifacts } from "./artifacts.js"
+
+export type { LanguageModel, ModelCallOptions } from "./ai/llm.js"
+export type { CodingAgent, CodingRunOptions } from "./ai/coding-agent.js"
+export { renderPrompt, type Prompt } from "./ai/prompt.js"
+export type {
+    AISession,
+    AISessionMessage,
+    AISessions,
+    CommonTool,
+    SessionMessageRole,
+    ToolSource
+} from "./ai/sessions.js"
+
+export { ClankHouseError, type ClankHouseErrorCode } from "./errors.js"
+
+export type { GcOptions, GcResult } from "./clankhouse.js"

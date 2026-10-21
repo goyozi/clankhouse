@@ -1,4 +1,4 @@
-import type { ClankHouse } from "@clankhouse/core/clankhouse"
+import type { ClankHouse } from "@clankhouse/core"
 import { toArtifact } from "../mappers.js"
 import { notFound, required, throwIfAborted, toConnectError } from "./errors.js"
 import type { ClankHouseServiceImplementation } from "./types.js"

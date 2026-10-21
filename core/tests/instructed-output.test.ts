@@ -1,6 +1,6 @@
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { prepareInstructedOutput } from "@clankhouse/core/ai/instructed-output"
+import { prepareInstructedOutput } from "../src/ai/instructed-output"
 import { instructedSchema, instructedTags } from "@clankhouse/test-utils"
 
 const outputSchema = z.object({ done: z.boolean() })

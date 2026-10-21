@@ -8,8 +8,12 @@ import {
     type AgentSessionEvent,
     type CreateAgentSessionOptions
 } from "@earendil-works/pi-coding-agent"
-import { BaseCodingAgent, type CodingAgentInvocation } from "@clankhouse/core/ai/base-agent"
-import type { CommonTool, SessionRecorder } from "@clankhouse/core/ai/sessions"
+import {
+    BaseCodingAgent,
+    type CodingAgentInvocation,
+    type CommonTool,
+    type SessionRecorder
+} from "@clankhouse/core/providers"
 import type { Worktree } from "@clankhouse/core/git"
 
 export type PiAgentSdkOptions = Omit<CreateAgentSessionOptions, "cwd" | "model" | "thinkingLevel" | "sessionManager">

@@ -1,16 +1,16 @@
 import * as z from "zod"
 import { expect, expectTypeOf, onTestFinished, test, vi } from "vitest"
-import { ClankHouse } from "@clankhouse/core/clankhouse"
+import { ClankHouse } from "../src/clankhouse"
 import { addTrigger } from "@clankhouse/core"
-import type { ActiveEventSource, ApiEventSource, EventSourceListener } from "@clankhouse/core/events"
+import type { ActiveEventSource, ApiEventSource, EventSourceListener } from "../src/events"
 import {
     Triggers,
     type TriggerArguments,
     type TriggerErrorHandler,
     type TriggerHandle,
     type TriggerOptions
-} from "@clankhouse/core/triggers"
-import type { WorkflowRef } from "@clankhouse/core/workflows"
+} from "../src/triggers"
+import type { WorkflowRef } from "../src/workflows"
 import { gate, runOutput, tempClankHouse, tempDir } from "@clankhouse/testing"
 
 function configuredClankHouse(onTriggerError: TriggerErrorHandler): ClankHouse {

@@ -3,7 +3,7 @@ import * as path from "node:path"
 import * as z from "zod"
 import { expect, test } from "vitest"
 import { FakeLLM, gate, tempClankHouse, tempDir, testRun } from "@clankhouse/testing"
-import { ClankHouse } from "@clankhouse/core/clankhouse"
+import { ClankHouse } from "../src/clankhouse"
 
 const outputSchema = z.object({ summary: z.string() })
 

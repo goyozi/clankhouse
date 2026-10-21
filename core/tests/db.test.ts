@@ -1,6 +1,6 @@
 import { expect, test } from "vitest"
-import * as sql from "@clankhouse/core/db"
-import type { RunRow } from "@clankhouse/core/db"
+import * as sql from "../src/db"
+import type { RunRow } from "../src/db"
 import { tempClankHouse } from "@clankhouse/testing"
 
 function runRow(overrides: Partial<RunRow> & Pick<RunRow, "id">): RunRow {

@@ -1,8 +1,8 @@
 import * as fs from "node:fs"
 import * as path from "node:path"
 import { expect, test } from "vitest"
-import type { Artifact } from "@clankhouse/core/artifacts"
-import { ClankHouse } from "@clankhouse/core/clankhouse"
+import type { Artifact } from "../src/artifacts"
+import { ClankHouse } from "../src/clankhouse"
 import { gate, tempClankHouse, testRun } from "@clankhouse/testing"
 
 async function collect(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {

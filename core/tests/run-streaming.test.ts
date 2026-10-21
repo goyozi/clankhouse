@@ -1,9 +1,9 @@
 import * as z from "zod"
 import { expect, test } from "vitest"
-import { BaseLanguageModel, type LanguageModelInvocation } from "@clankhouse/core/ai/base-llm"
-import { ClankHouseError } from "@clankhouse/core/errors"
+import { BaseLanguageModel, type LanguageModelInvocation } from "../src/ai/base-llm"
+import { ClankHouseError } from "../src/errors"
 import { gate, tempClankHouse, testRun } from "@clankhouse/testing"
-import type { ClankHouse } from "@clankhouse/core/clankhouse"
+import type { ClankHouse } from "../src/clankhouse"
 
 async function onlyRunId(clankhouse: ClankHouse, key?: string): Promise<string> {
     const runs = await clankhouse.runs.list(key !== undefined ? { key } : undefined)

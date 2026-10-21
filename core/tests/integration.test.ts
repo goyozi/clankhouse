@@ -4,7 +4,7 @@ import * as z from "zod"
 import { expect, test } from "vitest"
 import { FakeCodingAgent, FakeLLM, gate, runOutput, tempClankHouse, tempGitRepo, testRun } from "@clankhouse/testing"
 import { GitRepository } from "@clankhouse/core/git"
-import { ClankHouse } from "@clankhouse/core/clankhouse"
+import { ClankHouse } from "../src/clankhouse"
 
 test("end-to-end: durable workflow with llm, agent, artifact and approval survives crashes and reruns", async () => {
     // given a durable clankhouse instance and a git repository

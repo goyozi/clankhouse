@@ -1,5 +1,5 @@
 import { Code, ConnectError } from "@connectrpc/connect"
-import { ClankHouseError, type ClankHouseErrorCode } from "@clankhouse/core/errors"
+import { ClankHouseError, type ClankHouseErrorCode } from "@clankhouse/core"
 
 type ErrorMapping = Code | ((error: ClankHouseError) => ConnectError)
 type ErrorMappings = Partial<Record<ClankHouseErrorCode, ErrorMapping>>

@@ -2,7 +2,7 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as z from "zod"
 import { expect, test, vi } from "vitest"
-import type { EventSourceListener } from "@clankhouse/core/events"
+import type { EventSourceListener } from "../src/events"
 import { gate, runOutput, tempDir } from "@clankhouse/testing"
 
 function withClankHouseDir<T>(prefix: string, body: (dir: string) => Promise<T>): Promise<T> {

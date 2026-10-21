@@ -11,7 +11,8 @@
     "exports": {
         ".": "./src/index.ts",
         "./git": "./src/git/index.ts",
-        "./*": "./src/*.ts"
+        "./providers": "./src/providers/index.ts",
+        "./internal": "./src/internal/index.ts"
     },
     "repository": {
         "type": "git",
@@ -31,9 +32,13 @@
                 "types": "./dist/git/index.d.ts",
                 "import": "./dist/git/index.js"
             },
-            "./*": {
-                "types": "./dist/*.d.ts",
-                "import": "./dist/*.js"
+            "./providers": {
+                "types": "./dist/providers/index.d.ts",
+                "import": "./dist/providers/index.js"
+            },
+            "./internal": {
+                "types": "./dist/internal/index.d.ts",
+                "import": "./dist/internal/index.js"
             }
         }
     },

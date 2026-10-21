@@ -1,8 +1,7 @@
 import OpenAI, { type ClientOptions } from "openai"
 import type { Response, ResponseOutputItem } from "openai/resources/responses/responses"
-import { BaseLanguageModel, type LanguageModelInvocation } from "@clankhouse/core/ai/base-llm"
-import type { SessionRecorder } from "@clankhouse/core/ai/sessions"
-import { ClankHouseError } from "@clankhouse/core/errors"
+import { BaseLanguageModel, type LanguageModelInvocation, type SessionRecorder } from "@clankhouse/core/providers"
+import { ClankHouseError } from "@clankhouse/core"
 
 export type OpenAIModelOptions = {
     model: string

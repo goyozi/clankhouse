@@ -1,7 +1,7 @@
 import * as z from "zod"
 import { expect, expectTypeOf, test } from "vitest"
-import { ClankHouse } from "@clankhouse/core/clankhouse"
-import type { EventSourceListener } from "@clankhouse/core/events"
+import { ClankHouse } from "../src/clankhouse"
+import type { EventSourceListener } from "../src/events"
 import { gate, runOutput, tempClankHouse, testRun } from "@clankhouse/testing"
 
 const approval = z.object({ ok: z.boolean() })

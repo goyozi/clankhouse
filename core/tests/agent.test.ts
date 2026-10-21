@@ -4,7 +4,7 @@ import * as z from "zod"
 import { expect, test } from "vitest"
 import { FakeCodingAgent, runGit, runOutput, tempClankHouse, tempGitRepo, testRun } from "@clankhouse/testing"
 import { GitRepository, Worktree } from "@clankhouse/core/git"
-import { uniqueName } from "@clankhouse/core/util"
+import { uniqueName } from "../src/util"
 
 const outputSchema = z.object({ done: z.boolean() })
 const workflowOptions = { input: z.null(), output: z.json(), key: () => "test-key" }

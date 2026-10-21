@@ -1,7 +1,6 @@
 import { create } from "@bufbuild/protobuf"
 import { Code } from "@connectrpc/connect"
-import type { ClankHouse } from "@clankhouse/core/clankhouse"
-import { setRunGcState } from "@clankhouse/core/db"
+import type { ClankHouse } from "@clankhouse/core"
 import { CancelRunResponseSchema, ExecutionStatus } from "@clankhouse/protocol"
 import { tempClankHouse, testRun } from "@clankhouse/testing"
 import { expect, test } from "vitest"
@@ -81,7 +80,7 @@ test("cancelRun maps lifecycle and lookup failures to Connect codes", async () =
     const succeededId = (await clankhouse.runs.list({ key: "succeeded" }))[0]!.id
     await testRun(clankhouse, async () => null, { key: "deleted" })
     const deletedId = (await clankhouse.runs.list({ key: "deleted" }))[0]!.id
-    setRunGcState(clankhouse.db, deletedId, "deleted")
+    clankhouse.db.prepare("UPDATE runs SET gc_state = ? WHERE id = ?").run("deleted", deletedId)
     const client = rpcClient(await testServer(clankhouse))
 
     // when canceling a succeeded, missing, deleted run or omitting the run id

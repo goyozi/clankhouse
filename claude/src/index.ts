@@ -6,8 +6,13 @@ import type {
     SDKResultMessage,
     SDKUserMessage
 } from "@anthropic-ai/claude-agent-sdk"
-import { BaseCodingAgent, type CodingAgentInvocation } from "@clankhouse/core/ai/base-agent"
-import { type CommonTool, type SessionRecorder, type ToolSource } from "@clankhouse/core/ai/sessions"
+import {
+    BaseCodingAgent,
+    type CodingAgentInvocation,
+    type CommonTool,
+    type SessionRecorder,
+    type ToolSource
+} from "@clankhouse/core/providers"
 import type { Worktree } from "@clankhouse/core/git"
 
 export type QueryFunction = (input: {

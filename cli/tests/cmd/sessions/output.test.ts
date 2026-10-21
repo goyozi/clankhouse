@@ -1,7 +1,7 @@
 import { PassThrough, Readable } from "node:stream"
 import { create } from "@bufbuild/protobuf"
 import { timestampFromDate } from "@bufbuild/protobuf/wkt"
-import type { ClankHouse } from "@clankhouse/core/clankhouse"
+import type { ClankHouse } from "@clankhouse/core"
 import { listen, type ClankHouseServer } from "@clankhouse/server"
 import { SessionMessageSchema, ToolResultStatus } from "@clankhouse/protocol"
 import { tempClankHouse } from "@clankhouse/testing"

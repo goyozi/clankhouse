@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto"
 import { constants } from "node:fs"
 import { chmod, link, lstat, open, readFile, unlink } from "node:fs/promises"
 import * as path from "node:path"
-import { isNodeError } from "@clankhouse/core/util"
+import { isNodeError } from "@clankhouse/core/internal"
 
 type Credentials = {
     version: 1

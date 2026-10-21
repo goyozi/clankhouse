@@ -1,5 +1,5 @@
 import { expect, test } from "vitest"
-import { ClankHouseError } from "@clankhouse/core/errors"
+import { ClankHouseError } from "../src/errors"
 
 test("ClankHouseError exposes its stable code and standard Error fields", () => {
     // given an underlying failure

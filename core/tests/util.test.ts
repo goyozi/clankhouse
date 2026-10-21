@@ -1,5 +1,5 @@
 import { expect, test } from "vitest"
-import { newId, uniqueName } from "@clankhouse/core/util"
+import { newId, uniqueName } from "../src/util"
 
 test("newId generates unique alphanumeric ids safe to pass as CLI arguments", () => {
     // given a large batch of generated ids

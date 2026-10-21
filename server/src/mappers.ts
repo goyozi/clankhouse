@@ -1,20 +1,18 @@
 import type { MessageInitShape } from "@bufbuild/protobuf"
 import { timestampFromDate } from "@bufbuild/protobuf/wkt"
-import type { Artifact as CoreArtifact } from "@clankhouse/core/artifacts"
 import type {
     AISession,
     AISessionMessage,
+    Artifact as CoreArtifact,
     CommonTool as CoreCommonTool,
-    SessionMessageRole,
-    ToolSource
-} from "@clankhouse/core/ai/sessions"
-import type {
     ObservableRunStatus,
     ObservableStepStatus,
+    SessionMessageRole,
     Step as CoreStep,
+    ToolSource,
     WorkflowRun as CoreWorkflowRun,
     WorkflowRunMetadata as CoreRunMetadata
-} from "@clankhouse/core/runs"
+} from "@clankhouse/core"
 import {
     ArtifactKind,
     ArtifactSchema,

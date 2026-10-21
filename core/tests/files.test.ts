@@ -1,7 +1,7 @@
 import * as fs from "node:fs"
 import * as path from "node:path"
 import { expect, onTestFinished, test } from "vitest"
-import { fileCreated, fileCreatedIn } from "@clankhouse/core/files"
+import { fileCreated, fileCreatedIn } from "../src/files"
 import { gate, tempClankHouse, tempDir, testRun } from "@clankhouse/testing"
 import * as z from "zod"
 
