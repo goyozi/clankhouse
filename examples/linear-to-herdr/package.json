@@ -10,13 +10,13 @@
         "typecheck": "tsc -p tsconfig.json --noEmit"
     },
     "dependencies": {
-        "@clankhouse/core": "^0.2.0",
-        "@clankhouse/server": "^0.2.0",
+        "@clankhouse/core": "^0.3.0",
+        "@clankhouse/server": "^0.3.0",
         "tsx": "^4.23.0",
         "zod": "^4.4.3"
     },
     "devDependencies": {
-        "@clankhouse/testing": "^0.2.0",
+        "@clankhouse/testing": "^0.3.0",
         "@types/node": "^26.6.4",
         "typescript": "^6.0.3",
         "vitest": "^4.1.10"
