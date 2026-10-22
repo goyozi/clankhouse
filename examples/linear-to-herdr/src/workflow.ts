@@ -1,6 +1,4 @@
-import { clankhouse } from "@clankhouse/core"
-import { renderPrompt } from "@clankhouse/core/ai/prompt"
-import type { ClankHouse } from "@clankhouse/core/clankhouse"
+import { type ClankHouse, clankhouse, renderPrompt } from "@clankhouse/core"
 import * as z from "zod"
 import type { Herdr } from "./herdr"
 import type { Linear, LinearIssue } from "./linear"

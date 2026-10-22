@@ -1,6 +1,6 @@
 import * as fs from "node:fs"
 import * as path from "node:path"
-import type { CodingAgent, CodingRunOptions } from "@clankhouse/core/ai/coding-agent"
+import type { CodingAgent, CodingRunOptions } from "@clankhouse/core"
 import { FakeCodingAgent, gate, runGit, tempClankHouse, tempGitRepo, testRun } from "@clankhouse/testing"
 import { expect, test } from "vitest"
 import * as z from "zod"

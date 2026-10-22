@@ -1,6 +1,6 @@
 import * as fs from "node:fs"
 import * as path from "node:path"
-import type { ClankHouse } from "@clankhouse/core/clankhouse"
+import type { ClankHouse, WorkflowRun } from "@clankhouse/core"
 import {
     type FakeAgentResult,
     FakeCodingAgent,
@@ -9,7 +9,6 @@ import {
     tempGitRepo,
     waitForRun
 } from "@clankhouse/testing"
-import type { WorkflowRun } from "@clankhouse/core/runs"
 import { expect, onTestFinished, test, vi } from "vitest"
 import * as z from "zod"
 import { watchTasks } from "../src/tasks"

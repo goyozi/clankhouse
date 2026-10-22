@@ -1,7 +1,6 @@
 import { mkdirSync } from "node:fs"
 import * as path from "node:path"
-import { ClankHouseError, fileCreatedIn, type TriggerHandle, type WorkflowRef } from "@clankhouse/core"
-import type { ClankHouse } from "@clankhouse/core/clankhouse"
+import { type ClankHouse, ClankHouseError, fileCreatedIn, type TriggerHandle, type WorkflowRef } from "@clankhouse/core"
 import type { FactoryInput } from "./workflow"
 
 const TASK_STATES = ["requirements", "implementation", "done"] as const

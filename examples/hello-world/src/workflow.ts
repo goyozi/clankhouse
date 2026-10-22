@@ -3,10 +3,8 @@ import { mkdtemp, rm } from "node:fs/promises"
 import * as os from "node:os"
 import * as path from "node:path"
 import { promisify } from "node:util"
-import { clankhouse as defaultClankHouse } from "@clankhouse/core"
-import type { CodingAgent } from "@clankhouse/core/ai/coding-agent"
+import { type ClankHouse, type CodingAgent, clankhouse as defaultClankHouse } from "@clankhouse/core"
 import { GitRepository } from "@clankhouse/core/git"
-import type { ClankHouse } from "@clankhouse/core/clankhouse"
 import * as z from "zod"
 
 const execFileAsync = promisify(execFile)

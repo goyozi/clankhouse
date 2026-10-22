@@ -1,5 +1,4 @@
-import type { ClankHouse } from "@clankhouse/core/clankhouse"
-import type { WorkflowRun } from "@clankhouse/core/runs"
+import type { ClankHouse, WorkflowRun } from "@clankhouse/core"
 import { tempClankHouse, tempDir, waitForRun } from "@clankhouse/testing"
 import { expect, onTestFinished, test } from "vitest"
 import * as z from "zod"

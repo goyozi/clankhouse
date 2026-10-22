@@ -1,10 +1,7 @@
 import { readFile } from "node:fs/promises"
 import * as path from "node:path"
-import { clankhouse } from "@clankhouse/core"
-import type { CodingAgent } from "@clankhouse/core/ai/coding-agent"
-import type { ClankHouse } from "@clankhouse/core/clankhouse"
+import { type ClankHouse, type CodingAgent, clankhouse } from "@clankhouse/core"
 import { GitRepository, type Worktree } from "@clankhouse/core/git"
-import { isNodeError } from "@clankhouse/core/util"
 import * as z from "zod"
 import { taskDirectory } from "./tasks"
 
@@ -84,7 +81,7 @@ async function readOptional(file: string): Promise<string | null> {
     try {
         return await readFile(file, "utf8")
     } catch (error) {
-        if (isNodeError(error, "ENOENT")) return null
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return null
         throw error
     }
 }
